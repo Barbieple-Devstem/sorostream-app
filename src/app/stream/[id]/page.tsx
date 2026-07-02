@@ -387,7 +387,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
           </div>
           <Link
             href="/dashboard"
-            className="text-sm text-gray-500 hover:text-gray-300 underline transition-colors"
+            className="text-sm text-gray-400 hover:text-white underline transition-colors"
           >
             Go to dashboard
           </Link>
@@ -438,7 +438,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
             <p className="text-gray-400 text-sm max-w-sm">{error ?? "The stream you're looking for doesn't exist or may have been removed."}</p>
             <Link
               href="/dashboard"
-              className="mt-2 inline-flex items-center gap-2 bg-green-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+              className="mt-2 inline-flex items-center gap-2 bg-green-700 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-green-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
             >
               ← Back to Dashboard
             </Link>
@@ -648,7 +648,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
             <button
               onClick={handleWithdraw}
               disabled={isBusy}
-              className="flex-1 bg-green-600 text-white py-3 rounded-lg font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+              className="flex-1 bg-green-700 text-white py-3 rounded-lg font-medium hover:bg-green-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
             >
               {withdrawLoading ? (
                 <>

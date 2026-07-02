@@ -204,7 +204,7 @@ function NewStreamWizard() {
                 <div
                   className={`flex items-center justify-center w-8 h-8 rounded-full text-xs font-semibold transition-colors ${
                     step === s
-                      ? "bg-green-600 text-white"
+                      ? "bg-green-700 text-white"
                       : STEPS.indexOf(step) > i
                       ? "bg-green-800 text-green-300"
                       : "bg-gray-700 text-gray-400"
@@ -212,7 +212,7 @@ function NewStreamWizard() {
                 >
                   {STEPS.indexOf(step) > i ? "✓" : i + 1}
                 </div>
-                <span className={`text-xs hidden sm:inline ${step === s ? "text-white" : "text-gray-500"}`}>
+                <span className={`text-xs hidden sm:inline ${step === s ? "text-white" : "text-gray-400"}`}>
                   {stepLabels[s].title}
                 </span>
                 {i < STEPS.length - 1 && (
@@ -419,7 +419,7 @@ function NewStreamWizard() {
               type="button"
               onClick={goNext}
               disabled={!canGoNext}
-              className="flex-1 bg-green-600 text-white py-3 rounded-lg font-medium hover:bg-green-700 disabled:opacity-50 transition-colors"
+              className="flex-1 bg-green-700 text-white py-3 rounded-lg font-medium hover:bg-green-800 disabled:opacity-50 transition-colors"
             >
               Next
             </button>
@@ -428,7 +428,7 @@ function NewStreamWizard() {
               type="button"
               onClick={handleCreateStream}
               disabled={loading}
-              className="flex-1 bg-green-600 text-white py-3 rounded-lg font-medium hover:bg-green-700 disabled:opacity-50 transition-colors"
+              className="flex-1 bg-green-700 text-white py-3 rounded-lg font-medium hover:bg-green-800 disabled:opacity-50 transition-colors"
             >
               {t("submit")}
             </button>

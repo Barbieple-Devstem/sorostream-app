@@ -179,7 +179,7 @@ export default function WalletConnect({ onConnect, compact = false }: WalletConn
       <div className="relative" ref={dropdownRef}>
         <button
           onClick={() => setDropdownOpen((o) => !o)}
-          className="rounded-lg bg-sky-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+          className="rounded-lg bg-sky-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
           aria-expanded={dropdownOpen}
           aria-haspopup="true"
           aria-label="Connect wallet"
@@ -197,7 +197,7 @@ export default function WalletConnect({ onConnect, compact = false }: WalletConn
                     aria-pressed={walletType === w}
                     className={`rounded-lg px-3 py-1.5 text-xs font-medium border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 ${
                       walletType === w
-                        ? "bg-sky-600 text-white border-sky-600"
+                        ? "bg-sky-700 text-white border-sky-700"
                         : "border-slate-500 text-slate-300 hover:bg-slate-700"
                     }`}
                   >
@@ -218,7 +218,7 @@ export default function WalletConnect({ onConnect, compact = false }: WalletConn
               <button
                 onClick={async () => { await handleConnect(); setDropdownOpen(false); }}
                 disabled={loading}
-                className="w-full rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700 disabled:opacity-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+                className="w-full rounded-lg bg-sky-700 px-4 py-2 text-sm font-medium text-white hover:bg-sky-800 disabled:opacity-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
                 aria-label={`Connect ${WALLET_LABELS[walletType]} wallet`}
               >
                 {loading ? t("connecting") : t("connect", { wallet: WALLET_LABELS[walletType] })}
@@ -264,7 +264,7 @@ export default function WalletConnect({ onConnect, compact = false }: WalletConn
             aria-pressed={walletType === w}
             className={`rounded-lg px-3 py-1.5 text-xs font-medium border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 ${
               walletType === w
-                ? "bg-sky-600 text-white border-sky-600"
+                ? "bg-sky-700 text-white border-sky-700"
                 : "border-slate-500 text-slate-300 hover:bg-slate-700"
             }`}
           >
@@ -287,7 +287,7 @@ export default function WalletConnect({ onConnect, compact = false }: WalletConn
       <button
         onClick={handleConnect}
         disabled={loading}
-        className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700 disabled:opacity-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+        className="rounded-lg bg-sky-700 px-4 py-2 text-sm font-medium text-white hover:bg-sky-800 disabled:opacity-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
         aria-label={`Connect ${WALLET_LABELS[walletType]} wallet`}
       >
         {loading ? t("connecting") : t("connect", { wallet: WALLET_LABELS[walletType] })}

@@ -55,7 +55,7 @@ export default function CountdownTimer({ endTime }: CountdownTimerProps) {
             <span className="text-2xl sm:text-3xl font-bold tabular-nums text-green-400">
               {String(p.value).padStart(2, "0")}
             </span>
-            <span className="text-[10px] uppercase tracking-wider text-gray-500">{p.label}</span>
+            <span className="text-[10px] uppercase tracking-wider text-gray-400">{p.label}</span>
           </span>
         ))}
       </div>
