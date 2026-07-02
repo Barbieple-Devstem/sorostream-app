@@ -9,46 +9,11 @@ vi.mock('@/src/lib/analytics', () => ({
   trackEvent: vi.fn(),
 }));
 
-// Wallet adapters — two alias paths used by different import resolution paths
+// Wallet adapters
 vi.mock('@/src/lib/wallets', () => {
   const mockFreighterAdapter = {
     type: 'freighter',
-    isAvailable: vi.fn(() => new Promise<boolean>(resolve => setTimeout(() => resolve(true), 50))),
-    getPublicKey: vi.fn(() => Promise.resolve('GB7TJKR6KZ3L3LYPZNAZQJR4HGLJ4E7MSTFJZXQZ2RL4QJKZKSX6JQJ5')),
-    signTransaction: vi.fn(() => Promise.resolve('signed_xdr')),
-    disconnect: vi.fn(),
-  };
-
-  const mockLedgerAdapter = {
-    type: 'ledger',
-    isAvailable: vi.fn(() => Promise.resolve(false)),
-    getPublicKey: vi.fn(() => Promise.reject(new Error('Ledger transport not yet integrated'))),
-    signTransaction: vi.fn(),
-    disconnect: vi.fn(),
-  };
-
-  class MockServerKeypairAdapter {
-    type = 'server-keypair';
-    private secret: string;
-    constructor(secret: string) { this.secret = secret; }
-    isAvailable = vi.fn(() => Promise.resolve(true));
-    getPublicKey = vi.fn(() => Promise.resolve('GCZEAELPDHRCOS7XZAFAQ7TMURYCMDH5GB6MLCO4KDYK3AS3HFEIY2EZ'));
-    signTransaction = vi.fn();
-    disconnect = vi.fn();
-  }
-
-  return {
-    freighterAdapter: mockFreighterAdapter,
-    ledgerAdapter: mockLedgerAdapter,
-    ServerKeypairAdapter: MockServerKeypairAdapter,
-    WALLET_LABELS: { freighter: 'Freighter', ledger: 'Ledger', 'server-keypair': 'Server Keypair' },
-  };
-});
-
-vi.mock('../../src/lib/wallets', () => {
-  const mockFreighterAdapter = {
-    type: 'freighter',
-    isAvailable: vi.fn(() => new Promise<boolean>(resolve => setTimeout(() => resolve(true), 50))),
+    isAvailable: vi.fn(() => Promise.resolve(true)),
     getPublicKey: vi.fn(() => Promise.resolve('GB7TJKR6KZ3L3LYPZNAZQJR4HGLJ4E7MSTFJZXQZ2RL4QJKZKSX6JQJ5')),
     signTransaction: vi.fn(() => Promise.resolve('signed_xdr')),
     disconnect: vi.fn(),
@@ -143,13 +108,14 @@ describe('WalletConnect', () => {
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /connect freighter wallet/i }));
-      await new Promise(resolve => setTimeout(resolve, 80));
     });
 
-    expect(mockConnect).toHaveBeenCalled();
-    expect(onConnect).toHaveBeenCalledWith(KEY, 'freighter');
-    expect(window.localStorage.getItem('sorostream_wallet_connected')).toBe('true');
-    expect(window.localStorage.getItem('sorostream_wallet_type')).toBe('freighter');
+    await waitFor(() => {
+      expect(mockConnect).toHaveBeenCalled();
+      expect(onConnect).toHaveBeenCalledWith(KEY, 'freighter');
+      expect(window.localStorage.getItem('sorostream_wallet_connected')).toBe('true');
+      expect(window.localStorage.getItem('sorostream_wallet_type')).toBe('freighter');
+    }, { timeout: 2000 });
   });
 
   it('disables button while connecting', async () => {
