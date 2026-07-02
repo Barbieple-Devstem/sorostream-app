@@ -15,6 +15,7 @@ export default defineConfig({
   use: {
     baseURL: process.env.BASE_URL ?? "http://localhost:3000",
     headless: true,
+    colorScheme: "dark",
   },
   projects: [
     {

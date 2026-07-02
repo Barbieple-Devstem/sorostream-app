@@ -127,7 +127,7 @@ export default function NavHeader() {
                 ) : null}
               </span>
             )}
-            <WalletConnect />
+            <WalletConnect compact />
             <button
               onClick={toggleShowUsd}
               className={`text-xs px-2 py-1 rounded border transition-colors ${

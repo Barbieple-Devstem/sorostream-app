@@ -46,9 +46,17 @@ function DashboardContent() {
   const [search, setSearch] = useState(searchParams.get("search") || "");
   const [bookmarksOnly, setBookmarksOnly] = useState(false);
 
-  // Sort state — persisted to localStorage
-  const [sortField, setSortField] = useState<SortField>(() => loadSort().field);
-  const [sortOrder, setSortOrder] = useState<SortOrder>(() => loadSort().order);
+  // Sort state — persisted to localStorage.
+  // Initialize with the SSR-safe default; sync from localStorage after mount to
+  // avoid a server/client hydration mismatch (localStorage is undefined on the server).
+  const [sortField, setSortField] = useState<SortField>("created");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
+  useEffect(() => {
+    const saved = loadSort();
+    setSortField(saved.field);
+    setSortOrder(saved.order);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function handleSortFieldChange(field: SortField) {
     setSortField(field);

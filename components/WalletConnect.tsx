@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   WalletType,
   WalletAdapter,
@@ -16,6 +16,8 @@ import { useWallet } from "@/src/context/WalletContext";
 
 interface WalletConnectProps {
   onConnect?: (publicKey: string, walletType: WalletType) => void;
+  /** When true, the disconnected state renders as a compact dropdown button (for use in the nav header). */
+  compact?: boolean;
 }
 
 const WALLET_TYPES: WalletType[] = ["freighter", "ledger", "server-keypair"];
@@ -28,7 +30,7 @@ const WALLET_TYPES: WalletType[] = ["freighter", "ledger", "server-keypair"];
  * when the user switches accounts inside Freighter (handled by the context
  * watcher) — no page reload required.
  */
-export default function WalletConnect({ onConnect }: WalletConnectProps) {
+export default function WalletConnect({ onConnect, compact = false }: WalletConnectProps) {
   const t = useTranslations("wallet");
   const { address: contextAddress, connect: contextConnect, disconnect: contextDisconnect } = useWallet();
 
@@ -37,6 +39,19 @@ export default function WalletConnect({ onConnect }: WalletConnectProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [adapter, setAdapter] = useState<WalletAdapter | null>(null);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!dropdownOpen) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [dropdownOpen]);
 
   /**
    * Keep local adapter state aligned with the context address.
@@ -157,6 +172,66 @@ export default function WalletConnect({ onConnect }: WalletConnectProps) {
 
   // Derive displayed key from context (stays current after account switches)
   const publicKey = contextAddress;
+
+  // Compact mode: disconnected state renders as a dropdown button for use in the nav header
+  if (compact && !publicKey) {
+    return (
+      <div className="relative" ref={dropdownRef}>
+        <button
+          onClick={() => setDropdownOpen((o) => !o)}
+          className="rounded-lg bg-sky-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+          aria-expanded={dropdownOpen}
+          aria-haspopup="true"
+          aria-label="Connect wallet"
+        >
+          Connect
+        </button>
+        {dropdownOpen && (
+          <div className="absolute right-0 top-full mt-2 w-72 bg-gray-800 border border-gray-700 rounded-lg p-4 z-50 shadow-xl">
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                {WALLET_TYPES.map((w) => (
+                  <button
+                    key={w}
+                    onClick={() => setWalletType(w)}
+                    aria-pressed={walletType === w}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-medium border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 ${
+                      walletType === w
+                        ? "bg-sky-600 text-white border-sky-600"
+                        : "border-slate-500 text-slate-300 hover:bg-slate-700"
+                    }`}
+                  >
+                    {WALLET_LABELS[w]}
+                  </button>
+                ))}
+              </div>
+              {walletType === "server-keypair" && (
+                <input
+                  type="password"
+                  placeholder={t("secret_placeholder")}
+                  value={secretInput}
+                  onChange={(e) => setSecretInput(e.target.value)}
+                  className="w-full rounded-lg border border-slate-500 bg-gray-900 px-3 py-2 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-800"
+                  aria-label="Server keypair secret key"
+                />
+              )}
+              <button
+                onClick={async () => { await handleConnect(); setDropdownOpen(false); }}
+                disabled={loading}
+                className="w-full rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700 disabled:opacity-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+                aria-label={`Connect ${WALLET_LABELS[walletType]} wallet`}
+              >
+                {loading ? t("connecting") : t("connect", { wallet: WALLET_LABELS[walletType] })}
+              </button>
+              {error && (
+                <p className="text-xs text-red-400" role="alert">{error}</p>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   if (publicKey) {
     return (
