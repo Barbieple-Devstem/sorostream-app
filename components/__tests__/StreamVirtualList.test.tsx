@@ -19,6 +19,7 @@ function createStream(id: number): StreamData {
     endTime: new Date(Date.now() + 3600000).toISOString(),
     lastWithdrawTime: new Date().toISOString(),
     status: "Active",
+    token: "XLM",
   };
 }
 

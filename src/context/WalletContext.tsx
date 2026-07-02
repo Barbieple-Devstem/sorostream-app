@@ -101,7 +101,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         setNetworkMismatch(network.toLowerCase() !== APP_NETWORK);
       }
     });
-  }, [handleConnectionTimeout]);
+  }, []);
 
   /**
    * On mount, start the watcher unconditionally so we detect account/network

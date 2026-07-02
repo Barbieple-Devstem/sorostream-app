@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { StreamListSkeleton } from "@/components/Skeleton";
@@ -30,7 +30,7 @@ function loadSort(): { field: SortField; order: SortOrder } {
   return { field: "created", order: "desc" };
 }
 
-export default function Dashboard() {
+function DashboardContent() {
   const rpcFetch = useRpcFetch();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -544,5 +544,13 @@ export default function Dashboard() {
         groups={shortcutGroups}
       />
     </main>
+  );
+}
+
+export default function Dashboard() {
+  return (
+    <Suspense>
+      <DashboardContent />
+    </Suspense>
   );
 }
