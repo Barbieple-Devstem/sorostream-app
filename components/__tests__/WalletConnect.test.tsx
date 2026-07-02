@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import WalletConnect from '../WalletConnect';
 
 // ---------------------------------------------------------------------------
@@ -218,12 +218,10 @@ describe('WalletConnect', () => {
 
     render(<WalletConnect onConnect={onConnect} />);
 
-    await act(async () => {
-      await new Promise(resolve => setTimeout(resolve, 80));
-    });
-
-    expect(mockConnect).toHaveBeenCalled();
-    expect(onConnect).toHaveBeenCalledWith(KEY, 'freighter');
+    await waitFor(() => {
+      expect(mockConnect).toHaveBeenCalled();
+      expect(onConnect).toHaveBeenCalledWith(KEY, 'freighter');
+    }, { timeout: 2000 });
   });
 
   it('restores server keypair wallet from localStorage on mount', async () => {
@@ -238,10 +236,8 @@ describe('WalletConnect', () => {
 
     render(<WalletConnect onConnect={onConnect} />);
 
-    await act(async () => {
-      await new Promise(resolve => setTimeout(resolve, 80));
-    });
-
-    expect(onConnect).toHaveBeenCalledWith(expectedPublicKey, 'server-keypair');
+    await waitFor(() => {
+      expect(onConnect).toHaveBeenCalledWith(expectedPublicKey, 'server-keypair');
+    }, { timeout: 2000 });
   });
 });
