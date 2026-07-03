@@ -201,7 +201,7 @@ export default function OnboardingWizard() {
               />
             ))}
           </ol>
-          <span className="text-xs text-gray-500">
+          <span className="text-xs text-gray-400">
             Step {step + 1} of {STEPS.length}
           </span>
         </div>
@@ -237,7 +237,7 @@ export default function OnboardingWizard() {
             type="button"
             onClick={advance}
             disabled={isConnecting}
-            className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-800"
+            className="bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-800"
           >
             {isConnecting && current.id === "connect-wallet"
               ? "Connecting…"

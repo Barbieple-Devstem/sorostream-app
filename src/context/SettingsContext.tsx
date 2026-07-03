@@ -18,22 +18,43 @@ import {
 
 const STORAGE_KEY = "sorostream-settings";
 
+/**
+ * Default keyboard shortcut bindings.
+ * Key = action identifier, Value = key (lowercase) or modifier combination.
+ */
+export type ShortcutId = "newStream" | "search" | "help" | "dashboard" | "streams" | "home";
+export type ShortcutMap = Record<ShortcutId, string>;
+
+export const DEFAULT_SHORTCUTS: ShortcutMap = {
+  newStream: "n",
+  search: "/",
+  help: "shift+?",
+  dashboard: "g d",
+  streams: "g s",
+  home: "g h",
+};
+
 interface Settings {
   showUsd: boolean;
   withdrawThreshold: number;
   language: string;
+  keyboardShortcuts: ShortcutMap;
 }
 
 interface SettingsContextValue extends Settings {
   toggleShowUsd: () => void;
   setWithdrawThreshold: (value: number) => void;
   setLanguage: (value: string) => void;
+  setKeyboardShortcuts: (shortcuts: ShortcutMap) => void;
+  resetKeyboardShortcuts: () => void;
+  getShortcutLabel: (id: ShortcutId) => string;
 }
 
 const defaultSettings: Settings = {
   showUsd: true,
   withdrawThreshold: 1000,
   language: "en",
+  keyboardShortcuts: DEFAULT_SHORTCUTS,
 };
 
 const SettingsContext = createContext<SettingsContextValue | undefined>(undefined);
@@ -48,6 +69,7 @@ function loadSettings(): Settings {
       showUsd: parsed.showUsd ?? defaultSettings.showUsd,
       withdrawThreshold: parsed.withdrawThreshold ?? defaultSettings.withdrawThreshold,
       language: parsed.language ?? defaultSettings.language,
+      keyboardShortcuts: parsed.keyboardShortcuts ?? defaultSettings.keyboardShortcuts,
     };
   } catch {
     return defaultSettings;
@@ -101,9 +123,52 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const setKeyboardShortcuts = useCallback((shortcuts: ShortcutMap) => {
+    setSettings((prev) => {
+      const next = { ...prev, keyboardShortcuts: shortcuts };
+      persist(next);
+      return next;
+    });
+  }, []);
+
+  const resetKeyboardShortcuts = useCallback(() => {
+    setSettings((prev) => {
+      const next = { ...prev, keyboardShortcuts: DEFAULT_SHORTCUTS };
+      persist(next);
+      return next;
+    });
+  }, []);
+
+  const getShortcutLabel = useCallback(
+    (id: ShortcutId): string => {
+      const raw = settings.keyboardShortcuts[id] ?? DEFAULT_SHORTCUTS[id];
+      return raw
+        .replace(/^g /, "G then ")
+        .replace(/shift\+/, "Shift+")
+        .replace(/\+/g, "+");
+    },
+    [settings.keyboardShortcuts],
+  );
+
   const value = useMemo(
-    () => ({ ...settings, toggleShowUsd, setWithdrawThreshold, setLanguage }),
-    [settings, toggleShowUsd, setWithdrawThreshold, setLanguage],
+    () => ({
+      ...settings,
+      toggleShowUsd,
+      setWithdrawThreshold,
+      setLanguage,
+      setKeyboardShortcuts,
+      resetKeyboardShortcuts,
+      getShortcutLabel,
+    }),
+    [
+      settings,
+      toggleShowUsd,
+      setWithdrawThreshold,
+      setLanguage,
+      setKeyboardShortcuts,
+      resetKeyboardShortcuts,
+      getShortcutLabel,
+    ],
   );
 
   return (

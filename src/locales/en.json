@@ -97,7 +97,10 @@
     "hide_usd": "Hide USD values",
     "show_usd": "Show USD values",
     "wallet_balance": "Wallet XLM balance",
-    "main_navigation": "Main navigation"
+    "main_navigation": "Main navigation",
+    "keyboard_shortcuts": "Keyboard shortcuts (?)",
+    "open_keyboard_shortcuts": "Open keyboard shortcuts help",
+    "shortcuts": "Shortcuts"
   },
   "common": {
     "price_unavailable": "Price unavailable",

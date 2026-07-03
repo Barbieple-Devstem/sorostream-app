@@ -349,11 +349,6 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
     }, CANCEL_GRACE_SECONDS * 1000);
   }, [cancelPending, cancelLoading, params.id, upsertPersistentToast, handleCancelUndo, submitCancel]);
 
-  // ── Render helpers ─────────────────────────────────────────────────────────
-  const formatUSDC = (stroops: number) => (stroops / 10_000_000).toFixed(2);
-  const displayDeposit = optimisticDeposit != null ? optimisticDeposit : stream?.deposit ?? 0;
-  const isDepositOptimistic = optimisticDeposit != null;
-
   const isBusy = withdrawLoading || cancelLoading || cancelPending || topUpLoading;
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────────
@@ -372,6 +367,13 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
 
   useKeyboardShortcuts(shortcutGroups);
 
+  // ── Render helpers ─────────────────────────────────────────────────────────
+  const formatUSDC = (stroops: number) => (stroops / 10_000_000).toFixed(2);
+  const displayDeposit = optimisticDeposit != null ? optimisticDeposit : stream?.deposit ?? 0;
+  const isDepositOptimistic = optimisticDeposit != null;
+
+
+
   // ── Render: wallet not connected ──────────────────────────────────────────
   if (address === null) {
     return (
@@ -387,7 +389,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
           </div>
           <Link
             href="/dashboard"
-            className="text-sm text-gray-500 hover:text-gray-300 underline transition-colors"
+            className="text-sm text-gray-400 hover:text-white underline transition-colors"
           >
             Go to dashboard
           </Link>
@@ -438,7 +440,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
             <p className="text-gray-400 text-sm max-w-sm">{error ?? "The stream you're looking for doesn't exist or may have been removed."}</p>
             <Link
               href="/dashboard"
-              className="mt-2 inline-flex items-center gap-2 bg-green-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+              className="mt-2 inline-flex items-center gap-2 bg-green-700 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-green-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
             >
               ← Back to Dashboard
             </Link>
@@ -451,7 +453,6 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
   const toXlm = (stroops: number) => (stroops / 10_000_000).toFixed(2);
   const depositXlm = stream.deposit / 10_000_000;
   const flowXlm = stream.flowRate / 10_000_000;
-
 
   // ── Render: detail ─────────────────────────────────────────────────────────
   return (
@@ -542,9 +543,10 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
               });
               router.push(`/stream/new?${qp.toString()}`);
             }}
+            aria-label="Clone this stream"
             className="inline-flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-white py-2 px-4 rounded-lg text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M4 4v16h16" /><path d="m8 16 4-4 4 4" /><path d="M12 12v9" />
             </svg>
             Clone
@@ -567,10 +569,11 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
                 },
               );
             }}
+            aria-label="Copy share link for this stream"
             className="inline-flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-white py-2 px-4 rounded-lg text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
             title={`${window.location.origin}/stream/${stream.id}`}
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
               <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.51" />
             </svg>
@@ -647,7 +650,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
             <button
               onClick={handleWithdraw}
               disabled={isBusy}
-              className="flex-1 bg-green-600 text-white py-3 rounded-lg font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+              className="flex-1 bg-green-700 text-white py-3 rounded-lg font-medium hover:bg-green-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
             >
               {withdrawLoading ? (
                 <>

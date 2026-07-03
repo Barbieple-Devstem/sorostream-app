@@ -97,7 +97,10 @@
     "hide_usd": "Ocultar valores en USD",
     "show_usd": "Mostrar valores en USD",
     "wallet_balance": "Saldo de XLM de la billetera",
-    "main_navigation": "Navegación principal"
+    "main_navigation": "Navegación principal",
+    "keyboard_shortcuts": "Atajos de teclado (?)",
+    "open_keyboard_shortcuts": "Abrir ayuda de atajos de teclado",
+    "shortcuts": "Atajos"
   },
   "common": {
     "price_unavailable": "Precio no disponible",

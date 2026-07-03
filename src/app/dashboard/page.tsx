@@ -17,6 +17,18 @@ import { useWallet } from "@/src/context/WalletContext";
 
 type DashboardState = "loading" | "filtered-empty" | "empty" | "ready";
 
+type SortField = "created" | "endDate" | "amount" | "status";
+type SortOrder = "asc" | "desc";
+
+const SORT_STORAGE_KEY = "sorostream_sort";
+
+function loadSort(): { field: SortField; order: SortOrder } {
+  try {
+    const raw = localStorage.getItem(SORT_STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return { field: "created", order: "desc" };
+}
 function DashboardContent() {
   const rpcFetch = useRpcFetch();
   const searchParams = useSearchParams();
@@ -33,6 +45,30 @@ function DashboardContent() {
   const [search, setSearch] = useState(searchParams.get("search") || "");
   const [bookmarksOnly, setBookmarksOnly] = useState(false);
 
+  // Sort state — persisted to localStorage.
+  // Initialize with the SSR-safe default; sync from localStorage after mount to
+  // avoid a server/client hydration mismatch (localStorage is undefined on the server).
+  const [sortField, setSortField] = useState<SortField>("created");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
+  useEffect(() => {
+    const saved = loadSort();
+    setSortField(saved.field);
+    setSortOrder(saved.order);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function handleSortFieldChange(field: SortField) {
+    setSortField(field);
+    const order = sortOrder;
+    localStorage.setItem(SORT_STORAGE_KEY, JSON.stringify({ field, order }));
+  }
+
+  function toggleSortOrder() {
+    const next: SortOrder = sortOrder === "asc" ? "desc" : "asc";
+    setSortOrder(next);
+    localStorage.setItem(SORT_STORAGE_KEY, JSON.stringify({ field: sortField, order: next }));
+  }
+
   // Selection and bulk-action state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
@@ -45,9 +81,14 @@ function DashboardContent() {
   useEffect(() => {
     let cancelled = false;
 
-    // Clear stale data immediately on wallet change so the UI never shows
-    // streams from a previous wallet session.
+    // Flush cached data immediately; if no wallet is connected, stop here so
+    // streams from a previous session are never shown to the next connection.
     setStreams([]);
+    if (!address) {
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
 
     async function load() {
@@ -106,14 +147,31 @@ function DashboardContent() {
     });
   }, [streams, statusFilter, tokenFilter, search, bookmarksOnly, bookmarkedIds]);
 
-  // Pin bookmarked streams to the top of the list
+  // Sort filtered streams, pinning bookmarks first, then by the chosen sort field.
   const sortedFiltered = useMemo(() => {
+    const dir = sortOrder === "asc" ? 1 : -1;
     return [...filtered].sort((a, b) => {
+      // Always pin bookmarks first
       const aB = bookmarkedIds.has(a.id) ? 0 : 1;
       const bB = bookmarkedIds.has(b.id) ? 0 : 1;
-      return aB - bB;
+      if (aB !== bB) return aB - bB;
+
+      switch (sortField) {
+        case "created":
+          return dir * (new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+        case "endDate":
+          return dir * (new Date(a.endTime).getTime() - new Date(b.endTime).getTime());
+        case "amount":
+          return dir * (a.deposit - b.deposit);
+        case "status": {
+          const order = { Active: 0, Ended: 1, Cancelled: 2 };
+          return dir * ((order[a.status] ?? 3) - (order[b.status] ?? 3));
+        }
+        default:
+          return 0;
+      }
     });
-  }, [filtered, bookmarkedIds]);
+  }, [filtered, bookmarkedIds, sortField, sortOrder]);
 
   // Update URL params when filters change
   useEffect(() => {
@@ -235,7 +293,7 @@ function DashboardContent() {
           <h1 className="text-2xl font-bold">Dashboard</h1>
           <Link
             href="/stream/new"
-            className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+            className="bg-green-700 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
           >
             + New Stream
           </Link>
@@ -341,6 +399,39 @@ function DashboardContent() {
               )}
             </div>
 
+            {/* Sort controls */}
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              <span className="text-xs text-gray-400 mr-1">Sort by:</span>
+              {(
+                [
+                  { value: "created", label: "Date Created" },
+                  { value: "endDate", label: "End Date" },
+                  { value: "amount",  label: "Amount" },
+                  { value: "status",  label: "Status" },
+                ] as { value: SortField; label: string }[]
+              ).map(({ value, label }) => (
+                <button
+                  key={value}
+                  onClick={() => handleSortFieldChange(value)}
+                  aria-pressed={sortField === value}
+                  className={`px-3 py-1.5 rounded-lg text-xs border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 ${
+                    sortField === value
+                      ? "bg-green-700 border-green-600 text-white"
+                      : "border-gray-700 text-gray-400 hover:bg-gray-800"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+              <button
+                onClick={toggleSortOrder}
+                aria-label={`Sort order: ${sortOrder === "asc" ? "ascending" : "descending"}`}
+                className="ml-1 px-3 py-1.5 rounded-lg text-xs border border-gray-700 text-gray-300 hover:bg-gray-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+              >
+                {sortOrder === "asc" ? "↑ Asc" : "↓ Desc"}
+              </button>
+            </div>
+
             {/* Bulk actions bar */}
             {selectedIds.size > 0 && (
               <div className="mb-4 flex flex-wrap items-center gap-3 bg-gray-800 border border-gray-700 rounded-xl px-4 py-3">
@@ -406,7 +497,7 @@ function DashboardContent() {
                 <p className="text-gray-400 text-sm max-w-xs">Create your first payment stream to get started</p>
                 <Link
                   href="/stream/new"
-                  className="mt-2 inline-flex items-center gap-2 bg-green-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-800"
+                  className="mt-2 inline-flex items-center gap-2 bg-green-700 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-green-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-800"
                 >
                   + Create Stream
                 </Link>

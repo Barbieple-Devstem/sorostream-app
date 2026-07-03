@@ -7,12 +7,13 @@ import WalletConnect from "@/components/WalletConnect";
 import ThemeToggle from "@/components/ThemeToggle";
 import ChangelogModal, { useChangelogUnread } from "@/components/ChangelogModal";
 import NotificationBadge from "@/components/NotificationBadge";
-import { OPEN_ONBOARDING_EVENT } from "@/components/OnboardingWizard";
+import GlobalSearch from "@/components/GlobalSearch";
 import { useNotifications } from "@/src/context/NotificationContext";
 import { useSettings } from "@/src/context/SettingsContext";
 import { useWallet } from "@/src/context/WalletContext";
 import { APP_NETWORK } from "@/src/lib/freighter";
 import { useTranslations } from "@/src/lib/i18n";
+import { useGlobalShortcuts } from "@/components/GlobalShortcuts";
 
 const NAV_LINKS = [
   { href: "/", key: "home" },
@@ -39,6 +40,7 @@ export default function NavHeader() {
   const [balanceLoading, setBalanceLoading] = useState(false);
   const [changelogOpen, setChangelogOpen] = useState(false);
   const changelogUnread = useChangelogUnread();
+  const { openHelp } = useGlobalShortcuts();
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 10);
@@ -86,8 +88,8 @@ export default function NavHeader() {
           scrolled ? "border-gray-700 bg-gray-900/95 backdrop-blur" : "border-gray-800 bg-gray-900"
         }`}
       >
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
-        <div className="flex items-center gap-6">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between min-w-0">
+        <div className="flex items-center gap-6 min-w-0 shrink-0">
           <Link href="/" className="text-lg font-bold text-green-400 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900">
             SoroStream
           </Link>
@@ -113,7 +115,8 @@ export default function NavHeader() {
             })}
           </nav>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0 overflow-hidden">
+          <GlobalSearch />
           <NetworkSelector />
           {address && (
             <span
@@ -127,7 +130,7 @@ export default function NavHeader() {
               ) : null}
             </span>
           )}
-          <WalletConnect />
+          <WalletConnect compact />
           <button
             onClick={toggleShowUsd}
             className={`text-xs px-2 py-1 rounded border transition-colors ${
@@ -136,6 +139,7 @@ export default function NavHeader() {
                 : "border-gray-600 text-gray-400 hover:bg-gray-700"
             }`}
             aria-pressed={showUsd}
+            aria-label={showUsd ? t("hide_usd") : t("show_usd")}
             title={showUsd ? t("hide_usd") : t("show_usd")}
           >
             {showUsd ? t("usd_active") : t("usd")}
@@ -155,12 +159,13 @@ export default function NavHeader() {
             )}
           </button>
           <button
-            onClick={() => window.dispatchEvent(new Event(OPEN_ONBOARDING_EVENT))}
+            onClick={openHelp}
             className="text-xs px-2 py-1 rounded border border-gray-600 text-gray-400 hover:bg-gray-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
-            title={t("open_guide")}
-            aria-label={t("open_onboarding")}
+            title={t("keyboard_shortcuts")}
+            aria-label={t("open_keyboard_shortcuts")}
           >
-            {t("help")}
+            <span className="hidden sm:inline">{t("shortcuts")}</span>
+            <span className="sm:hidden">?</span>
           </button>
           <ThemeToggle />
         </div>

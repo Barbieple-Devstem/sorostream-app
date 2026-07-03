@@ -68,7 +68,7 @@ export default function StreamEventFeed() {
           <span className="h-2 w-2 rounded-full bg-green-400 animate-pulse" />
           Live Events
         </h2>
-        <span className="text-[10px] text-gray-500">auto-updates</span>
+        <span className="text-[10px] text-gray-400">auto-updates</span>
       </div>
       <div
         ref={feedRef}
@@ -91,7 +91,7 @@ export default function StreamEventFeed() {
             ))}
           </div>
         ) : events.length === 0 ? (
-          <p className="text-gray-500 text-sm text-center py-4">No events yet</p>
+          <p className="text-gray-400 text-sm text-center py-4">No events yet</p>
         ) : (
           events.map((event) => {
             const config = typeConfig[event.type];
@@ -108,7 +108,7 @@ export default function StreamEventFeed() {
                     <span className="font-medium">{config.label}</span>
                     <span className="text-gray-400"> on Stream #{event.streamId}</span>
                   </p>
-                  <p className="text-[10px] text-gray-500">
+                  <p className="text-[10px] text-gray-400">
                     {event.amount ? `${truncateAddress(event.txHash)} · ${formatRelativeTime(event.timestamp)}` : formatRelativeTime(event.timestamp)}
                   </p>
                 </div>

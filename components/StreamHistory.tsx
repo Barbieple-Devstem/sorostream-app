@@ -42,7 +42,13 @@ function formatDate(value: string, language: string): string {
 
 export default function StreamHistory({ entries, loading }: StreamHistoryProps) {
   const t = useTranslations("common");
-  const { language } = useSettings();
+  let language = "en";
+  try {
+    const settings = useSettings();
+    if (settings) language = settings.language;
+  } catch {
+    // fallback to "en" when context is not available (e.g. in tests)
+  }
 
   if (loading) {
     return (
