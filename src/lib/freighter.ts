@@ -1,6 +1,10 @@
 "use client";
 
-import { createWatchWalletChanges } from "@stellar/freighter-api";
+import {
+  getNetwork as freighterGetNetwork,
+  getAddress,
+  WatchWalletChanges,
+} from "@stellar/freighter-api";
 
 export const APP_NETWORK = (
   process.env.NEXT_PUBLIC_STELLAR_NETWORK ?? "testnet"

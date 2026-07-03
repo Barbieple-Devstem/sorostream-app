@@ -21,16 +21,19 @@ const STORAGE_KEY = "sorostream-settings";
 interface Settings {
   showUsd: boolean;
   withdrawThreshold: number;
+  language: string;
 }
 
 interface SettingsContextValue extends Settings {
   toggleShowUsd: () => void;
   setWithdrawThreshold: (value: number) => void;
+  setLanguage: (value: string) => void;
 }
 
 const defaultSettings: Settings = {
   showUsd: true,
   withdrawThreshold: 1000,
+  language: "en",
 };
 
 const SettingsContext = createContext<SettingsContextValue | undefined>(undefined);
@@ -44,6 +47,7 @@ function loadSettings(): Settings {
     return {
       showUsd: parsed.showUsd ?? defaultSettings.showUsd,
       withdrawThreshold: parsed.withdrawThreshold ?? defaultSettings.withdrawThreshold,
+      language: parsed.language ?? defaultSettings.language,
     };
   } catch {
     return defaultSettings;
@@ -65,6 +69,14 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     setSettings(loadSettings());
   }, []);
 
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const isRtl = ["ar", "he", "fa", "ur"].includes(settings.language);
+      document.documentElement.lang = settings.language;
+      document.documentElement.dir = isRtl ? "rtl" : "ltr";
+    }
+  }, [settings.language]);
+
   const toggleShowUsd = useCallback(() => {
     setSettings((prev) => {
       const next = { ...prev, showUsd: !prev.showUsd };
@@ -81,9 +93,17 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const setLanguage = useCallback((value: string) => {
+    setSettings((prev) => {
+      const next = { ...prev, language: value };
+      persist(next);
+      return next;
+    });
+  }, []);
+
   const value = useMemo(
-    () => ({ ...settings, toggleShowUsd, setWithdrawThreshold }),
-    [settings, toggleShowUsd, setWithdrawThreshold],
+    () => ({ ...settings, toggleShowUsd, setWithdrawThreshold, setLanguage }),
+    [settings, toggleShowUsd, setWithdrawThreshold, setLanguage],
   );
 
   return (

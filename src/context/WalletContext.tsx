@@ -55,6 +55,19 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setNetworkMismatch(matches === false);
   }, []);
 
+  const disconnect = useCallback(() => {
+    setAddress(null);
+    setError(null);
+    setNetworkMismatch(false);
+    // Don't stop the watcher on disconnect — keep polling so we notice when
+    // the user switches back or reconnects from within Freighter.
+  }, []);
+
+  const stopWatcher = useCallback(() => {
+    watcherRef.current?.stop();
+    watcherRef.current = null;
+  }, []);
+
   /**
    * Handle connection timeout - close modal and show error message.
    */
@@ -76,7 +89,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     watcherRef.current = watcher;
     watcher.watch(({ address: watchAddress, network }) => {
       // If watch errors or times out, stop watching
-      if (!watchAddress) {
+      if (!watchAddress && !network) {
         // Freighter didn't respond with an address within the timeout
         handleConnectionTimeout();
         return;
@@ -101,10 +114,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     });
   }, [handleConnectionTimeout]);
 
-  const stopWatcher = useCallback(() => {
-    watcherRef.current?.stop();
-    watcherRef.current = null;
-  }, []);
+
 
   /**
    * On mount, start the watcher unconditionally so we detect account/network
@@ -154,13 +164,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [verifyNetwork, startWatcher]);
 
-  const disconnect = useCallback(() => {
-    setAddress(null);
-    setError(null);
-    setNetworkMismatch(false);
-    // Don't stop the watcher on disconnect — keep polling so we notice when
-    // the user switches back or reconnects from within Freighter.
-  }, []);
+
 
   const value = useMemo(
     () => ({

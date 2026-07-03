@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { StreamListSkeleton } from "@/components/Skeleton";
@@ -17,7 +17,7 @@ import { useWallet } from "@/src/context/WalletContext";
 
 type DashboardState = "loading" | "filtered-empty" | "empty" | "ready";
 
-export default function Dashboard() {
+function DashboardContent() {
   const rpcFetch = useRpcFetch();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -460,5 +460,13 @@ export default function Dashboard() {
         groups={shortcutGroups}
       />
     </main>
+  );
+}
+
+export default function Dashboard() {
+  return (
+    <Suspense fallback={<StreamListSkeleton />}>
+      <DashboardContent />
+    </Suspense>
   );
 }

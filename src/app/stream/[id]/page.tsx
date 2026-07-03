@@ -354,6 +354,24 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
   const displayDeposit = optimisticDeposit != null ? optimisticDeposit : stream?.deposit ?? 0;
   const isDepositOptimistic = optimisticDeposit != null;
 
+  const isBusy = withdrawLoading || cancelLoading || cancelPending || topUpLoading;
+
+  // ── Keyboard shortcuts ────────────────────────────────────────────────────
+  const shortcutGroups: ShortcutGroup[] = useMemo(() => [
+    {
+      title: "Stream Detail",
+      shortcuts: [
+        { key: "w", description: "Withdraw", action: () => { if (!isBusy) handleWithdraw(); } },
+        { key: "c", description: "Cancel", action: () => { if (!cancelLoading && !withdrawLoading && !topUpLoading) setShowCancelModal(true); } },
+        { key: "t", description: "Toggle top-up", action: () => setShowTopUp((v) => !v) },
+        { key: "Escape", description: "Close modals", action: () => { setShowCancelModal(false); setShowQrModal(false); setShowTopUp(false); } },
+        { key: "?", shift: true, description: "Toggle keyboard shortcuts help", action: () => setShowShortcutsHelp((v) => !v) },
+      ],
+    },
+  ], [handleWithdraw, isBusy, cancelLoading, withdrawLoading, topUpLoading]);
+
+  useKeyboardShortcuts(shortcutGroups);
+
   // ── Render: wallet not connected ──────────────────────────────────────────
   if (address === null) {
     return (
@@ -433,23 +451,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
   const toXlm = (stroops: number) => (stroops / 10_000_000).toFixed(2);
   const depositXlm = stream.deposit / 10_000_000;
   const flowXlm = stream.flowRate / 10_000_000;
-  const isBusy = withdrawLoading || cancelLoading || cancelPending || topUpLoading;
 
-  // ── Keyboard shortcuts ────────────────────────────────────────────────────
-  const shortcutGroups: ShortcutGroup[] = useMemo(() => [
-    {
-      title: "Stream Detail",
-      shortcuts: [
-        { key: "w", description: "Withdraw", action: () => { if (!isBusy) handleWithdraw(); } },
-        { key: "c", description: "Cancel", action: () => { if (!cancelLoading && !withdrawLoading && !topUpLoading) setShowCancelModal(true); } },
-        { key: "t", description: "Toggle top-up", action: () => setShowTopUp((v) => !v) },
-        { key: "Escape", description: "Close modals", action: () => { setShowCancelModal(false); setShowQrModal(false); setShowTopUp(false); } },
-        { key: "?", shift: true, description: "Toggle keyboard shortcuts help", action: () => setShowShortcutsHelp((v) => !v) },
-      ],
-    },
-  ], [handleWithdraw, isBusy, cancelLoading, withdrawLoading, topUpLoading]);
-
-  useKeyboardShortcuts(shortcutGroups);
 
   // ── Render: detail ─────────────────────────────────────────────────────────
   return (
