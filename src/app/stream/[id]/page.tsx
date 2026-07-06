@@ -372,6 +372,8 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
   const displayDeposit = optimisticDeposit != null ? optimisticDeposit : stream?.deposit ?? 0;
   const isDepositOptimistic = optimisticDeposit != null;
 
+
+
   // ── Render: wallet not connected ──────────────────────────────────────────
   if (address === null) {
     return (

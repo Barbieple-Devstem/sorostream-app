@@ -12,14 +12,15 @@ import { useNotifications } from "@/src/context/NotificationContext";
 import { useSettings } from "@/src/context/SettingsContext";
 import { useWallet } from "@/src/context/WalletContext";
 import { APP_NETWORK } from "@/src/lib/freighter";
+import { useTranslations } from "@/src/lib/i18n";
 import { useGlobalShortcuts } from "@/components/GlobalShortcuts";
 
 const NAV_LINKS = [
-  { href: "/", label: "Home" },
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/stream/new", label: "Create" },
-  { href: "/settings", label: "Settings" },
-];
+  { href: "/", key: "home" },
+  { href: "/dashboard", key: "dashboard" },
+  { href: "/stream/new", key: "create" },
+  { href: "/settings", key: "settings" },
+] as const;
 
 const HORIZON_URL =
   APP_NETWORK === "public" || APP_NETWORK === "mainnet"
@@ -29,10 +30,11 @@ const HORIZON_URL =
     : "https://horizon-testnet.stellar.org";
 
 export default function NavHeader() {
+  const t = useTranslations("nav");
   const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
   const { countFor, clearSection } = useNotifications();
-  const { showUsd, toggleShowUsd } = useSettings();
+  const { showUsd, toggleShowUsd, language } = useSettings();
   const { address } = useWallet();
   const [xlmBalance, setXlmBalance] = useState<string | null>(null);
   const [balanceLoading, setBalanceLoading] = useState(false);
@@ -86,89 +88,90 @@ export default function NavHeader() {
           scrolled ? "border-gray-700 bg-gray-900/95 backdrop-blur" : "border-gray-800 bg-gray-900"
         }`}
       >
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between min-w-0">
-          <div className="flex items-center gap-6 min-w-0 shrink-0">
-            <Link href="/" className="text-lg font-bold text-green-400 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900">
-              SoroStream
-            </Link>
-            <nav className="hidden sm:flex items-center gap-4" aria-label="Main navigation">
-              {NAV_LINKS.map((link) => {
-                const isActive = pathname === link.href || (link.href !== "/" && pathname.startsWith(link.href));
-                const unread = countFor(link.href);
-                return (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    aria-current={isActive ? "page" : undefined}
-                    className={`text-sm transition-colors rounded-md px-1 py-0.5 inline-flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 ${
-                      isActive ? "text-white font-medium" : "text-gray-300 hover:text-white"
-                    }`}
-                  >
-                    {link.label}
-                    <NotificationBadge count={unread} label={`${link.label} update`} />
-                    {isActive && <span className="ml-1 inline-block h-1 w-1 rounded-full bg-green-400" aria-hidden="true" />}
-                  </Link>
-                );
-              })}
-            </nav>
-          </div>
-          <div className="flex items-center gap-3 min-w-0 overflow-hidden">
-            <GlobalSearch />
-            <NetworkSelector />
-            {address && (
-              <span
-                className="text-xs text-gray-300 font-mono hidden sm:inline-block"
-                aria-label="Wallet XLM balance"
-              >
-                {balanceLoading && xlmBalance === null ? (
-                  <span className="inline-block w-16 h-3 bg-gray-700 rounded animate-pulse" aria-hidden="true" />
-                ) : xlmBalance !== null ? (
-                  `${xlmBalance} XLM`
-                ) : null}
-              </span>
-            )}
-            <WalletConnect compact />
-            <button
-              onClick={toggleShowUsd}
-              className={`text-xs px-2 py-1 rounded border transition-colors ${
-                showUsd
-                  ? "border-green-600 text-green-400 hover:bg-green-900/30"
-                  : "border-gray-600 text-gray-400 hover:bg-gray-700"
-              }`}
-              aria-pressed={showUsd}
-              aria-label={showUsd ? "Hide USD values" : "Show USD values"}
-              title={showUsd ? "Hide USD values" : "Show USD values"}
-            >
-              {showUsd ? "USD ✓" : "USD"}
-            </button>
-            <button
-              onClick={() => setChangelogOpen(true)}
-              className="relative text-gray-400 hover:text-white transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 p-1"
-              aria-label={changelogUnread ? "What's new (unread updates)" : "What's new"}
-              title="What's new"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-              </svg>
-              {changelogUnread && (
-                <span className="absolute top-0.5 right-0.5 w-2 h-2 bg-green-400 rounded-full" aria-hidden="true" />
-              )}
-            </button>
-            <button
-              onClick={openHelp}
-              className="text-xs px-2 py-1 rounded border border-gray-600 text-gray-400 hover:bg-gray-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
-              title="Keyboard shortcuts (?)"
-              aria-label="Open keyboard shortcuts help"
-            >
-              <span className="hidden sm:inline">Shortcuts</span>
-              <span className="sm:hidden">?</span>
-            </button>
-            <ThemeToggle />
-          </div>
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between min-w-0">
+        <div className="flex items-center gap-6 min-w-0 shrink-0">
+          <Link href="/" className="text-lg font-bold text-green-400 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900">
+            SoroStream
+          </Link>
+          <nav className="hidden sm:flex items-center gap-4" aria-label={t("main_navigation")}>
+            {NAV_LINKS.map((link) => {
+              const isActive = pathname === link.href || (link.href !== "/" && pathname.startsWith(link.href));
+              const unread = countFor(link.href);
+              const label = t(link.key);
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  aria-current={isActive ? "page" : undefined}
+                  className={`text-sm transition-colors rounded-md px-1 py-0.5 inline-flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 ${
+                    isActive ? "text-white font-medium" : "text-gray-300 hover:text-white"
+                  }`}
+                >
+                  {label}
+                  <NotificationBadge count={unread} label={`${label} update`} />
+                  {isActive && <span className="ml-1 inline-block h-1 w-1 rounded-full bg-green-400" aria-hidden="true" />}
+                </Link>
+              );
+            })}
+          </nav>
         </div>
-      </header>
-      <ChangelogModal open={changelogOpen} onClose={() => setChangelogOpen(false)} />
+        <div className="flex items-center gap-3 min-w-0 overflow-hidden">
+          <GlobalSearch />
+          <NetworkSelector />
+          {address && (
+            <span
+              className="text-xs text-gray-300 font-mono hidden sm:inline-block"
+              aria-label={t("wallet_balance")}
+            >
+              {balanceLoading && xlmBalance === null ? (
+                <span className="inline-block w-16 h-3 bg-gray-700 rounded animate-pulse" aria-hidden="true" />
+              ) : xlmBalance !== null ? (
+                `${parseFloat(xlmBalance).toLocaleString(language, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} XLM`
+              ) : null}
+            </span>
+          )}
+          <WalletConnect compact />
+          <button
+            onClick={toggleShowUsd}
+            className={`text-xs px-2 py-1 rounded border transition-colors ${
+              showUsd
+                ? "border-green-600 text-green-400 hover:bg-green-900/30"
+                : "border-gray-600 text-gray-400 hover:bg-gray-700"
+            }`}
+            aria-pressed={showUsd}
+            aria-label={showUsd ? t("hide_usd") : t("show_usd")}
+            title={showUsd ? t("hide_usd") : t("show_usd")}
+          >
+            {showUsd ? t("usd_active") : t("usd")}
+          </button>
+          <button
+            onClick={() => setChangelogOpen(true)}
+            className="relative text-gray-400 hover:text-white transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 p-1"
+            aria-label={changelogUnread ? t("whats_new_unread") : t("whats_new")}
+            title={t("whats_new")}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+            </svg>
+            {changelogUnread && (
+              <span className="absolute top-0.5 right-0.5 w-2 h-2 bg-green-400 rounded-full" aria-hidden="true" />
+            )}
+          </button>
+          <button
+            onClick={openHelp}
+            className="text-xs px-2 py-1 rounded border border-gray-600 text-gray-400 hover:bg-gray-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
+            title={t("keyboard_shortcuts")}
+            aria-label={t("open_keyboard_shortcuts")}
+          >
+            <span className="hidden sm:inline">{t("shortcuts")}</span>
+            <span className="sm:hidden">?</span>
+          </button>
+          <ThemeToggle />
+        </div>
+      </div>
+    </header>
+    <ChangelogModal open={changelogOpen} onClose={() => setChangelogOpen(false)} />
     </>
   );
 }

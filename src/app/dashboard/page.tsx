@@ -29,7 +29,6 @@ function loadSort(): { field: SortField; order: SortOrder } {
   } catch {}
   return { field: "created", order: "desc" };
 }
-
 function DashboardContent() {
   const rpcFetch = useRpcFetch();
   const searchParams = useSearchParams();
@@ -557,7 +556,7 @@ function DashboardContent() {
 
 export default function Dashboard() {
   return (
-    <Suspense>
+    <Suspense fallback={<StreamListSkeleton />}>
       <DashboardContent />
     </Suspense>
   );

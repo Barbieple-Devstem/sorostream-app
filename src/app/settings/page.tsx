@@ -12,6 +12,7 @@ import {
 } from "@/src/lib/addressBook";
 import { useToast } from "@/src/lib/toast";
 import { useSettings } from "@/src/context/SettingsContext";
+import { useTranslations } from "@/src/lib/i18n";
 
 function truncateAddress(address: string): string {
   if (!address) return "";
@@ -31,8 +32,9 @@ interface FormState {
 const emptyForm: FormState = { id: "", name: "", address: "" };
 
 export default function SettingsPage() {
+  const t = useTranslations("settings");
   const { addToast } = useToast();
-  const { withdrawThreshold, setWithdrawThreshold } = useSettings();
+  const { withdrawThreshold, setWithdrawThreshold, language, setLanguage } = useSettings();
   const [thresholdInput, setThresholdInput] = useState(String(withdrawThreshold));
   const [thresholdError, setThresholdError] = useState("");
 
@@ -54,10 +56,10 @@ export default function SettingsPage() {
 
   function validate(): boolean {
     const errs = { name: "", address: "" };
-    if (!form.name.trim()) errs.name = "Name is required.";
-    if (!form.address.trim()) errs.address = "Address is required.";
+    if (!form.name.trim()) errs.name = t("error_name_required");
+    if (!form.address.trim()) errs.address = t("error_address_required");
     else if (!/^G[A-Z2-7]{55}$/.test(form.address.trim()))
-      errs.address = "Must be a valid Stellar public key (starts with G, 56 chars).";
+      errs.address = t("error_address_invalid");
     setErrors(errs);
     return !errs.name && !errs.address;
   }
@@ -68,13 +70,13 @@ export default function SettingsPage() {
     if (form.id) {
       const ok = updateContact(form.id, { name: form.name.trim(), address: form.address.trim() });
       if (ok) {
-        addToast("Contact updated.", "success");
+        addToast(t("toast_contact_updated"), "success");
       } else {
-        addToast("Failed to update contact.", "error");
+        addToast(t("toast_contact_update_failed"), "error");
       }
     } else {
       if (contacts.length >= MAX_CONTACTS) {
-        addToast(`Maximum of ${MAX_CONTACTS} contacts reached.`, "error");
+        addToast(t("toast_contact_max_reached", { max: String(MAX_CONTACTS) }), "error");
         return;
       }
       const contact: AddressBookContact = {
@@ -84,9 +86,9 @@ export default function SettingsPage() {
       };
       const ok = saveContact(contact);
       if (ok) {
-        addToast("Contact saved.", "success");
+        addToast(t("toast_contact_saved"), "success");
       } else {
-        addToast("Failed to save contact.", "error");
+        addToast(t("toast_contact_save_failed"), "error");
       }
     }
 
@@ -103,7 +105,7 @@ export default function SettingsPage() {
     deleteContact(id);
     if (form.id === id) setForm(emptyForm);
     load();
-    addToast("Contact deleted.", "info");
+    addToast(t("toast_contact_deleted"), "info");
   }
 
   function handleCancel() {
@@ -116,21 +118,21 @@ export default function SettingsPage() {
       <div className="max-w-lg mx-auto">
         <div className="mb-4">
           <Link href="/dashboard" className="text-sm text-gray-400 hover:text-white transition-colors">
-            ← Dashboard
+            ← {t("cancel")}
           </Link>
         </div>
 
-        <h1 className="text-xl sm:text-2xl font-bold mb-6 sm:mb-8">Address Book</h1>
+        <h1 className="text-xl sm:text-2xl font-bold mb-6 sm:mb-8">{t("title")}</h1>
 
         {/* Withdrawal Threshold */}
         <div className="bg-gray-800 rounded-xl p-6 space-y-4 mb-8">
-          <h2 className="text-lg font-semibold">Withdrawal Confirmation Threshold</h2>
+          <h2 className="text-lg font-semibold">{t("withdraw_threshold_title")}</h2>
           <p className="text-gray-400 text-sm">
-            Withdrawals above this amount will require you to type the exact value to confirm.
+            {t("withdraw_threshold_desc")}
           </p>
           <div>
             <label htmlFor="withdraw-threshold" className="text-gray-200 text-sm font-medium block mb-1">
-              Threshold (XLM)
+              {t("withdraw_threshold_label")}
             </label>
             <div className="flex gap-3">
               <input
@@ -151,15 +153,15 @@ export default function SettingsPage() {
                 onClick={() => {
                   const parsed = parseFloat(thresholdInput);
                   if (!Number.isFinite(parsed) || parsed < 0) {
-                    setThresholdError("Enter a valid non-negative number.");
+                    setThresholdError(t("withdraw_threshold_error"));
                     return;
                   }
                   setWithdrawThreshold(parsed);
-                  addToast("Threshold saved.", "success");
+                  addToast(t("withdraw_threshold_saved"), "success");
                 }}
                 className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
               >
-                Save
+                {t("save")}
               </button>
             </div>
             {thresholdError && (
@@ -168,12 +170,34 @@ export default function SettingsPage() {
           </div>
         </div>
 
+        {/* Language Selection */}
+        <div className="bg-gray-800 rounded-xl p-6 space-y-4 mb-8">
+          <h2 className="text-lg font-semibold">{t("language_title")}</h2>
+          <p className="text-gray-400 text-sm">
+            {t("language_desc")}
+          </p>
+          <div>
+            <label htmlFor="language-select" className="text-gray-200 text-sm font-medium block mb-1">
+              {t("language_label")}
+            </label>
+            <select
+              id="language-select"
+              value={language}
+              onChange={(e) => setLanguage(e.target.value)}
+              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
+            >
+              <option value="en">{t("language_en")}</option>
+              <option value="pt">{t("language_pt")}</option>
+              <option value="es">{t("language_es")}</option>
+            </select>
+          </div>
+        </div>
 
         <div className="bg-gray-800 rounded-xl p-6 space-y-4 mb-8">
-          <h2 className="text-lg font-semibold">{form.id ? "Edit Contact" : "Add Contact"}</h2>
+          <h2 className="text-lg font-semibold">{form.id ? t("edit_title") : t("add_title")}</h2>
           <div>
             <label htmlFor="contact-name" className="text-gray-200 text-sm font-medium block mb-1">
-              Name
+              {t("name_label")}
             </label>
             <input
               id="contact-name"
@@ -182,7 +206,7 @@ export default function SettingsPage() {
                 setForm((prev) => ({ ...prev, name: e.target.value }));
                 setErrors((prev) => ({ ...prev, name: "" }));
               }}
-              placeholder="Alice"
+              placeholder={t("name_placeholder")}
               className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
               aria-invalid={!!errors.name}
               aria-describedby={errors.name ? "contact-name-error" : undefined}
@@ -193,7 +217,7 @@ export default function SettingsPage() {
           </div>
           <div>
             <label htmlFor="contact-address" className="text-gray-200 text-sm font-medium block mb-1">
-              Stellar Address
+              {t("address_label")}
             </label>
             <input
               id="contact-address"
@@ -202,7 +226,7 @@ export default function SettingsPage() {
                 setForm((prev) => ({ ...prev, address: e.target.value }));
                 setErrors((prev) => ({ ...prev, address: "" }));
               }}
-              placeholder="G..."
+              placeholder={t("address_placeholder")}
               className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white font-mono text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
               aria-invalid={!!errors.address}
               aria-describedby={errors.address ? "contact-address-error" : undefined}
@@ -216,14 +240,14 @@ export default function SettingsPage() {
               onClick={handleSave}
               className="flex-1 bg-green-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
             >
-              {form.id ? "Update" : "Save"}
+              {form.id ? t("update") : t("save")}
             </button>
             {form.id && (
               <button
                 onClick={handleCancel}
                 className="flex-1 border border-gray-600 text-gray-300 py-2 rounded-lg text-sm hover:bg-gray-700 transition-colors"
               >
-                Cancel
+                {t("cancel")}
               </button>
             )}
           </div>
@@ -233,12 +257,12 @@ export default function SettingsPage() {
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <p className="text-gray-400 text-sm">
-              {contacts.length}/{MAX_CONTACTS} contacts
+              {t("contact_count", { count: String(contacts.length), max: String(MAX_CONTACTS) })}
             </p>
           </div>
 
           {contacts.length === 0 ? (
-            <p className="text-gray-500 text-sm text-center py-8">No saved contacts yet.</p>
+            <p className="text-gray-500 text-sm text-center py-8">{t("empty")}</p>
           ) : (
             contacts.map((contact) => (
               <div
@@ -254,14 +278,14 @@ export default function SettingsPage() {
                   className="text-gray-400 hover:text-white text-sm px-2 py-1 transition-colors"
                   aria-label={`Edit ${contact.name}`}
                 >
-                  Edit
+                  {t("edit")}
                 </button>
                 <button
                   onClick={() => handleDelete(contact.id)}
                   className="text-red-400 hover:text-red-300 text-sm px-2 py-1 transition-colors"
                   aria-label={`Delete ${contact.name}`}
                 >
-                  Delete
+                  {t("delete")}
                 </button>
               </div>
             ))

@@ -37,12 +37,14 @@ export const DEFAULT_SHORTCUTS: ShortcutMap = {
 interface Settings {
   showUsd: boolean;
   withdrawThreshold: number;
+  language: string;
   keyboardShortcuts: ShortcutMap;
 }
 
 interface SettingsContextValue extends Settings {
   toggleShowUsd: () => void;
   setWithdrawThreshold: (value: number) => void;
+  setLanguage: (value: string) => void;
   setKeyboardShortcuts: (shortcuts: ShortcutMap) => void;
   resetKeyboardShortcuts: () => void;
   getShortcutLabel: (id: ShortcutId) => string;
@@ -51,6 +53,7 @@ interface SettingsContextValue extends Settings {
 const defaultSettings: Settings = {
   showUsd: true,
   withdrawThreshold: 1000,
+  language: "en",
   keyboardShortcuts: DEFAULT_SHORTCUTS,
 };
 
@@ -65,6 +68,7 @@ function loadSettings(): Settings {
     return {
       showUsd: parsed.showUsd ?? defaultSettings.showUsd,
       withdrawThreshold: parsed.withdrawThreshold ?? defaultSettings.withdrawThreshold,
+      language: parsed.language ?? defaultSettings.language,
       keyboardShortcuts: parsed.keyboardShortcuts ?? defaultSettings.keyboardShortcuts,
     };
   } catch {
@@ -87,6 +91,14 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     setSettings(loadSettings());
   }, []);
 
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const isRtl = ["ar", "he", "fa", "ur"].includes(settings.language);
+      document.documentElement.lang = settings.language;
+      document.documentElement.dir = isRtl ? "rtl" : "ltr";
+    }
+  }, [settings.language]);
+
   const toggleShowUsd = useCallback(() => {
     setSettings((prev) => {
       const next = { ...prev, showUsd: !prev.showUsd };
@@ -98,6 +110,14 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const setWithdrawThreshold = useCallback((value: number) => {
     setSettings((prev) => {
       const next = { ...prev, withdrawThreshold: value };
+      persist(next);
+      return next;
+    });
+  }, []);
+
+  const setLanguage = useCallback((value: string) => {
+    setSettings((prev) => {
+      const next = { ...prev, language: value };
       persist(next);
       return next;
     });
@@ -135,11 +155,20 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       ...settings,
       toggleShowUsd,
       setWithdrawThreshold,
+      setLanguage,
       setKeyboardShortcuts,
       resetKeyboardShortcuts,
       getShortcutLabel,
     }),
-    [settings, toggleShowUsd, setWithdrawThreshold, setKeyboardShortcuts, resetKeyboardShortcuts, getShortcutLabel],
+    [
+      settings,
+      toggleShowUsd,
+      setWithdrawThreshold,
+      setLanguage,
+      setKeyboardShortcuts,
+      resetKeyboardShortcuts,
+      getShortcutLabel,
+    ],
   );
 
   return (

@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import FiatDisplay from "@/components/FiatDisplay";
 import { sorostream } from "@/src/lib/sorostream";
 import { useRpcFetch } from "@/src/lib/useRpcFetch";
+import { useSettings } from "@/src/context/SettingsContext";
+import { useTranslations } from "@/src/lib/i18n";
 
 interface LiveCounterProps {
   flowRate: number;
@@ -39,6 +41,14 @@ export default function LiveCounter({
   reconcileIntervalMs = DEFAULT_RECONCILE_INTERVAL_MS,
   optimisticOverride,
 }: LiveCounterProps) {
+  const t = useTranslations("common");
+  let language = "en";
+  try {
+    const settings = useSettings();
+    if (settings) language = settings.language;
+  } catch {
+    // fallback to "en" when context is not available (e.g. in tests)
+  }
   const rpcFetch = useRpcFetch();
 
   const [baseline, setBaseline] = useState(() => ({
@@ -108,7 +118,7 @@ export default function LiveCounter({
 
   // Locale-aware display: groups thousands, always shows 7 decimal places
   const formatUSDC = (val: number) =>
-    (val / 10_000_000).toLocaleString(undefined, {
+    (val / 10_000_000).toLocaleString(language, {
       minimumFractionDigits: 7,
       maximumFractionDigits: 7,
     });
@@ -123,7 +133,7 @@ export default function LiveCounter({
       className="font-mono font-semibold tabular-nums inline-flex items-baseline gap-1.5"
       role="status"
       aria-live="polite"
-      aria-label={`Claimable: ${formatUSDC(displayValue)} USDC${isOptimistic ? " (pending confirmation)" : ""}`}
+      aria-label={t("claimable", { val: formatUSDC(displayValue) }) + (isOptimistic ? t("pending_confirmation") : "")}
     >
       <span className={isOptimistic ? "text-yellow-400" : "text-green-600"}>
         {formatUSDC(displayValue)} USDC
@@ -133,7 +143,7 @@ export default function LiveCounter({
           className="text-xs font-normal text-yellow-400/80 italic"
           aria-hidden="true"
         >
-          (pending…)
+          ({t("pending")})
         </span>
       )}
       {!isOptimistic && <FiatDisplay usdcAmount={displayValue / 10000000} />}

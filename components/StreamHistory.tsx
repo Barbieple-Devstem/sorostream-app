@@ -1,6 +1,8 @@
 "use client";
 
 import { formatUSDC, truncateAddress } from "@/src/lib/sorostream";
+import { useSettings } from "@/src/context/SettingsContext";
+import { useTranslations } from "@/src/lib/i18n";
 
 export interface HistoryEntry {
   timestamp: string;
@@ -16,32 +18,41 @@ interface StreamHistoryProps {
 
 const typeConfig: Record<
   HistoryEntry["type"],
-  { label: string; icon: string; colorClass: string }
+  { labelKey: "history_created" | "history_withdrawal" | "history_top_up" | "history_cancelled"; icon: string; colorClass: string }
 > = {
-  creation: { label: "Created", icon: "◉", colorClass: "text-gray-400 bg-gray-800" },
+  creation: { labelKey: "history_created", icon: "◉", colorClass: "text-gray-400 bg-gray-800" },
   withdrawal: {
-    label: "Withdrawal",
+    labelKey: "history_withdrawal",
     icon: "↓",
     colorClass: "text-green-400 bg-green-900/30",
   },
-  "top-up": { label: "Top-up", icon: "↑", colorClass: "text-blue-400 bg-blue-900/30" },
+  "top-up": { labelKey: "history_top_up", icon: "↑", colorClass: "text-blue-400 bg-blue-900/30" },
   cancellation: {
-    label: "Cancelled",
+    labelKey: "history_cancelled",
     icon: "✕",
     colorClass: "text-red-400 bg-red-900/30",
   },
 };
 
-function formatDate(value: string): string {
+function formatDate(value: string, language: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
+  return date.toLocaleString(language);
 }
 
 export default function StreamHistory({ entries, loading }: StreamHistoryProps) {
+  const t = useTranslations("common");
+  let language = "en";
+  try {
+    const settings = useSettings();
+    if (settings) language = settings.language;
+  } catch {
+    // fallback to "en" when context is not available (e.g. in tests)
+  }
+
   if (loading) {
     return (
-      <div className="space-y-3" aria-busy="true" aria-label="Loading stream history">
+      <div className="space-y-3" aria-busy="true" aria-label={t("loading_history")}>
         {[0, 1, 2].map((i) => (
           <div key={i} className="bg-gray-800 rounded-lg p-4 border border-gray-700 animate-pulse">
             <div className="flex items-center justify-between">
@@ -63,7 +74,7 @@ export default function StreamHistory({ entries, loading }: StreamHistoryProps) 
   if (!entries.length) {
     return (
       <div className="bg-gray-800 rounded-xl p-6 text-center border border-gray-700">
-        <p className="text-gray-400">No history events recorded yet.</p>
+        <p className="text-gray-400">{t("no_history_events")}</p>
       </div>
     );
   }
@@ -83,8 +94,8 @@ export default function StreamHistory({ entries, loading }: StreamHistoryProps) 
                   {config.icon}
                 </span>
                 <div>
-                  <p className="text-sm font-medium text-white">{config.label}</p>
-                  <p className="text-xs text-gray-400">{formatDate(entry.timestamp)}</p>
+                  <p className="text-sm font-medium text-white">{t(config.labelKey)}</p>
+                  <p className="text-xs text-gray-400">{formatDate(entry.timestamp, language)}</p>
                 </div>
               </div>
               <div className="text-right">

@@ -1,4 +1,5 @@
-"use client";
+import { useSettings } from "@/src/context/SettingsContext";
+import { useTranslations } from "@/src/lib/i18n";
 
 interface StreamTimelineProps {
   startTime?: Date | string;
@@ -6,16 +7,18 @@ interface StreamTimelineProps {
 }
 
 export default function StreamTimeline({ startTime = new Date(), endTime = new Date() }: StreamTimelineProps) {
+  const t = useTranslations("stream_detail");
+  const { language } = useSettings();
   const now = Date.now();
   const start = new Date(startTime).getTime();
   const end = new Date(endTime).getTime();
   const progress = Math.min(100, Math.max(0, ((now - start) / (end - start)) * 100));
-  const fmt = (d: Date | string) => new Date(d).toLocaleDateString();
+  const fmt = (d: Date | string) => new Date(d).toLocaleDateString(language);
   return (
     <div className="space-y-2">
       <div className="flex justify-between text-xs text-gray-400">
         <span>{fmt(startTime)}</span>
-        <span>Now</span>
+        <span>{t("now")}</span>
         <span>{fmt(endTime)}</span>
       </div>
       <div

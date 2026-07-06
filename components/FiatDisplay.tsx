@@ -16,6 +16,7 @@
  */
 import { useXlmPrice } from "@/src/lib/useXlmPrice";
 import { useSettings } from "@/src/context/SettingsContext";
+import { useTranslations } from "@/src/lib/i18n";
 
 interface FiatDisplayProps {
   /** Amount expressed in XLM (not stroops). */
@@ -25,20 +26,21 @@ interface FiatDisplayProps {
 }
 
 export default function FiatDisplay({ xlmAmount, usdcAmount }: FiatDisplayProps) {
+  const t = useTranslations("common");
   const { price, loading } = useXlmPrice();
-  const { showUsd } = useSettings();
+  const { showUsd, language } = useSettings();
 
   if (!showUsd) return null;
 
   if (usdcAmount !== undefined) {
-    const formatted = usdcAmount.toLocaleString(undefined, {
+    const formatted = usdcAmount.toLocaleString(language, {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
     return (
       <span
         className="text-gray-400 text-xs ml-1"
-        aria-label={`approximately ${formatted} US dollars`}
+        aria-label={t("approximately_usd", { formatted })}
       >
         (~${formatted} USD)
       </span>
@@ -50,14 +52,14 @@ export default function FiatDisplay({ xlmAmount, usdcAmount }: FiatDisplayProps)
 
     if (price === null) {
       return (
-        <span className="text-gray-500 text-xs ml-1" aria-label="Price unavailable">
-          (Price unavailable)
+        <span className="text-gray-500 text-xs ml-1" aria-label={t("price_unavailable")}>
+          ({t("price_unavailable")})
         </span>
       );
     }
 
     const usd = xlmAmount * price;
-    const formatted = usd.toLocaleString(undefined, {
+    const formatted = usd.toLocaleString(language, {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
@@ -65,7 +67,7 @@ export default function FiatDisplay({ xlmAmount, usdcAmount }: FiatDisplayProps)
     return (
       <span
         className="text-gray-400 text-xs ml-1"
-        aria-label={`approximately ${formatted} US dollars`}
+        aria-label={t("approximately_usd", { formatted })}
       >
         (~${formatted} USD)
       </span>
