@@ -3,6 +3,7 @@
 import { formatUSDC, truncateAddress } from "@/src/lib/sorostream";
 import { useSettings } from "@/src/context/SettingsContext";
 import { useTranslations } from "@/src/lib/i18n";
+import { formatDateWithTimezone } from "@/src/lib/timezone";
 
 export interface HistoryEntry {
   timestamp: string;
@@ -35,9 +36,7 @@ const typeConfig: Record<
 };
 
 function formatDate(value: string, language: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString(language);
+  return formatDateWithTimezone(value, language);
 }
 
 export default function StreamHistory({ entries, loading }: StreamHistoryProps) {
