@@ -7,6 +7,7 @@ import StreamVirtualList from "@/components/StreamVirtualList";
 import StreamEventFeed from "@/components/StreamEventFeed";
 import KeyboardShortcutsHelp from "@/components/KeyboardShortcutsHelp";
 import StatusLegend from "@/components/StatusLegend";
+import { StreamErrorBoundary } from "@/components/StreamErrorBoundary";
 import { getMockStreams, watchClaimable, sorostream, getMockStreamHistory, StreamData } from "@/src/lib/sorostream";
 import { useRpcFetch } from "@/src/lib/useRpcFetch";
 import { useToast } from "@/src/lib/toast";
@@ -302,7 +303,9 @@ function DashboardContent() {
         <div className="flex flex-col lg:flex-row gap-6">
           <div className="flex-1 min-w-0">
             {/* Status legend */}
-            <StatusLegend />
+            <StreamErrorBoundary section="Stats Summary">
+              <StatusLegend />
+            </StreamErrorBoundary>
 
             {/* Filter Bar */}
             <div className="mb-6 space-y-3">
@@ -478,6 +481,7 @@ function DashboardContent() {
               </div>
             )}
 
+            <StreamErrorBoundary section="Stream List">
             {state === "loading" ? (
               <StreamListSkeleton />
             ) : state === "empty" ? (
@@ -537,10 +541,13 @@ function DashboardContent() {
                 />
               </div>
             )}
+            </StreamErrorBoundary>
           </div>
 
           <div className="w-full lg:w-80 shrink-0">
-            <StreamEventFeed />
+            <StreamErrorBoundary section="Activity Feed">
+              <StreamEventFeed />
+            </StreamErrorBoundary>
           </div>
         </div>
       </div>

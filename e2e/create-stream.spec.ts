@@ -140,6 +140,133 @@ test.describe('Create Stream – form validation', () => {
   });
 });
 
+test.describe('Create Stream – end date & cliff date validation', () => {
+  /**
+   * Helper: navigate to step 2 (Amount & Duration) with valid recipient.
+   */
+  async function goToAmountStep(page: import('@playwright/test').Page) {
+    await page.goto('/stream/new');
+    await page.getByLabel('Recipient Address').fill(VALID_RECIPIENT);
+    await page.getByRole('button', { name: 'Next' }).click();
+    // Should now be on step 2
+    await expect(page.getByLabel(/Amount/i).first()).toBeVisible();
+  }
+
+  /**
+   * Returns a datetime-local string that is offset from now by `offsetMs` ms.
+   * Playwright fills datetime-local inputs with the format YYYY-MM-DDTHH:MM.
+   */
+  function datetimeLocalOffset(offsetMs: number): string {
+    const d = new Date(Date.now() + offsetMs);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return (
+      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+      `T${pad(d.getHours())}:${pad(d.getMinutes())}`
+    );
+  }
+
+  test('shows error when end date is in the past', async ({ page }) => {
+    await goToAmountStep(page);
+
+    const pastDate = datetimeLocalOffset(-86400000); // 1 day ago
+    await page.getByLabel('End Date').fill(pastDate);
+    await page.getByLabel('End Date').blur();
+
+    await expect(page.locator('#end-date-error')).toBeVisible();
+    await expect(page.locator('#end-date-error')).toContainText(/future/i);
+  });
+
+  test('does not show end-date error when end date is in the future', async ({ page }) => {
+    await goToAmountStep(page);
+
+    const futureDate = datetimeLocalOffset(86400000 * 2); // 2 days ahead
+    await page.getByLabel('End Date').fill(futureDate);
+    await page.getByLabel('End Date').blur();
+
+    await expect(page.locator('#end-date-error')).not.toBeVisible();
+  });
+
+  test('shows error when cliff date is after end date', async ({ page }) => {
+    await goToAmountStep(page);
+
+    const endDate = datetimeLocalOffset(86400000); // 1 day ahead
+    const cliffAfterEnd = datetimeLocalOffset(86400000 * 3); // 3 days ahead (after end)
+
+    await page.getByLabel('End Date').fill(endDate);
+    await page.getByLabel('End Date').blur();
+
+    await page.getByLabel('Cliff Date').fill(cliffAfterEnd);
+    await page.getByLabel('Cliff Date').blur();
+
+    await expect(page.locator('#cliff-date-error')).toBeVisible();
+    await expect(page.locator('#cliff-date-error')).toContainText(/before the end date/i);
+  });
+
+  test('shows error when cliff date is in the past', async ({ page }) => {
+    await goToAmountStep(page);
+
+    const pastCliff = datetimeLocalOffset(-86400000); // 1 day ago
+    await page.getByLabel('Cliff Date').fill(pastCliff);
+    await page.getByLabel('Cliff Date').blur();
+
+    await expect(page.locator('#cliff-date-error')).toBeVisible();
+    await expect(page.locator('#cliff-date-error')).toContainText(/future/i);
+  });
+
+  test('no cliff error when cliff is before a valid end date', async ({ page }) => {
+    await goToAmountStep(page);
+
+    const endDate = datetimeLocalOffset(86400000 * 3); // 3 days ahead
+    const cliffBeforeEnd = datetimeLocalOffset(86400000); // 1 day ahead (before end)
+
+    await page.getByLabel('End Date').fill(endDate);
+    await page.getByLabel('End Date').blur();
+
+    await page.getByLabel('Cliff Date').fill(cliffBeforeEnd);
+    await page.getByLabel('Cliff Date').blur();
+
+    await expect(page.locator('#cliff-date-error')).not.toBeVisible();
+  });
+
+  test('Next is blocked when end date is in the past', async ({ page }) => {
+    await goToAmountStep(page);
+
+    // Fill valid amount & duration
+    await page.getByLabel('Amount (USDC)').fill('10');
+    await page.getByLabel('Days').fill('1');
+
+    const pastDate = datetimeLocalOffset(-86400000);
+    await page.getByLabel('End Date').fill(pastDate);
+    await page.getByLabel('End Date').blur();
+
+    await page.getByRole('button', { name: 'Next' }).click();
+
+    // Still on amount step (not proceeded to review)
+    await expect(page.locator('#end-date-error')).toBeVisible();
+    await expect(page.locator('#end-date-error')).toContainText(/future/i);
+  });
+
+  test('Next is blocked when cliff date is after end date', async ({ page }) => {
+    await goToAmountStep(page);
+
+    await page.getByLabel('Amount (USDC)').fill('10');
+    await page.getByLabel('Days').fill('1');
+
+    const endDate = datetimeLocalOffset(86400000);
+    const cliffAfterEnd = datetimeLocalOffset(86400000 * 3);
+
+    await page.getByLabel('End Date').fill(endDate);
+    await page.getByLabel('End Date').blur();
+    await page.getByLabel('Cliff Date').fill(cliffAfterEnd);
+    await page.getByLabel('Cliff Date').blur();
+
+    await page.getByRole('button', { name: 'Next' }).click();
+
+    await expect(page.locator('#cliff-date-error')).toBeVisible();
+    await expect(page.locator('#cliff-date-error')).toContainText(/before the end date/i);
+  });
+});
+
 test.describe('Create Stream – wallet not connected', () => {
   test('nav shows Connect wallet button when no wallet is connected', async ({ page }) => {
     await page.goto('/stream/new');

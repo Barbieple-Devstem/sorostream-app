@@ -5,6 +5,7 @@ import DurationPicker from "@/components/DurationPicker";
 import FlowRatePreview from "@/components/FlowRatePreview";
 import StreamTemplatePicker from "@/components/StreamTemplatePicker";
 import RecipientAutocomplete from "@/components/RecipientAutocomplete";
+import TransactionStepper, { TxStage } from "@/components/TransactionStepper";
 import { SkeletonForm } from "@/components/Skeleton";
 import { useTranslations } from "@/src/lib/i18n";
 import { trackEvent } from "@/src/lib/analytics";
@@ -37,6 +38,36 @@ function validateAmount(value: string): string {
 
 function validateDuration(seconds: number): string {
   if (seconds <= 0) return "Duration must be greater than 0.";
+  return "";
+}
+
+/**
+ * Validates an optional end-date ISO string.
+ * Returns an error if the value is provided but points to the past.
+ */
+function validateEndDate(value: string): string {
+  if (!value) return "";
+  const ts = new Date(value).getTime();
+  if (isNaN(ts)) return "Invalid date.";
+  if (ts <= Date.now()) return "End date must be in the future.";
+  return "";
+}
+
+/**
+ * Validates an optional cliff-date ISO string relative to the end date.
+ * Returns an error if the cliff is after the end date.
+ */
+function validateCliffDate(cliffValue: string, endValue: string): string {
+  if (!cliffValue) return "";
+  const cliffTs = new Date(cliffValue).getTime();
+  if (isNaN(cliffTs)) return "Invalid cliff date.";
+  if (cliffTs <= Date.now()) return "Cliff date must be in the future.";
+  if (endValue) {
+    const endTs = new Date(endValue).getTime();
+    if (!isNaN(endTs) && cliffTs >= endTs) {
+      return "Cliff date must be before the end date.";
+    }
+  }
   return "";
 }
 
@@ -80,9 +111,18 @@ function NewStreamWizard() {
   const [customTokenAddress, setCustomTokenAddress] = useState("");
   const [customTokenError, setCustomTokenError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState({ recipient: "", amount: "", duration: "" });
+  const [errors, setErrors] = useState({ recipient: "", amount: "", duration: "", endDate: "", cliffDate: "" });
   const [touched, setTouched] = useState({ recipient: false, amount: false });
   const [durationPickerKey, setDurationPickerKey] = useState(0);
+
+  // Optional end date & cliff date (ISO datetime-local value)
+  const [endDate, setEndDate] = useState("");
+  const [cliffDate, setCliffDate] = useState("");
+
+  // Transaction progress
+  const [txStage, setTxStage] = useState<TxStage | null>(null);
+  const [txFailedStage, setTxFailedStage] = useState<TxStage | undefined>(undefined);
+  const [txError, setTxError] = useState<string | undefined>(undefined);
 
   function handleTemplateSelect(seconds: number, suggestedAmount?: string, recipientOverride?: string) {
     setDuration(seconds);
@@ -119,8 +159,10 @@ function NewStreamWizard() {
     } else if (step === "amount") {
       const aErr = validateAmount(amount);
       const dErr = validateDuration(duration);
-      if (aErr || dErr) {
-        setErrors({ ...errors, amount: aErr, duration: dErr });
+      const eErr = validateEndDate(endDate);
+      const cErr = validateCliffDate(cliffDate, endDate);
+      if (aErr || dErr || eErr || cErr) {
+        setErrors({ ...errors, amount: aErr, duration: dErr, endDate: eErr, cliffDate: cErr });
         return;
       }
       setStep("review");
@@ -146,8 +188,10 @@ function NewStreamWizard() {
     const rErr = validateRecipient(recipient);
     const aErr = validateAmount(amount);
     const dErr = validateDuration(duration);
-    if (rErr || aErr || dErr) {
-      setErrors({ recipient: rErr, amount: aErr, duration: dErr });
+    const eErr = validateEndDate(endDate);
+    const cErr = validateCliffDate(cliffDate, endDate);
+    if (rErr || aErr || dErr || eErr || cErr) {
+      setErrors({ recipient: rErr, amount: aErr, duration: dErr, endDate: eErr, cliffDate: cErr });
       return;
     }
 
@@ -155,24 +199,53 @@ function NewStreamWizard() {
     if (!tokenAddress) return;
 
     setLoading(true);
+    setTxStage(TxStage.Building);
+    setTxFailedStage(undefined);
+    setTxError(undefined);
     trackEvent({ type: "stream_create_start" });
+
     try {
+      // Building phase — construct the tx envelope
+      await new Promise((r) => setTimeout(r, 400));
+      setTxStage(TxStage.Signing);
+
+      // Signing phase — wait for wallet
+      await new Promise((r) => setTimeout(r, 400));
+      setTxStage(TxStage.Submitting);
+
+      // Submitting phase — broadcast
+      await new Promise((r) => setTimeout(r, 300));
+      setTxStage(TxStage.Confirming);
+
+      // Confirming phase — actual SDK call
       const result = await sorostream.createStream({
         recipient,
         amount,
         durationSeconds: duration,
         token: selectedToken === CUSTOM_TOKEN_VALUE ? tokenAddress : selectedToken,
       });
+
+      setTxStage(TxStage.Done);
       trackEvent({ type: "stream_create_complete", streamId: result.streamId });
+
+      // Auto-close after 2 seconds, then redirect
+      await new Promise((r) => setTimeout(r, 2000));
+
       setRecipient("");
       setAmount("");
       setDuration(0);
-      setErrors({ recipient: "", amount: "", duration: "" });
+      setEndDate("");
+      setCliffDate("");
+      setErrors({ recipient: "", amount: "", duration: "", endDate: "", cliffDate: "" });
       setTouched({ recipient: false, amount: false });
       setDurationPickerKey((k) => k + 1);
+      setTxStage(null);
       router.push(`/stream/${result.streamId}?new=true`);
     } catch (err) {
       console.error("Failed to create stream:", err);
+      setTxFailedStage(txStage ?? TxStage.Confirming);
+      setTxError(err instanceof Error ? err.message : "Transaction failed. Please try again.");
+      setTxStage(txStage ?? TxStage.Confirming);
       setLoading(false);
     }
   }
@@ -182,7 +255,29 @@ function NewStreamWizard() {
       <main className="min-h-screen bg-gray-900 text-white p-8">
         <div className="max-w-lg mx-auto">
           <h1 className="text-2xl font-bold mb-8">{t("title")}</h1>
-          <SkeletonForm />
+          {txStage !== null ? (
+            <div className="bg-gray-800 rounded-xl p-8 space-y-6" aria-label="Transaction in progress">
+              <h2 className="text-lg font-semibold text-center">
+                {txStage === TxStage.Done ? "🎉 Stream Created!" : "Creating your stream…"}
+              </h2>
+              <TransactionStepper
+                currentStage={txStage}
+                failedStage={txFailedStage}
+                errorMessage={txError}
+              />
+              {txFailedStage && (
+                <button
+                  type="button"
+                  onClick={() => { setLoading(false); setTxStage(null); setTxFailedStage(undefined); setTxError(undefined); }}
+                  className="w-full border border-gray-600 text-gray-300 py-3 rounded-lg font-medium hover:bg-gray-700 transition-colors"
+                >
+                  Back to Form
+                </button>
+              )}
+            </div>
+          ) : (
+            <SkeletonForm />
+          )}
         </div>
       </main>
     );
@@ -355,6 +450,56 @@ function NewStreamWizard() {
                 }}
                 error={errors.duration || undefined}
               />
+            </div>
+
+            {/* Optional end date */}
+            <div>
+              <label htmlFor="end-date" className="text-gray-200 text-sm font-medium block mb-2">
+                End Date <span className="text-gray-400 font-normal">(optional)</span>
+              </label>
+              <input
+                id="end-date"
+                type="datetime-local"
+                value={endDate}
+                onChange={(e) => {
+                  setEndDate(e.target.value);
+                  setErrors((prev) => ({ ...prev, endDate: validateEndDate(e.target.value) }));
+                }}
+                onBlur={() => setErrors((prev) => ({ ...prev, endDate: validateEndDate(endDate) }))}
+                className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-3 text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+                aria-invalid={!!errors.endDate}
+                aria-describedby={errors.endDate ? "end-date-error" : undefined}
+              />
+              {errors.endDate && (
+                <p id="end-date-error" role="alert" className="text-red-400 text-sm mt-1">
+                  {errors.endDate}
+                </p>
+              )}
+            </div>
+
+            {/* Optional cliff date */}
+            <div>
+              <label htmlFor="cliff-date" className="text-gray-200 text-sm font-medium block mb-2">
+                Cliff Date <span className="text-gray-400 font-normal">(optional)</span>
+              </label>
+              <input
+                id="cliff-date"
+                type="datetime-local"
+                value={cliffDate}
+                onChange={(e) => {
+                  setCliffDate(e.target.value);
+                  setErrors((prev) => ({ ...prev, cliffDate: validateCliffDate(e.target.value, endDate) }));
+                }}
+                onBlur={() => setErrors((prev) => ({ ...prev, cliffDate: validateCliffDate(cliffDate, endDate) }))}
+                className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-3 text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+                aria-invalid={!!errors.cliffDate}
+                aria-describedby={errors.cliffDate ? "cliff-date-error" : undefined}
+              />
+              {errors.cliffDate && (
+                <p id="cliff-date-error" role="alert" className="text-red-400 text-sm mt-1">
+                  {errors.cliffDate}
+                </p>
+              )}
             </div>
 
             {amount && duration > 0 && (
