@@ -82,17 +82,17 @@ export default function ChangelogModal({ open, onClose }: Props) {
         onClick={onClose}
         aria-hidden="true"
       />
-      <div className="relative bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl w-full max-w-md p-6 flex flex-col gap-5">
+      <div className="relative bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-2xl w-full max-w-md p-6 flex flex-col gap-5">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-bold text-white">What&apos;s New</h2>
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white">What&apos;s New</h2>
             {changelog && (
-              <p className="text-xs text-gray-500 mt-0.5">Version {changelog.version}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-500 mt-0.5">Version {changelog.version}</p>
             )}
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-white transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 p-1"
+            className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 p-1"
             aria-label="Close changelog"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -108,8 +108,8 @@ export default function ChangelogModal({ open, onClose }: Props) {
               <li key={i} className="flex items-start gap-3">
                 <span className="text-2xl leading-none mt-0.5" aria-hidden="true">{entry.icon}</span>
                 <div>
-                  <p className="text-sm font-semibold text-white">{entry.title}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">{entry.description}</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">{entry.title}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{entry.description}</p>
                 </div>
               </li>
             ))}
@@ -118,10 +118,10 @@ export default function ChangelogModal({ open, onClose }: Props) {
           <div className="flex flex-col gap-3">
             {Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className="flex items-start gap-3">
-                <div className="w-8 h-8 bg-gray-800 rounded animate-pulse shrink-0" />
+                <div className="w-8 h-8 bg-gray-200 dark:bg-gray-800 rounded animate-pulse shrink-0" />
                 <div className="flex-1 space-y-1.5">
-                  <div className="h-3 bg-gray-800 rounded animate-pulse w-2/3" />
-                  <div className="h-3 bg-gray-800 rounded animate-pulse w-full" />
+                  <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded animate-pulse w-2/3" />
+                  <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded animate-pulse w-full" />
                 </div>
               </div>
             ))}
@@ -130,7 +130,7 @@ export default function ChangelogModal({ open, onClose }: Props) {
 
         <button
           onClick={onClose}
-          className="mt-1 w-full bg-green-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+          className="mt-1 w-full bg-green-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 dark:focus-visible:ring-offset-gray-900"
         >
           Got it
         </button>

@@ -35,8 +35,8 @@ function getSystemTheme(): Theme {
 
 function applyTheme(theme: Theme) {
   const root = document.documentElement;
-  root.classList.toggle("light", theme === "light");
   root.classList.toggle("dark", theme === "dark");
+  root.classList.remove("light");
   root.style.colorScheme = theme;
 }
 
