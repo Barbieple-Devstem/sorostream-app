@@ -6,6 +6,7 @@ import { StreamListSkeleton } from "@/components/Skeleton";
 import StreamVirtualList from "@/components/StreamVirtualList";
 import StreamEventFeed from "@/components/StreamEventFeed";
 import KeyboardShortcutsHelp from "@/components/KeyboardShortcutsHelp";
+import PortfolioChart from "@/components/PortfolioChart";
 import StatusLegend from "@/components/StatusLegend";
 import { getMockStreams, watchClaimable, sorostream, getMockStreamHistory, StreamData } from "@/src/lib/sorostream";
 import { useRpcFetch } from "@/src/lib/useRpcFetch";
@@ -301,6 +302,9 @@ function DashboardContent() {
 
         <div className="flex flex-col lg:flex-row gap-6">
           <div className="flex-1 min-w-0">
+            {/* Portfolio Chart */}
+            <PortfolioChart />
+
             {/* Status legend */}
             <StatusLegend />
 
