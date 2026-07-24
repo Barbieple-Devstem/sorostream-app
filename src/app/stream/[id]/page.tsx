@@ -70,7 +70,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
   const router = useRouter();
   const { addToast, upsertPersistentToast, removeToast } = useToast();
   const { withdrawThreshold } = useSettings();
-  const { address } = useWallet();
+  const { address, refetchBalance } = useWallet();
   const { isBookmarked, toggleBookmark } = useBookmarks();
   const [withdrawConfirmAmount, setWithdrawConfirmAmount] = useState<string | null>(null);
 
@@ -218,6 +218,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
     try {
       const result = await sorostream.withdraw();
       setOptimisticClaimable(null);
+      refetchBalance();
       addToast(`Withdrawal submitted! Tx: ${result.txHash}`, "success");
     } catch {
       setOptimisticClaimable(null);
@@ -226,7 +227,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
     } finally {
       setWithdrawLoading(false);
     }
-  }, [params.id, addToast]);
+  }, [params.id, addToast, refetchBalance]);
 
   const handleWithdraw = useCallback(() => {
     const prevStream = getMockStream(params.id);
