@@ -100,8 +100,8 @@ function NewStreamWizard() {
   })();
   const initialDuration = (() => {
     if (!durationParam) return 0;
-    const num = parseInt(durationParam, 10);
-    return !isNaN(num) && num > 0 ? num : 0;
+    const num = parseFloat(durationParam);
+    return !isNaN(num) && num > 0 ? Math.round(num) : 0;
   })();
 
   const [recipient, setRecipient] = useState(initialRecipient);
@@ -252,7 +252,7 @@ function NewStreamWizard() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-gray-900 text-white p-8">
+      <main id="main-content" tabIndex={-1} className="min-h-screen bg-gray-900 text-white p-8">
         <div className="max-w-lg mx-auto">
           <h1 className="text-2xl font-bold mb-8">{t("title")}</h1>
           {txStage !== null ? (
@@ -290,7 +290,7 @@ function NewStreamWizard() {
     : true;
 
   return (
-    <main className="min-h-screen bg-gray-900 text-white p-4 sm:p-8">
+    <main id="main-content" tabIndex={-1} className="min-h-screen bg-gray-900 text-white p-4 sm:p-8">
       <div className="max-w-lg mx-auto">
         <div className="mb-8">
           <div className="flex items-center justify-center gap-2 mb-6">
@@ -533,11 +533,19 @@ function NewStreamWizard() {
               <div className="flex justify-between items-center">
                 <span className="text-gray-400 text-sm">Duration</span>
                 <span className="text-white font-mono text-sm">
-                  {duration >= 86400
-                    ? `${Math.floor(duration / 86400)}d ${Math.floor((duration % 86400) / 3600)}h`
-                    : duration >= 3600
-                    ? `${Math.floor(duration / 3600)}h ${Math.floor((duration % 3600) / 60)}m`
-                    : `${Math.floor(duration / 60)}m`}
+                  {(() => {
+                    if (duration >= 86400) {
+                      const totalDays = duration / 86400;
+                      const isWhole = totalDays === Math.floor(totalDays);
+                      const dayPart = isWhole ? `${Math.floor(totalDays)}d` : `${totalDays.toFixed(1)}d`;
+                      const hourRemainder = Math.floor((duration % 86400) / 3600);
+                      return hourRemainder > 0 ? `${dayPart} ${hourRemainder}h` : dayPart;
+                    }
+                    if (duration >= 3600) {
+                      return `${Math.floor(duration / 3600)}h ${Math.floor((duration % 3600) / 60)}m`;
+                    }
+                    return `${Math.floor(duration / 60)}m`;
+                  })()}
                 </span>
               </div>
               <div className="border-t border-gray-700 pt-4">
@@ -586,7 +594,7 @@ function NewStreamWizard() {
 
 export default function NewStreamPage() {
   return (
-    <Suspense fallback={<main className="min-h-screen bg-gray-900 text-white p-4 sm:p-8"><div className="max-w-lg mx-auto"><SkeletonForm /></div></main>}>
+    <Suspense fallback={<main id="main-content" tabIndex={-1} className="min-h-screen bg-gray-900 text-white p-4 sm:p-8"><div className="max-w-lg mx-auto"><SkeletonForm /></div></main>}>
       <NewStreamWizard />
     </Suspense>
   );

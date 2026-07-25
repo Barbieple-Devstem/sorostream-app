@@ -237,7 +237,7 @@ export default function WalletConnect({ onConnect, compact = false }: WalletConn
     return (
       <div className="flex items-center gap-2 min-w-0 overflow-hidden">
         <span
-          className="text-sm text-slate-300 font-mono flex items-center shrink-0"
+          className="text-sm text-slate-300 font-mono flex items-center min-w-0"
           aria-label={`Connected wallet: ${publicKey}`}
         >
           {publicKey.slice(0, 4)}…{publicKey.slice(-4)}
