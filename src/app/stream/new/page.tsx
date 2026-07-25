@@ -5,6 +5,7 @@ import DurationPicker from "@/components/DurationPicker";
 import FlowRatePreview from "@/components/FlowRatePreview";
 import StreamTemplatePicker from "@/components/StreamTemplatePicker";
 import RecipientAutocomplete from "@/components/RecipientAutocomplete";
+import VestingPreviewChart from "@/components/VestingPreviewChart";
 import TransactionStepper, { TxStage } from "@/components/TransactionStepper";
 import { SkeletonForm } from "@/components/Skeleton";
 import { useTranslations } from "@/src/lib/i18n";
@@ -501,6 +502,15 @@ function NewStreamWizard() {
                 </p>
               )}
             </div>
+
+            {amount && duration > 0 && (
+              <VestingPreviewChart
+                amount={amount}
+                durationSeconds={duration}
+                cliffSeconds={cliffDate ? Math.max(0, Math.floor((new Date(cliffDate).getTime() - Date.now()) / 1000)) : undefined}
+                token={selectedToken === CUSTOM_TOKEN_VALUE ? "tokens" : selectedToken}
+              />
+            )}
 
             {amount && duration > 0 && (
               <FlowRatePreview amount={amount} durationSeconds={duration} />
