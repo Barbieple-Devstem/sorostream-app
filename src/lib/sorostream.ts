@@ -298,3 +298,54 @@ export function truncateAddress(address: string): string {
   if (!address) return "";
   return `${address.slice(0, 4)}...${address.slice(-4)}`;
 }
+
+// ── Treasury ────────────────────────────────────────────────────────────────
+
+export interface TreasuryBalance {
+  /** Token symbol, e.g. "USDC" or "XLM" */
+  token: string;
+  /** Raw stroop balance accumulated in the treasury */
+  balanceStroops: number;
+  /** ISO timestamp of the last sweep (null if never swept) */
+  lastSweepAt: string | null;
+  /** Amount swept in the last sweep (stroops), null if never swept */
+  lastSweepAmountStroops: number | null;
+}
+
+/** Mock treasury balances — keyed by token. */
+const MOCK_TREASURY: TreasuryBalance[] = [
+  {
+    token: "USDC",
+    balanceStroops: 3_750_000_000, // 375 USDC
+    lastSweepAt: new Date(Date.now() - 86400000 * 7).toISOString(),
+    lastSweepAmountStroops: 1_200_000_000,
+  },
+  {
+    token: "XLM",
+    balanceStroops: 8_200_000_000, // 820 XLM
+    lastSweepAt: new Date(Date.now() - 86400000 * 14).toISOString(),
+    lastSweepAmountStroops: 2_500_000_000,
+  },
+  {
+    token: "wBTC",
+    balanceStroops: 0, // No fees collected yet
+    lastSweepAt: null,
+    lastSweepAmountStroops: null,
+  },
+];
+
+/** Fetch the treasury balances (simulates a contract query). */
+export async function getTreasuryBalances(): Promise<TreasuryBalance[]> {
+  return [...MOCK_TREASURY];
+}
+
+/** Simulate a sweep_fees contract call. Clears the balance and records sweep metadata. */
+export async function sweepTreasuryFees(token: string): Promise<{ txHash: string }> {
+  const entry = MOCK_TREASURY.find((t) => t.token === token);
+  if (entry) {
+    entry.lastSweepAmountStroops = entry.balanceStroops;
+    entry.lastSweepAt = new Date().toISOString();
+    entry.balanceStroops = 0;
+  }
+  return { txHash: `mock-sweep-tx-${Date.now()}` };
+}
