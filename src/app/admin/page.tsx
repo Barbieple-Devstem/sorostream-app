@@ -1,443 +1,308 @@
 "use client";
-
-import { useState, useEffect, useMemo, useCallback } from "react";
+/**
+ * /admin — Admin dashboard.
+ *
+ * Treasury Stats widget:
+ * - Shows accumulated fee balance per supported token
+ * - USD equivalent via XLM price feed (XLM tokens) or 1:1 assumption for USDC
+ * - Last sweep date and amount
+ * - Sweep button visible only to the admin wallet address
+ * - Zero-balance tokens show "No fees collected"
+ * - Sweep triggers a balance refresh
+ */
+import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
+import {
+  getTreasuryBalances,
+  sweepTreasuryFees,
+  formatStellarAmount,
+  type TreasuryBalance,
+} from "@/src/lib/sorostream";
+import { useXlmPrice } from "@/src/lib/useXlmPrice";
 import { useWallet } from "@/src/context/WalletContext";
 import { useToast } from "@/src/lib/toast";
 
-// ---------------------------------------------------------------------------
-// Mock admin data & contract stubs
-// In production, replace these with real SDK / RPC calls.
-// ---------------------------------------------------------------------------
+// ── Env-configurable admin wallet address ───────────────────────────────────
+// Set NEXT_PUBLIC_ADMIN_WALLET to the admin's Stellar public key.
+// If unset, the sweep button is never shown.
+const ADMIN_WALLET = process.env.NEXT_PUBLIC_ADMIN_WALLET ?? "";
 
-const MOCK_ADMIN_ADDRESS = "GBAM5YLZJXO7RMZLBFNBJ6JCWLF7BLZQTBQKGMQYXB3XNFA3BOEP";
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
-const INITIAL_WHITELIST: string[] = [
-  "GBCR7QXZD4XKQNLKFM7JOXNJ4RSDQKPFZVZLHXMKXYXT5RDRL7XDRL",
-  "GDEF3XYZKQNP7LKFM7JOXNJ4RSDQKPFZVZLHXMKXYXT5RDRL7XABC",
-  "GHIJ5KLMNQ4XKQNLKFM7JOXNJ4RSDQKPFZVZLHXMKXYXT5RDRL7XYZ",
-  "GPQR8STUVW4XKQNLKFM7JOXNJ4RSDQKPFZVZLHXMKXYXT5RDRL7DEF",
-  "GXYZ1ABCD24XKQNLKFM7JOXNJ4RSDQKPFZVZLHXMKXYXT5RDRL7GHI",
-];
-
-async function mockLoadWhitelist(): Promise<string[]> {
-  await new Promise((r) => setTimeout(r, 600));
-  return [...INITIAL_WHITELIST];
+function formatDate(iso: string | null): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
 }
 
-async function mockAddToWhitelist(address: string): Promise<void> {
-  await new Promise((r) => setTimeout(r, 800));
-  // In production: sign & submit addWhitelist(address) transaction
+/**
+ * Compute the approximate USD value of a treasury balance.
+ * - USDC is treated as 1:1 with USD.
+ * - XLM uses the live price feed.
+ * - Other tokens: shown as "—" when price is unavailable.
+ */
+function toUsd(
+  token: string,
+  stroops: number,
+  xlmPrice: number | null,
+): string | null {
+  const amount = stroops / 10_000_000;
+  if (token === "USDC") return `$${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  if (token === "XLM" && xlmPrice !== null) {
+    const usd = amount * xlmPrice;
+    return `$${usd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+  return null;
 }
 
-async function mockRemoveFromWhitelist(address: string): Promise<void> {
-  await new Promise((r) => setTimeout(r, 800));
-  // In production: sign & submit removeWhitelist(address) transaction
+// ── Sub-components ───────────────────────────────────────────────────────────
+
+function Spinner() {
+  return (
+    <svg
+      className="animate-spin h-4 w-4 inline-block align-middle"
+      xmlns="http://www.w3.org/2000/svg"
+      fill="none"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+    </svg>
+  );
 }
 
-async function mockSetWhitelistEnabled(enabled: boolean): Promise<void> {
-  await new Promise((r) => setTimeout(r, 600));
-  // In production: sign & submit setWhitelistEnabled(enabled) transaction
+interface TreasuryRowProps {
+  entry: TreasuryBalance;
+  isAdmin: boolean;
+  xlmPrice: number | null;
+  onSweep: (token: string) => Promise<void>;
+  sweeping: boolean;
 }
 
-// ---------------------------------------------------------------------------
-// Page component
-// ---------------------------------------------------------------------------
+function TreasuryRow({ entry, isAdmin, xlmPrice, onSweep, sweeping }: TreasuryRowProps) {
+  const hasBalance = entry.balanceStroops > 0;
+  const usdValue = hasBalance ? toUsd(entry.token, entry.balanceStroops, xlmPrice) : null;
 
-const PAGE_SIZE = 10;
+  return (
+    <div className="bg-gray-800 rounded-xl border border-gray-700 p-5 flex flex-col gap-3">
+      {/* Token name + balance */}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs text-gray-400 uppercase tracking-wider mb-0.5">Token</p>
+          <p className="text-lg font-bold text-white">{entry.token}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-xs text-gray-400 uppercase tracking-wider mb-0.5">Balance</p>
+          {hasBalance ? (
+            <p className="text-lg font-bold text-green-400 font-mono">
+              {formatStellarAmount(entry.balanceStroops)}
+            </p>
+          ) : (
+            <p className="text-sm text-gray-500 italic">No fees collected</p>
+          )}
+        </div>
+      </div>
 
-function validateAddress(addr: string): string {
-  if (!addr.trim()) return "Address is required.";
-  if (!/^G[A-Z2-7]{55}$/.test(addr.trim()))
-    return "Must be a valid Stellar public key (starts with G, 56 chars).";
-  return "";
+      {/* USD equivalent */}
+      {hasBalance && (
+        <div className="flex items-center gap-2 text-sm">
+          <span className="text-gray-400">≈</span>
+          <span className="text-gray-300">
+            {usdValue ?? <span className="text-gray-500 text-xs">Price unavailable</span>}
+          </span>
+          {entry.token === "XLM" && xlmPrice !== null && (
+            <span className="text-xs text-gray-500">@ ${xlmPrice.toFixed(4)}/XLM</span>
+          )}
+        </div>
+      )}
+
+      {/* Last sweep info */}
+      <div className="text-xs text-gray-400 space-y-0.5 border-t border-gray-700 pt-3">
+        <div className="flex justify-between">
+          <span>Last sweep</span>
+          <span className="text-gray-300">{formatDate(entry.lastSweepAt)}</span>
+        </div>
+        {entry.lastSweepAmountStroops !== null && (
+          <div className="flex justify-between">
+            <span>Last swept amount</span>
+            <span className="text-gray-300 font-mono">
+              {formatStellarAmount(entry.lastSweepAmountStroops)} {entry.token}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Sweep button — admin only */}
+      {isAdmin && (
+        <button
+          onClick={() => onSweep(entry.token)}
+          disabled={sweeping || !hasBalance}
+          aria-busy={sweeping}
+          className="mt-1 w-full py-2 rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 disabled:opacity-40 disabled:cursor-not-allowed bg-green-700 text-white hover:bg-green-600"
+          title={!hasBalance ? "No fees to sweep" : undefined}
+        >
+          {sweeping ? (
+            <span className="flex items-center justify-center gap-2">
+              <Spinner /> Sweeping…
+            </span>
+          ) : (
+            "Sweep Fees"
+          )}
+        </button>
+      )}
+    </div>
+  );
 }
+
+// ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function AdminPage() {
-  const { address: walletAddress } = useWallet();
+  const { address } = useWallet();
+  const { price: xlmPrice } = useXlmPrice();
   const { addToast } = useToast();
 
-  const [whitelist, setWhitelist] = useState<string[]>([]);
+  const [balances, setBalances] = useState<TreasuryBalance[]>([]);
   const [loading, setLoading] = useState(true);
-  const [whitelistEnabled, setWhitelistEnabled] = useState(true);
-  const [toggleLoading, setToggleLoading] = useState(false);
+  const [sweepingToken, setSweepingToken] = useState<string | null>(null);
 
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
+  // An admin is the connected wallet matching the configured admin address.
+  const isAdmin = Boolean(ADMIN_WALLET && address && address === ADMIN_WALLET);
 
-  const [newAddress, setNewAddress] = useState("");
-  const [addError, setAddError] = useState("");
-  const [addLoading, setAddLoading] = useState(false);
-
-  const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
-  const [removeLoading, setRemoveLoading] = useState(false);
-
-  const isAdmin =
-    !walletAddress ||
-    walletAddress === MOCK_ADMIN_ADDRESS ||
-    // For development: any connected wallet is treated as admin
-    !!walletAddress;
-
-  const reload = useCallback(async () => {
-    setLoading(true);
+  const fetchBalances = useCallback(async () => {
     try {
-      const list = await mockLoadWhitelist();
-      setWhitelist(list);
+      const data = await getTreasuryBalances();
+      setBalances(data);
     } catch {
-      addToast({ type: "error", message: "Failed to load whitelist." });
+      addToast("Failed to load treasury balances.", "error");
     } finally {
       setLoading(false);
     }
   }, [addToast]);
 
   useEffect(() => {
-    void reload();
-  }, [reload]);
+    void fetchBalances();
+  }, [fetchBalances]);
 
-  // Filtered and paginated
-  const filtered = useMemo(
-    () =>
-      whitelist.filter((addr) =>
-        addr.toLowerCase().includes(search.toLowerCase()),
-      ),
-    [whitelist, search],
+  const handleSweep = useCallback(
+    async (token: string) => {
+      if (sweepingToken) return;
+      setSweepingToken(token);
+      try {
+        const result = await sweepTreasuryFees(token);
+        addToast(`Swept ${token} fees. TX: ${result.txHash}`, "success");
+        // Refresh balances after a successful sweep
+        await fetchBalances();
+      } catch {
+        addToast(`Failed to sweep ${token} fees. Please try again.`, "error");
+      } finally {
+        setSweepingToken(null);
+      }
+    },
+    [sweepingToken, addToast, fetchBalances],
   );
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-
-  // Reset to page 1 when search changes
-  useEffect(() => setPage(1), [search]);
-
-  // -------------------------------------------------------------------------
-  // Handlers
-  // -------------------------------------------------------------------------
-
-  async function handleToggle() {
-    setToggleLoading(true);
-    try {
-      await mockSetWhitelistEnabled(!whitelistEnabled);
-      setWhitelistEnabled((v) => !v);
-      addToast({
-        type: "success",
-        message: `Whitelist ${!whitelistEnabled ? "enabled" : "disabled"}.`,
-      });
-    } catch {
-      addToast({ type: "error", message: "Failed to update whitelist state." });
-    } finally {
-      setToggleLoading(false);
-    }
-  }
-
-  async function handleAdd(e: React.FormEvent) {
-    e.preventDefault();
-    const err = validateAddress(newAddress);
-    if (err) {
-      setAddError(err);
-      return;
-    }
-    if (whitelist.includes(newAddress.trim())) {
-      setAddError("Address is already in the whitelist.");
-      return;
-    }
-    setAddLoading(true);
-    try {
-      await mockAddToWhitelist(newAddress.trim());
-      setWhitelist((prev) => [...prev, newAddress.trim()]);
-      setNewAddress("");
-      setAddError("");
-      addToast({ type: "success", message: "Address added to whitelist." });
-    } catch {
-      addToast({ type: "error", message: "Failed to add address." });
-    } finally {
-      setAddLoading(false);
-    }
-  }
-
-  async function handleRemove(addr: string) {
-    setRemoveLoading(true);
-    try {
-      await mockRemoveFromWhitelist(addr);
-      setWhitelist((prev) => prev.filter((a) => a !== addr));
-      addToast({ type: "success", message: "Address removed from whitelist." });
-    } catch {
-      addToast({ type: "error", message: "Failed to remove address." });
-    } finally {
-      setRemoveLoading(false);
-      setConfirmRemove(null);
-    }
-  }
-
-  // -------------------------------------------------------------------------
-  // Render
-  // -------------------------------------------------------------------------
-
-  if (!walletAddress) {
-    return (
-      <main
-        id="main-content"
-        tabIndex={-1}
-        className="min-h-screen bg-gray-900 text-white flex items-center justify-center p-8"
-      >
-        <div className="text-center max-w-sm">
-          <div className="text-4xl mb-4">🔒</div>
-          <h1 className="text-xl font-bold mb-2">Connect Your Wallet</h1>
-          <p className="text-gray-400 text-sm">
-            You must connect an admin wallet to access this page.
-          </p>
-        </div>
-      </main>
-    );
-  }
-
   return (
-    <main
-      id="main-content"
-      tabIndex={-1}
-      className="min-h-screen bg-gray-900 text-white p-4 sm:p-8 pb-24 md:pb-8"
-    >
-      <div className="max-w-3xl mx-auto">
-        {/* Page title */}
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold">Admin Dashboard</h1>
-          <p className="text-gray-400 text-sm mt-1">
-            Manage contract state and recipient whitelist.
-          </p>
+    <main className="min-h-screen bg-gray-900 text-white p-4 sm:p-8">
+      <div className="max-w-5xl mx-auto">
+        {/* Header */}
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
+          <div>
+            <h1 className="text-2xl font-bold">Admin Dashboard</h1>
+            <p className="text-gray-400 text-sm mt-1">
+              Protocol fee revenue and treasury management.
+            </p>
+          </div>
+          <Link
+            href="/dashboard"
+            className="text-sm text-green-400 hover:text-green-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+          >
+            ← Dashboard
+          </Link>
         </div>
 
-        {/* Whitelist section */}
-        <section aria-labelledby="whitelist-heading">
-          <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-            <h2 id="whitelist-heading" className="text-lg font-semibold">
-              Recipient Whitelist
+        {/* Admin wallet notice */}
+        {!ADMIN_WALLET && (
+          <div
+            role="note"
+            className="mb-6 rounded-lg bg-yellow-900/30 border border-yellow-700 text-yellow-300 text-sm px-4 py-3"
+          >
+            <strong>NEXT_PUBLIC_ADMIN_WALLET</strong> is not configured. The
+            Sweep Fees button will not appear until an admin address is set.
+          </div>
+        )}
+
+        {address && ADMIN_WALLET && !isAdmin && (
+          <div
+            role="note"
+            className="mb-6 rounded-lg bg-gray-800 border border-gray-700 text-gray-400 text-sm px-4 py-3"
+          >
+            Connected as <span className="font-mono text-gray-300">{address}</span>. Sweep
+            controls are only available to the admin wallet.
+          </div>
+        )}
+
+        {/* Treasury stats */}
+        <section aria-labelledby="treasury-heading">
+          <div className="flex items-center justify-between mb-4">
+            <h2 id="treasury-heading" className="text-lg font-semibold">
+              Treasury Balances
             </h2>
-
-            {/* Enable / Disable toggle */}
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-gray-400">
-                {whitelistEnabled ? "Enabled" : "Disabled"}
-              </span>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={whitelistEnabled}
-                onClick={handleToggle}
-                disabled={toggleLoading || !isAdmin}
-                className={`
-                  relative inline-flex h-6 w-11 items-center rounded-full transition-colors
-                  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900
-                  disabled:opacity-50
-                  ${whitelistEnabled ? "bg-green-600" : "bg-gray-600"}
-                `}
-                aria-label={`${whitelistEnabled ? "Disable" : "Enable"} whitelist`}
-              >
-                <span
-                  className={`
-                    inline-block h-4 w-4 transform rounded-full bg-white transition-transform
-                    ${whitelistEnabled ? "translate-x-6" : "translate-x-1"}
-                  `}
-                />
-              </button>
-            </div>
-          </div>
-
-          {/* Add to whitelist — only for admins */}
-          {isAdmin && (
-            <form
-              onSubmit={handleAdd}
-              noValidate
-              className="bg-gray-800 border border-gray-700 rounded-xl p-4 mb-5"
+            <button
+              onClick={() => { setLoading(true); void fetchBalances(); }}
+              disabled={loading}
+              className="text-xs text-gray-400 hover:text-white transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 rounded px-2 py-1"
+              aria-label="Refresh treasury balances"
             >
-              <h3 className="text-sm font-medium text-gray-300 mb-3">
-                Add Address to Whitelist
-              </h3>
-              <div className="flex gap-3">
-                <div className="flex-1">
-                  <label htmlFor="whitelist-add-input" className="sr-only">
-                    Stellar address
-                  </label>
-                  <input
-                    id="whitelist-add-input"
-                    type="text"
-                    value={newAddress}
-                    onChange={(e) => {
-                      setNewAddress(e.target.value);
-                      setAddError("");
-                    }}
-                    placeholder="G... (56 characters)"
-                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2.5 text-white text-sm font-mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-800"
-                    aria-invalid={!!addError}
-                    aria-describedby={addError ? "add-error" : undefined}
-                  />
-                  {addError && (
-                    <p
-                      id="add-error"
-                      role="alert"
-                      className="text-red-400 text-xs mt-1"
-                    >
-                      {addError}
-                    </p>
-                  )}
-                </div>
-                <button
-                  type="submit"
-                  disabled={addLoading}
-                  className="bg-green-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-green-800 disabled:opacity-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-800 whitespace-nowrap"
-                >
-                  {addLoading ? "Adding…" : "Add"}
-                </button>
-              </div>
-            </form>
-          )}
-
-          {/* Search */}
-          <div className="mb-3">
-            <label htmlFor="whitelist-search" className="sr-only">
-              Search whitelist
-            </label>
-            <input
-              id="whitelist-search"
-              type="search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search addresses…"
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white text-sm font-mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
-            />
+              {loading ? <Spinner /> : "↻ Refresh"}
+            </button>
           </div>
 
-          {/* Table */}
           {loading ? (
-            <div className="space-y-2">
-              {[...Array(5)].map((_, i) => (
-                <div
-                  key={i}
-                  className="h-12 bg-gray-800 rounded-lg animate-pulse"
-                  aria-hidden="true"
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="h-44 bg-gray-800 rounded-xl animate-pulse border border-gray-700" />
+              ))}
+            </div>
+          ) : balances.length === 0 ? (
+            <div className="bg-gray-800 rounded-xl border border-gray-700 p-8 text-center text-gray-400 text-sm">
+              No treasury data available.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {balances.map((entry) => (
+                <TreasuryRow
+                  key={entry.token}
+                  entry={entry}
+                  isAdmin={isAdmin}
+                  xlmPrice={xlmPrice}
+                  onSweep={handleSweep}
+                  sweeping={sweepingToken === entry.token}
                 />
               ))}
             </div>
-          ) : filtered.length === 0 ? (
-            <div className="text-center py-12 text-gray-500">
-              {whitelist.length === 0
-                ? "No addresses in the whitelist yet."
-                : "No addresses match your search."}
-            </div>
-          ) : (
-            <>
-              <div
-                className="border border-gray-700 rounded-xl overflow-hidden"
-                role="table"
-                aria-label="Whitelisted addresses"
-              >
-                {/* Table header */}
-                <div
-                  role="row"
-                  className="grid grid-cols-[1fr_auto] gap-4 px-4 py-2.5 bg-gray-800 border-b border-gray-700 text-xs text-gray-500 font-medium uppercase tracking-wider"
-                >
-                  <div role="columnheader">Address</div>
-                  {isAdmin && <div role="columnheader">Action</div>}
-                </div>
-
-                {/* Rows */}
-                {paginated.map((addr) => (
-                  <div
-                    key={addr}
-                    role="row"
-                    className="grid grid-cols-[1fr_auto] gap-4 items-center px-4 py-3 border-b border-gray-800 last:border-0 bg-gray-900 hover:bg-gray-800/50 transition-colors"
-                  >
-                    <div
-                      role="cell"
-                      className="font-mono text-sm text-gray-300 truncate"
-                    >
-                      {addr}
-                    </div>
-                    {isAdmin && (
-                      <div role="cell">
-                        <button
-                          type="button"
-                          onClick={() => setConfirmRemove(addr)}
-                          className="text-xs text-red-400 hover:text-red-300 border border-red-900 hover:border-red-700 px-2.5 py-1 rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
-                          aria-label={`Remove ${addr} from whitelist`}
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              {/* Pagination */}
-              {totalPages > 1 && (
-                <div className="flex items-center justify-between mt-4 text-sm text-gray-400">
-                  <span>
-                    {(page - 1) * PAGE_SIZE + 1}–
-                    {Math.min(page * PAGE_SIZE, filtered.length)} of{" "}
-                    {filtered.length}
-                  </span>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setPage((p) => p - 1)}
-                      disabled={page === 1}
-                      className="px-3 py-1 border border-gray-700 rounded hover:bg-gray-800 disabled:opacity-40 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
-                    >
-                      ← Prev
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPage((p) => p + 1)}
-                      disabled={page === totalPages}
-                      className="px-3 py-1 border border-gray-700 rounded hover:bg-gray-800 disabled:opacity-40 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
-                    >
-                      Next →
-                    </button>
-                  </div>
-                </div>
-              )}
-            </>
           )}
         </section>
-      </div>
 
-      {/* Remove confirmation modal */}
-      {confirmRemove && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="confirm-remove-title"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-        >
-          <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 max-w-sm w-full shadow-2xl">
-            <h2 id="confirm-remove-title" className="text-lg font-semibold mb-2">
-              Remove from Whitelist
-            </h2>
-            <p className="text-gray-400 text-sm mb-2">
-              Are you sure you want to remove this address from the whitelist?
-            </p>
-            <p className="text-white text-xs font-mono bg-gray-900 rounded p-2 mb-6 break-all">
-              {confirmRemove}
-            </p>
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={() => handleRemove(confirmRemove)}
-                disabled={removeLoading}
-                className="flex-1 bg-red-700 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-red-800 disabled:opacity-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-800"
-              >
-                {removeLoading ? "Removing…" : "Remove"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setConfirmRemove(null)}
-                disabled={removeLoading}
-                className="flex-1 border border-gray-600 text-gray-300 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-800"
-              >
-                Cancel
-              </button>
+        {/* Summary totals */}
+        {!loading && balances.length > 0 && (
+          <div className="mt-6 bg-gray-800 rounded-xl border border-gray-700 px-5 py-4 flex flex-wrap gap-6">
+            <div>
+              <p className="text-xs text-gray-400 mb-1">Total tokens tracked</p>
+              <p className="text-white font-semibold">{balances.length}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-400 mb-1">Tokens with pending fees</p>
+              <p className="text-white font-semibold">
+                {balances.filter((b) => b.balanceStroops > 0).length}
+              </p>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </main>
   );
 }
