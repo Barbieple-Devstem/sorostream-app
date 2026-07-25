@@ -2,8 +2,8 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import LiveCounter from "@/components/LiveCounter";
-import WithdrawConfirmModal from "@/components/WithdrawConfirmModal";
-import { sorostream, claimableNow, getMockStream, formatStellarAmount } from "@/src/lib/sorostream";
+import WithdrawFeeBreakdownModal from "@/components/WithdrawFeeBreakdownModal";
+import { sorostream, claimableNow, getMockStream } from "@/src/lib/sorostream";
 import { useToast } from "@/src/lib/toast";
 import { useSettings } from "@/src/context/SettingsContext";
 
@@ -51,7 +51,7 @@ export default function StreamActions({
   const [withdrawing, setWithdrawing] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [cancelPending, setCancelPending] = useState(false);
-  const [confirmAmount, setConfirmAmount] = useState<string | null>(null);
+  const [confirmAmount, setConfirmAmount] = useState<number | null>(null);
   const { addToast, upsertPersistentToast, removeToast } = useToast();
   const { withdrawThreshold } = useSettings();
 
@@ -95,7 +95,8 @@ export default function StreamActions({
     const claimableXlm = claimableStroops / 10_000_000;
 
     if (claimableXlm >= withdrawThreshold) {
-      setConfirmAmount(formatStellarAmount(claimableStroops));
+      // Store raw stroops so the fee breakdown modal can compute the breakdown
+      setConfirmAmount(claimableStroops);
     } else {
       void executeWithdraw();
     }
@@ -238,8 +239,9 @@ export default function StreamActions({
       </div>
 
       {confirmAmount !== null && (
-        <WithdrawConfirmModal
-          amount={confirmAmount}
+        <WithdrawFeeBreakdownModal
+          claimableStroops={confirmAmount}
+          token="USDC"
           onConfirm={handleConfirmed}
           onCancel={() => setConfirmAmount(null)}
         />

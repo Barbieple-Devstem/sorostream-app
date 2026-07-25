@@ -232,3 +232,37 @@ export function truncateAddress(address: string): string {
   if (!address) return "";
   return `${address.slice(0, 4)}...${address.slice(-4)}`;
 }
+
+// ── Protocol fee config ──────────────────────────────────────────────────────
+
+export interface FeeConfig {
+  /** Fee rate as a basis-point integer, e.g. 50 = 0.50% */
+  basisPoints: number;
+}
+
+/** Simulates reading the current fee rate from the contract config. */
+export async function getFeeConfig(): Promise<FeeConfig> {
+  // Mock: 0.50% (50 bps). Set to 0 to test zero-fee path.
+  return { basisPoints: 50 };
+}
+
+/**
+ * Break down a withdrawal into claimable amount, protocol fee, and net amount.
+ *
+ * @param claimableStroops  Raw stroop value the user would receive pre-fee
+ * @param basisPoints       Protocol fee rate in basis points (e.g. 50 = 0.5%)
+ */
+export function calcWithdrawBreakdown(
+  claimableStroops: number,
+  basisPoints: number,
+): {
+  claimable: number;
+  fee: number;
+  net: number;
+  feePercent: number;
+} {
+  const feePercent = basisPoints / 100; // e.g. 50 bps → 0.5%
+  const fee = Math.floor((claimableStroops * basisPoints) / 10_000);
+  const net = claimableStroops - fee;
+  return { claimable: claimableStroops, fee, net, feePercent };
+}
