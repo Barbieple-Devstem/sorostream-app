@@ -11,6 +11,10 @@ export interface StreamData {
   endTime: string;
   lastWithdrawTime: string;
   status: "Active" | "Cancelled" | "Ended";
+  /** Whether the stream auto-renews on expiry. */
+  autoRenew?: boolean;
+  /** Duration in seconds for each auto-renewal cycle (defaults to original duration). */
+  autoRenewDurationSeconds?: number;
 }
 
 /** Mutable stream store — seeded with test data, extended by createStream(). */
@@ -89,6 +93,10 @@ export interface CreateStreamParams {
   amount?: string;
   durationSeconds?: number;
   token?: string;
+  /** Pass true to enable auto_renew on the contract. */
+  autoRenew?: boolean;
+  /** Duration in seconds for each renewal cycle; defaults to durationSeconds. */
+  autoRenewDurationSeconds?: number;
 }
 
 export function watchClaimable(streams: StreamData[]): StreamData[] {
@@ -134,6 +142,10 @@ export const sorostream = {
       endTime: new Date(now.getTime() + durationSeconds * 1000).toISOString(),
       lastWithdrawTime: now.toISOString(),
       status: "Active",
+      autoRenew: params?.autoRenew ?? false,
+      autoRenewDurationSeconds: params?.autoRenew
+        ? (params.autoRenewDurationSeconds ?? durationSeconds)
+        : undefined,
     };
     MOCK_STREAMS.push(stream);
     return { streamId: id, txHash: `mock-tx-${id}` };
@@ -297,6 +309,78 @@ export function addStreamEvent(event: Omit<StreamEvent, "id">): StreamEvent {
 export function truncateAddress(address: string): string {
   if (!address) return "";
   return `${address.slice(0, 4)}...${address.slice(-4)}`;
+}
+
+// ── Gas fee estimate ─────────────────────────────────────────────────────────
+
+export interface GasFeeEstimate {
+  /** Estimated fee in stroops */
+  feeStroops: number;
+  /** Estimated fee as a formatted string, e.g. "0.0000100" */
+  feeFormatted: string;
+}
+
+/**
+ * Simulates fetching the gas fee estimate for a create_stream transaction.
+ * In production this would simulate the transaction envelope and read the
+ * fee from the simulation response.
+ *
+ * @param amountStroops  Stream deposit amount in stroops (affects resource usage)
+ */
+export async function getGasFeeEstimate(amountStroops: number): Promise<GasFeeEstimate> {
+  // Simulate network latency
+  await new Promise((r) => setTimeout(r, 200 + Math.random() * 150));
+  // Base fee of 100 stroops + a tiny resource charge proportional to deposit size
+  const feeStroops = 100 + Math.floor(amountStroops * 0.000001);
+  return { feeStroops, feeFormatted: formatStellarAmount(feeStroops) };
+}
+
+// ── Collateral config ────────────────────────────────────────────────────────
+
+export interface CollateralConfig {
+  /**
+   * Collateral rate as a basis-point integer, e.g. 1000 = 10%.
+   * A value of 0 means collateral is not required.
+   */
+  basisPoints: number;
+}
+
+/**
+ * Simulates reading the current collateral configuration from the contract.
+ * New senders must lock collateral equal to (streamAmount * basisPoints / 10_000).
+ * Set basisPoints to 0 to test the zero-collateral path.
+ */
+export async function getCollateralConfig(): Promise<CollateralConfig> {
+  // Mock: 10% (1000 bps). Set to 0 to test zero-collateral path.
+  return { basisPoints: 1000 };
+}
+
+/**
+ * Returns true when the given sender address has never created a stream before
+ * and therefore is subject to the collateral requirement.
+ *
+ * @param senderAddress  The connected wallet's Stellar public key
+ */
+export async function checkIsNewSender(senderAddress: string): Promise<boolean> {
+  if (!senderAddress) return false;
+  // Mock: treat address as new if they have no streams in the mock store.
+  const hasPriorStreams = MOCK_STREAMS.some((s) =>
+    s.sender === senderAddress || s.sender.startsWith(senderAddress.slice(0, 5)),
+  );
+  return !hasPriorStreams;
+}
+
+/**
+ * Compute the collateral amount in stroops required for a given stream deposit.
+ *
+ * @param depositStroops  Stream deposit in stroops
+ * @param basisPoints     Protocol collateral rate in basis points
+ */
+export function calcCollateral(
+  depositStroops: number,
+  basisPoints: number,
+): number {
+  return Math.ceil((depositStroops * basisPoints) / 10_000);
 }
 
 // ── Protocol fee config ──────────────────────────────────────────────────────

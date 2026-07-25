@@ -682,6 +682,32 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
                 <FiatDisplay xlmAmount={flowXlm} />
               </p>
             </div>
+            {stream.autoRenew && (
+              <div className="col-span-2">
+                <p className="text-gray-400 mb-1">Auto-renewal</p>
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-green-900/40 border border-green-700/50 text-green-300">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+                      <path d="M21 3v5h-5" />
+                      <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+                      <path d="M8 16H3v5" />
+                    </svg>
+                    Auto-renewal enabled
+                  </span>
+                  {stream.autoRenewDurationSeconds && (
+                    <span className="text-xs text-gray-400">
+                      {(() => {
+                        const s = stream.autoRenewDurationSeconds;
+                        if (s >= 86400) return `every ${Math.floor(s / 86400)}d`;
+                        if (s >= 3600) return `every ${Math.floor(s / 3600)}h`;
+                        return `every ${Math.floor(s / 60)}m`;
+                      })()}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Claimable balance — optimistic withdraw support */}

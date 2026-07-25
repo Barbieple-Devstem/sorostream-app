@@ -1,5 +1,5 @@
 "use client";
-import { useState, Suspense } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import DurationPicker from "@/components/DurationPicker";
 import FlowRatePreview from "@/components/FlowRatePreview";
@@ -9,7 +9,8 @@ import TransactionStepper, { TxStage } from "@/components/TransactionStepper";
 import { SkeletonForm } from "@/components/Skeleton";
 import { useTranslations } from "@/src/lib/i18n";
 import { trackEvent } from "@/src/lib/analytics";
-import { sorostream } from "@/src/lib/sorostream";
+import { sorostream, getCollateralConfig, checkIsNewSender, calcCollateral, getGasFeeEstimate, type GasFeeEstimate } from "@/src/lib/sorostream";
+import { useWallet } from "@/src/context/WalletContext";
 
 type Step = "recipient" | "amount" | "review";
 
@@ -84,6 +85,7 @@ function NewStreamWizard() {
   const t = useTranslations("stream_new");
   const [step, setStep] = useState<Step>("recipient");
   const searchParams = useSearchParams();
+  const { address } = useWallet();
 
   const recipientParam = searchParams.get("recipient");
   const amountParam = searchParams.get("amount");
@@ -123,6 +125,65 @@ function NewStreamWizard() {
   const [txStage, setTxStage] = useState<TxStage | null>(null);
   const [txFailedStage, setTxFailedStage] = useState<TxStage | undefined>(undefined);
   const [txError, setTxError] = useState<string | undefined>(undefined);
+
+  // Auto-renewal settings
+  const [autoRenew, setAutoRenew] = useState(false);
+  const [autoRenewDuration, setAutoRenewDuration] = useState(0); // 0 = same as stream duration
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  // Gas fee estimate
+  const [gasFee, setGasFee] = useState<GasFeeEstimate | null>(null);
+  const [gasFeeLoading, setGasFeeLoading] = useState(false);
+  const [gasFeeStale, setGasFeeStale] = useState(false);
+  const gasFeeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Debounced gas fee re-fetch whenever amount changes on the amount step
+  useEffect(() => {
+    if (step !== "amount") return;
+    const parsed = parseFloat(amount);
+    if (!amount || isNaN(parsed) || parsed <= 0) {
+      setGasFee(null);
+      return;
+    }
+    if (gasFeeDebounceRef.current) clearTimeout(gasFeeDebounceRef.current);
+    gasFeeDebounceRef.current = setTimeout(async () => {
+      setGasFeeLoading(true);
+      setGasFeeStale(false);
+      try {
+        const estimate = await getGasFeeEstimate(Math.round(parsed * 10_000_000));
+        setGasFee(estimate);
+      } catch {
+        setGasFeeStale(true); // keep last known value, mark stale
+      } finally {
+        setGasFeeLoading(false);
+      }
+    }, 500);
+    return () => {
+      if (gasFeeDebounceRef.current) clearTimeout(gasFeeDebounceRef.current);
+    };
+  }, [amount, step]);
+
+  // Collateral requirement
+  const [collateralBps, setCollateralBps] = useState<number | null>(null);
+  const [isNewSender, setIsNewSender] = useState(false);
+
+  // Fetch collateral config and new-sender status once when reaching review step
+  useEffect(() => {
+    if (step !== "review") return;
+    let cancelled = false;
+    async function fetchCollateral() {
+      const [config, newSender] = await Promise.all([
+        getCollateralConfig(),
+        checkIsNewSender(address ?? ""),
+      ]);
+      if (!cancelled) {
+        setCollateralBps(config.basisPoints);
+        setIsNewSender(newSender);
+      }
+    }
+    void fetchCollateral();
+    return () => { cancelled = true; };
+  }, [step, address]);
 
   function handleTemplateSelect(seconds: number, suggestedAmount?: string, recipientOverride?: string) {
     setDuration(seconds);
@@ -223,6 +284,8 @@ function NewStreamWizard() {
         amount,
         durationSeconds: duration,
         token: selectedToken === CUSTOM_TOKEN_VALUE ? tokenAddress : selectedToken,
+        autoRenew,
+        autoRenewDurationSeconds: autoRenew && autoRenewDuration > 0 ? autoRenewDuration : undefined,
       });
 
       setTxStage(TxStage.Done);
@@ -236,6 +299,10 @@ function NewStreamWizard() {
       setDuration(0);
       setEndDate("");
       setCliffDate("");
+      setAutoRenew(false);
+      setAutoRenewDuration(0);
+      setShowAdvanced(false);
+      setGasFee(null);
       setErrors({ recipient: "", amount: "", duration: "", endDate: "", cliffDate: "" });
       setTouched({ recipient: false, amount: false });
       setDurationPickerKey((k) => k + 1);
@@ -505,6 +572,124 @@ function NewStreamWizard() {
             {amount && duration > 0 && (
               <FlowRatePreview amount={amount} durationSeconds={duration} />
             )}
+
+            {/* Gas fee estimate */}
+            {(gasFee || gasFeeLoading) && (
+              <div
+                className={`flex items-center justify-between text-xs px-3 py-2 rounded-lg border ${
+                  gasFeeStale
+                    ? "bg-yellow-900/20 border-yellow-700/40 text-yellow-300"
+                    : "bg-gray-800 border-gray-700 text-gray-400"
+                }`}
+                aria-live="polite"
+                aria-label="Estimated network fee"
+              >
+                <span>Estimated network fee</span>
+                <span className="flex items-center gap-1.5 font-mono">
+                  {gasFeeLoading ? (
+                    <>
+                      <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                      </svg>
+                      <span className="text-gray-500">Refreshing…</span>
+                    </>
+                  ) : (
+                    <>
+                      {gasFee && <span className={gasFeeStale ? "text-yellow-300" : "text-white"}>{gasFee.feeFormatted} XLM</span>}
+                      {gasFeeStale && <span className="text-yellow-400" title="Could not refresh — showing last known estimate">⚠ stale</span>}
+                    </>
+                  )}
+                </span>
+              </div>
+            )}
+
+            {/* Advanced settings */}
+            <div>
+              <button
+                type="button"
+                onClick={() => setShowAdvanced((v) => !v)}
+                aria-expanded={showAdvanced}
+                className="flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 rounded"
+              >
+                <svg
+                  className={`h-4 w-4 transition-transform ${showAdvanced ? "rotate-90" : ""}`}
+                  xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
+                Advanced settings
+              </button>
+
+              {showAdvanced && (
+                <div className="mt-4 space-y-4 pl-1">
+                  {/* Auto-renewal toggle */}
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <label htmlFor="auto-renew-toggle" className="text-sm text-gray-200 font-medium">
+                          Auto-Renewal
+                        </label>
+                        {/* Tooltip */}
+                        <div className="relative group">
+                          <button
+                            type="button"
+                            aria-label="How does auto-renewal work?"
+                            className="text-gray-500 hover:text-gray-300 text-xs border border-gray-600 rounded-full w-4 h-4 flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
+                          >
+                            ?
+                          </button>
+                          <div
+                            role="tooltip"
+                            className="hidden group-hover:block group-focus-within:block absolute left-0 bottom-6 w-64 bg-gray-700 border border-gray-600 rounded-lg p-3 text-xs text-gray-300 leading-relaxed z-10 shadow-lg"
+                          >
+                            When enabled, the stream automatically restarts at expiry using
+                            the same amount. The renewal re-locks the same deposit from your
+                            balance — ensure you have sufficient funds each cycle.
+                            You can cancel auto-renewal at any time before the next cycle starts.
+                          </div>
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        Automatically restart the stream when it expires
+                      </p>
+                    </div>
+                    <button
+                      id="auto-renew-toggle"
+                      type="button"
+                      role="switch"
+                      aria-checked={autoRenew}
+                      onClick={() => setAutoRenew((v) => !v)}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 flex-shrink-0 ${
+                        autoRenew ? "bg-green-600" : "bg-gray-600"
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                          autoRenew ? "translate-x-6" : "translate-x-1"
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Auto-renew duration (only when toggle is on) */}
+                  {autoRenew && (
+                    <div>
+                      <label className="text-sm text-gray-200 font-medium block mb-2">
+                        Auto-Renew Duration{" "}
+                        <span className="text-gray-400 font-normal">(optional — defaults to stream duration)</span>
+                      </label>
+                      <DurationPicker
+                        initialSeconds={autoRenewDuration > 0 ? autoRenewDuration : undefined}
+                        onChange={setAutoRenewDuration}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -551,7 +736,89 @@ function NewStreamWizard() {
               <div className="border-t border-gray-700 pt-4">
                 <FlowRatePreview amount={amount} durationSeconds={duration} />
               </div>
+              {autoRenew && (
+                <div className="flex justify-between items-center border-t border-gray-700 pt-3">
+                  <span className="text-gray-400 text-sm">Auto-Renewal</span>
+                  <span className="text-green-400 text-sm font-medium">
+                    ✓ Enabled
+                    {autoRenewDuration > 0 && (
+                      <span className="text-gray-400 font-normal ml-1">
+                        ({(() => {
+                          const s = autoRenewDuration;
+                          if (s >= 86400) return `${Math.floor(s / 86400)}d`;
+                          if (s >= 3600) return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
+                          return `${Math.floor(s / 60)}m`;
+                        })()})
+                      </span>
+                    )}
+                  </span>
+                </div>
+              )}
+              {gasFee && (
+                <div className="flex justify-between items-center border-t border-gray-700 pt-3">
+                  <span className="text-gray-400 text-sm">Est. network fee</span>
+                  <span className="text-gray-300 font-mono text-sm">{gasFee.feeFormatted} XLM</span>
+                </div>
+              )}
             </div>
+
+            {/* Collateral Required section — shown when sender is subject to the requirement */}
+            {isNewSender && collateralBps !== null && collateralBps > 0 && (() => {
+              const depositStroops = Math.round(parseFloat(amount || "0") * 10_000_000);
+              const collateralStroops = calcCollateral(depositStroops, collateralBps);
+              const totalStroops = depositStroops + collateralStroops;
+              const collateralAmt = (collateralStroops / 10_000_000).toLocaleString(undefined, { minimumFractionDigits: 7 });
+              const totalAmt = (totalStroops / 10_000_000).toLocaleString(undefined, { minimumFractionDigits: 7 });
+              const token = selectedToken === CUSTOM_TOKEN_VALUE ? "tokens" : selectedToken;
+              const pct = (collateralBps / 100).toFixed(2);
+              return (
+                <div
+                  role="note"
+                  aria-label="Collateral requirement"
+                  className="bg-yellow-900/20 border border-yellow-700/50 rounded-xl p-4 space-y-3"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-yellow-400 text-base" aria-hidden="true">⚠</span>
+                    <p className="text-yellow-300 text-sm font-semibold">Collateral Required</p>
+                    <div className="relative group ml-auto">
+                      <button
+                        type="button"
+                        aria-label="When is collateral returned?"
+                        className="text-gray-400 hover:text-gray-200 text-xs border border-gray-600 rounded-full w-5 h-5 flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
+                      >
+                        ?
+                      </button>
+                      <div
+                        role="tooltip"
+                        className="hidden group-hover:block group-focus-within:block absolute right-0 bottom-7 w-64 bg-gray-700 border border-gray-600 rounded-lg p-3 text-xs text-gray-300 leading-relaxed z-10 shadow-lg"
+                      >
+                        The protocol holds collateral from first-time senders to ensure
+                        the stream can be fulfilled. Your collateral is automatically
+                        returned to your wallet when the stream ends or is cancelled,
+                        provided no dispute is raised.
+                      </div>
+                    </div>
+                  </div>
+                  <p className="text-gray-400 text-xs">
+                    As a new sender, the protocol requires {pct}% collateral to be locked for the duration of the stream.
+                  </p>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Stream amount</span>
+                      <span className="text-white font-mono">{amount} {token}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Collateral ({pct}%)</span>
+                      <span className="text-yellow-300 font-mono">{collateralAmt} {token}</span>
+                    </div>
+                    <div className="flex justify-between border-t border-gray-700 pt-2">
+                      <span className="text-gray-300 font-medium">Total required</span>
+                      <span className="text-white font-mono font-semibold">{totalAmt} {token}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
 
