@@ -179,7 +179,7 @@ export default function WalletConnect({ onConnect, compact = false }: WalletConn
       <div className="relative" ref={dropdownRef}>
         <button
           onClick={() => setDropdownOpen((o) => !o)}
-          className="rounded-lg bg-sky-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+          className="rounded-lg bg-sky-600 dark:bg-sky-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-700 dark:hover:bg-sky-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 dark:focus-visible:ring-offset-gray-900"
           aria-expanded={dropdownOpen}
           aria-haspopup="true"
           aria-label="Connect wallet"
@@ -187,7 +187,7 @@ export default function WalletConnect({ onConnect, compact = false }: WalletConn
           Connect
         </button>
         {dropdownOpen && (
-          <div className="absolute right-0 top-full mt-2 w-72 bg-gray-800 border border-gray-700 rounded-lg p-4 z-50 shadow-xl">
+          <div className="absolute right-0 top-full mt-2 w-72 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 z-50 shadow-xl">
             <div className="space-y-2">
               <div className="flex gap-2">
                 {WALLET_TYPES.map((w) => (
@@ -195,10 +195,10 @@ export default function WalletConnect({ onConnect, compact = false }: WalletConn
                     key={w}
                     onClick={() => setWalletType(w)}
                     aria-pressed={walletType === w}
-                    className={`rounded-lg px-3 py-1.5 text-xs font-medium border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 ${
+                    className={`rounded-lg px-3 py-1.5 text-xs font-medium border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 dark:focus-visible:ring-offset-gray-900 ${
                       walletType === w
-                        ? "bg-sky-700 text-white border-sky-700"
-                        : "border-slate-500 text-slate-300 hover:bg-slate-700"
+                        ? "bg-sky-600 dark:bg-sky-700 text-white border-sky-600 dark:border-sky-700"
+                        : "border-gray-300 dark:border-slate-500 text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700"
                     }`}
                   >
                     {WALLET_LABELS[w]}
@@ -211,14 +211,14 @@ export default function WalletConnect({ onConnect, compact = false }: WalletConn
                   placeholder={t("secret_placeholder")}
                   value={secretInput}
                   onChange={(e) => setSecretInput(e.target.value)}
-                  className="w-full rounded-lg border border-slate-500 bg-gray-900 px-3 py-2 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-800"
+                  className="w-full rounded-lg border border-gray-300 dark:border-slate-500 bg-gray-100 dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 dark:focus-visible:ring-offset-gray-900"
                   aria-label="Server keypair secret key"
                 />
               )}
               <button
                 onClick={async () => { await handleConnect(); setDropdownOpen(false); }}
                 disabled={loading}
-                className="w-full rounded-lg bg-sky-700 px-4 py-2 text-sm font-medium text-white hover:bg-sky-800 disabled:opacity-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+                className="w-full rounded-lg bg-sky-600 dark:bg-sky-700 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700 dark:hover:bg-sky-800 disabled:opacity-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
                 aria-label={`Connect ${WALLET_LABELS[walletType]} wallet`}
               >
                 {loading ? t("connecting") : t("connect", { wallet: WALLET_LABELS[walletType] })}
@@ -237,7 +237,7 @@ export default function WalletConnect({ onConnect, compact = false }: WalletConn
     return (
       <div className="flex items-center gap-2 min-w-0 overflow-hidden">
         <span
-          className="text-sm text-slate-300 font-mono flex items-center shrink-0"
+          className="text-sm text-slate-300 font-mono flex items-center min-w-0"
           aria-label={`Connected wallet: ${publicKey}`}
         >
           {publicKey.slice(0, 4)}…{publicKey.slice(-4)}

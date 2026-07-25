@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import FiatDisplay from "@/components/FiatDisplay";
 import { sorostream } from "@/src/lib/sorostream";
 import { useRpcFetch } from "@/src/lib/useRpcFetch";
@@ -23,6 +23,7 @@ interface LiveCounterProps {
 }
 
 const DEFAULT_RECONCILE_INTERVAL_MS = 30_000;
+const ANNOUNCE_THROTTLE_MS = 30_000;
 
 function getEstimatedClaimable(flowRate: number, lastWithdrawTime: Date) {
   const elapsed = (Date.now() - new Date(lastWithdrawTime).getTime()) / 1000;
@@ -57,6 +58,13 @@ export default function LiveCounter({
   }));
   const [claimable, setClaimable] = useState(() =>
     getEstimatedClaimable(flowRate, lastWithdrawTime)
+  );
+
+  // Throttled aria-label: only update at most once per 30 seconds to avoid
+  // spammy screen-reader narration while the counter ticks every second.
+  const lastAnnounceTimeRef = useRef(0);
+  const [ariaLabel, setAriaLabel] = useState(() =>
+    formatUSDCFixed(getEstimatedClaimable(flowRate, lastWithdrawTime))
   );
 
   // Reset baseline when props change (e.g. after a withdrawal).
@@ -112,6 +120,25 @@ export default function LiveCounter({
     return () => clearInterval(interval);
   }, [baseline, flowRate, optimisticOverride]);
 
+  // Throttle the aria-label update so screen readers hear at most one
+  // announcement every 30 seconds, even though the visual counter ticks
+  // every second.
+  useEffect(() => {
+    const now = Date.now();
+    const timeSinceLast = now - lastAnnounceTimeRef.current;
+    if (timeSinceLast >= ANNOUNCE_THROTTLE_MS || lastAnnounceTimeRef.current === 0) {
+      lastAnnounceTimeRef.current = now;
+      setAriaLabel(formatUSDCFixed(displayValue));
+      return;
+    }
+    const remaining = ANNOUNCE_THROTTLE_MS - timeSinceLast;
+    const timer = setTimeout(() => {
+      lastAnnounceTimeRef.current = Date.now();
+      setAriaLabel(formatUSDCFixed(displayValue));
+    }, remaining);
+    return () => clearTimeout(timer);
+  }, [displayValue]);
+
   /** Format stroops as XLM with 7 decimal places. */
   const formatXlm = (val: number) => (val / 10_000_000).toFixed(7);
   const xlmAmount = claimable / 10_000_000;
@@ -133,7 +160,8 @@ export default function LiveCounter({
       className="font-mono font-semibold tabular-nums inline-flex items-baseline gap-1.5"
       role="status"
       aria-live="polite"
-      aria-label={t("claimable", { val: formatUSDC(displayValue) }) + (isOptimistic ? t("pending_confirmation") : "")}
+      aria-atomic="true"
+      aria-label={t("claimable", { val: ariaLabel }) + (isOptimistic ? t("pending_confirmation") : "")}
     >
       <span className={isOptimistic ? "text-yellow-400" : "text-green-600"}>
         {formatUSDC(displayValue)} USDC

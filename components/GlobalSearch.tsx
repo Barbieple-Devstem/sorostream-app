@@ -191,7 +191,7 @@ export default function GlobalSearch() {
           setOpen(true);
           setTimeout(() => inputRef.current?.focus(), 50);
         }}
-        className="hidden sm:flex items-center gap-2 text-xs text-gray-400 border border-gray-700 rounded-lg px-3 py-1.5 hover:border-gray-500 hover:text-gray-200 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
+        className="hidden sm:flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-1.5 hover:border-gray-400 dark:hover:border-gray-500 hover:text-gray-700 dark:hover:text-gray-200 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
         aria-label="Open search"
         title="Search streams and transactions (/)"
       >
@@ -211,7 +211,7 @@ export default function GlobalSearch() {
           <path d="m21 21-4.35-4.35" />
         </svg>
         <span>Search</span>
-        <kbd className="text-gray-500 border border-gray-700 rounded px-1 leading-none">
+        <kbd className="text-gray-500 dark:text-gray-600 border border-gray-300 dark:border-gray-700 rounded px-1 leading-none">
           /
         </kbd>
       </button>
@@ -219,8 +219,8 @@ export default function GlobalSearch() {
       {showDropdown && (
         <div className="fixed inset-0 z-40 flex items-start justify-center pt-16 sm:pt-20">
           <div className="fixed inset-0 bg-black/40" onClick={() => setOpen(false)} />
-          <div className="relative z-50 w-full max-w-xl bg-gray-800 rounded-xl shadow-2xl border border-gray-700 mx-4 max-h-[70vh] flex flex-col">
-            <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-700">
+          <div className="relative z-50 w-full max-w-xl bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 mx-4 max-h-[70vh] flex flex-col">
+            <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 width="16"
@@ -231,7 +231,7 @@ export default function GlobalSearch() {
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                className="text-gray-400 shrink-0"
+                className="text-gray-500 dark:text-gray-400 shrink-0"
                 aria-hidden="true"
               >
                 <circle cx="11" cy="11" r="8" />
@@ -244,7 +244,7 @@ export default function GlobalSearch() {
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="Search streams, transactions, addresses…"
-                className="flex-1 bg-transparent text-white text-sm placeholder-gray-500 focus:outline-none"
+                className="flex-1 bg-transparent text-gray-900 dark:text-white text-sm placeholder-gray-500 dark:placeholder-gray-500 focus:outline-none"
                 aria-label="Search streams and transactions"
                 aria-autocomplete="list"
                 aria-controls="global-search-results"
@@ -254,7 +254,7 @@ export default function GlobalSearch() {
               {query && (
                 <button
                   onClick={() => setQuery("")}
-                  className="text-gray-400 hover:text-white transition-colors"
+                  className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white transition-colors"
                   aria-label="Clear search"
                 >
                   <svg
@@ -285,13 +285,13 @@ export default function GlobalSearch() {
             >
               {debouncedQuery.trim() && flatResults.length === 0 ? (
                 <div className="py-8 text-center">
-                  <p className="text-gray-400 text-sm">No results found for &quot;{debouncedQuery}&quot;</p>
-                  <p className="text-gray-500 text-xs mt-1">Try a different search term</p>
+                  <p className="text-gray-500 dark:text-gray-400 text-sm">No results found for &quot;{debouncedQuery}&quot;</p>
+                  <p className="text-gray-400 dark:text-gray-500 text-xs mt-1">Try a different search term</p>
                 </div>
               ) : (
                 grouped.map((group) => (
                   <div key={group.category}>
-                    <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       {group.category}
                     </div>
                     {group.results.map((item, i) => {
@@ -312,15 +312,15 @@ export default function GlobalSearch() {
             </div>
 
             {flatResults.length > 0 && (
-              <div className="flex items-center gap-4 px-4 py-2 border-t border-gray-700 text-xs text-gray-500">
+              <div className="flex items-center gap-4 px-4 py-2 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400">
                 <span className="flex items-center gap-1">
-                  <kbd className="bg-gray-700 text-gray-300 px-1 rounded text-xs">↑↓</kbd> Navigate
+                  <kbd className="bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-1 rounded text-xs">↑↓</kbd> Navigate
                 </span>
                 <span className="flex items-center gap-1">
-                  <kbd className="bg-gray-700 text-gray-300 px-1 rounded text-xs">Enter</kbd> Open
+                  <kbd className="bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-1 rounded text-xs">Enter</kbd> Open
                 </span>
                 <span className="flex items-center gap-1">
-                  <kbd className="bg-gray-700 text-gray-300 px-1 rounded text-xs">Esc</kbd> Close
+                  <kbd className="bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-1 rounded text-xs">Esc</kbd> Close
                 </span>
               </div>
             )}

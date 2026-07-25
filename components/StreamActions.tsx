@@ -6,6 +6,7 @@ import WithdrawFeeBreakdownModal from "@/components/WithdrawFeeBreakdownModal";
 import { sorostream, claimableNow, getMockStream } from "@/src/lib/sorostream";
 import { useToast } from "@/src/lib/toast";
 import { useSettings } from "@/src/context/SettingsContext";
+import { useWallet } from "@/src/context/WalletContext";
 
 /** Grace period in seconds before a cancel is submitted on-chain. */
 const CANCEL_GRACE_SECONDS = 5;
@@ -54,6 +55,7 @@ export default function StreamActions({
   const [confirmAmount, setConfirmAmount] = useState<number | null>(null);
   const { addToast, upsertPersistentToast, removeToast } = useToast();
   const { withdrawThreshold } = useSettings();
+  const { refetchBalance } = useWallet();
 
   const [optimisticClaimable, setOptimisticClaimable] = useState<number | null>(null);
 
@@ -79,6 +81,7 @@ export default function StreamActions({
     try {
       const result = await sorostream.withdraw();
       setOptimisticClaimable(null);
+      refetchBalance();
       addToast(`Withdrawn ${result.amount} USDC from stream #${streamId}`, "success");
     } catch {
       setOptimisticClaimable(null);
@@ -87,7 +90,7 @@ export default function StreamActions({
     } finally {
       setWithdrawing(false);
     }
-  }, [streamId, addToast]);
+  }, [streamId, addToast, refetchBalance]);
 
   const handleWithdraw = useCallback(() => {
     const stream = getMockStream(streamId);
