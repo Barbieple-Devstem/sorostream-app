@@ -55,6 +55,31 @@ const MOCK_STREAMS: StreamData[] = [
     lastWithdrawTime: new Date(Date.now() - 86400000 * 1).toISOString(),
     status: "Cancelled",
   },
+  // --- Archived streams (ended/cancelled > 30 days ago) ---
+  {
+    id: "6", sender: "GBAM...BOEP", recipient: "GARC...H1VE", token: "USDC",
+    flowRate: 200000, deposit: 2000000000,
+    startTime: new Date(Date.now() - 86400000 * 90).toISOString(),
+    endTime: new Date(Date.now() - 86400000 * 60).toISOString(),
+    lastWithdrawTime: new Date(Date.now() - 86400000 * 61).toISOString(),
+    status: "Ended",
+  },
+  {
+    id: "7", sender: "GHIJ...KLMN", recipient: "GBAM...BOEP", token: "XLM",
+    flowRate: 150000, deposit: 1500000000,
+    startTime: new Date(Date.now() - 86400000 * 120).toISOString(),
+    endTime: new Date(Date.now() - 86400000 * 45).toISOString(),
+    lastWithdrawTime: new Date(Date.now() - 86400000 * 46).toISOString(),
+    status: "Cancelled",
+  },
+  {
+    id: "8", sender: "GXYZ...ABC", recipient: "GDEF...XYZ", token: "USDC",
+    flowRate: 400000, deposit: 4000000000,
+    startTime: new Date(Date.now() - 86400000 * 180).toISOString(),
+    endTime: new Date(Date.now() - 86400000 * 31).toISOString(),
+    lastWithdrawTime: new Date(Date.now() - 86400000 * 32).toISOString(),
+    status: "Ended",
+  },
 ];
 
 let nextId = 6;
@@ -135,6 +160,34 @@ export function getMockStreams(): StreamData[] {
   return MOCK_STREAMS;
 }
 
+/** Archive threshold in milliseconds (30 days after end/cancel). */
+const ARCHIVE_THRESHOLD_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Returns streams that are eligible for the archive:
+ * - status is "Ended" or "Cancelled"
+ * - endTime was more than 30 days ago
+ * Active streams are NEVER returned here.
+ */
+export function getArchivedStreams(): StreamData[] {
+  const cutoff = Date.now() - ARCHIVE_THRESHOLD_MS;
+  return MOCK_STREAMS.filter(
+    (s) =>
+      (s.status === "Ended" || s.status === "Cancelled") &&
+      new Date(s.endTime).getTime() <= cutoff,
+  );
+}
+
+/**
+ * Returns non-archived streams: Active streams, or Ended/Cancelled streams
+ * that ended within the last 30 days.
+ */
+export function getActiveDashboardStreams(): StreamData[] {
+  const cutoff = Date.now() - ARCHIVE_THRESHOLD_MS;
+  return MOCK_STREAMS.filter((s) => {
+    if (s.status === "Active") return true;
+    return new Date(s.endTime).getTime() > cutoff;
+  });
 /**
  * Return streams relevant to the given wallet address.
  * A stream is relevant when the address is the sender or recipient.
