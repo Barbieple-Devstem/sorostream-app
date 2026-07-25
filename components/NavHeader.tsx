@@ -103,7 +103,7 @@ export default function NavHeader() {
         }`}
       >
       <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between min-w-0">
-        <div className="flex items-center gap-6 min-w-0 shrink-0">
+        <div className="flex items-center gap-6 min-w-0 shrink">
           <Link href="/" className="text-lg font-bold text-green-400 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900">
             SoroStream
           </Link>

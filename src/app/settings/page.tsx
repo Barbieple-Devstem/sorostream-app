@@ -13,6 +13,8 @@ import {
 import { useToast } from "@/src/lib/toast";
 import { useSettings } from "@/src/context/SettingsContext";
 import { useTranslations } from "@/src/lib/i18n";
+import TwoFactorSetup from "@/components/TwoFactorSetup";
+import { useWallet } from "@/src/context/WalletContext";
 
 function truncateAddress(address: string): string {
   if (!address) return "";
@@ -35,8 +37,11 @@ export default function SettingsPage() {
   const t = useTranslations("settings");
   const { addToast } = useToast();
   const { withdrawThreshold, setWithdrawThreshold, language, setLanguage } = useSettings();
+  const { address } = useWallet();
   const [thresholdInput, setThresholdInput] = useState(String(withdrawThreshold));
   const [thresholdError, setThresholdError] = useState("");
+  const [showTwoFactorSetup, setShowTwoFactorSetup] = useState(false);
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
 
   // Sync input when context hydrates from localStorage
   useEffect(() => {
@@ -191,6 +196,65 @@ export default function SettingsPage() {
               <option value="es">{t("language_es")}</option>
             </select>
           </div>
+        </div>
+
+        {/* Two-Factor Authentication */}
+        <div className="bg-gray-800 rounded-xl p-6 space-y-4 mb-8">
+          <h2 className="text-lg font-semibold">Two-Factor Authentication</h2>
+          <p className="text-gray-400 text-sm">
+            Add an extra layer of security to your account with TOTP-based 2FA.
+          </p>
+          
+          {showTwoFactorSetup ? (
+            <TwoFactorSetup
+              accountName={address || "user"}
+              onComplete={() => {
+                setShowTwoFactorSetup(false);
+                setTwoFactorEnabled(true);
+                addToast("Two-factor authentication enabled successfully", "success");
+              }}
+              onCancel={() => setShowTwoFactorSetup(false)}
+            />
+          ) : (
+            <>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className={`text-sm font-medium ${twoFactorEnabled ? "text-green-400" : "text-gray-300"}`}>
+                    {twoFactorEnabled ? "2FA Enabled" : "2FA Disabled"}
+                  </p>
+                  <p className="text-gray-500 text-xs mt-1">
+                    {twoFactorEnabled
+                      ? "Your account is protected with two-factor authentication"
+                      : "Your account is not protected with two-factor authentication"}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowTwoFactorSetup(true)}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    twoFactorEnabled
+                      ? "border border-gray-600 text-gray-300 hover:bg-gray-700"
+                      : "bg-green-700 text-white hover:bg-green-800"
+                  }`}
+                >
+                  {twoFactorEnabled ? "Manage" : "Enable"}
+                </button>
+              </div>
+              
+              {twoFactorEnabled && (
+                <div className="mt-4 pt-4 border-t border-gray-700">
+                  <button
+                    onClick={() => {
+                      setTwoFactorEnabled(false);
+                      addToast("Two-factor authentication disabled", "info");
+                    }}
+                    className="text-red-400 text-sm hover:text-red-300 transition-colors"
+                  >
+                    Disable Two-Factor Authentication
+                  </button>
+                </div>
+              )}
+            </>
+          )}
         </div>
 
         <div className="bg-gray-800 rounded-xl p-6 space-y-4 mb-8">
