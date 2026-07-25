@@ -19,6 +19,7 @@ const NAV_LINKS = [
   { href: "/", key: "home" },
   { href: "/dashboard", key: "dashboard" },
   { href: "/stream/new", key: "create" },
+  { href: "/archive", key: "archive" },
   { href: "/settings", key: "settings" },
 ] as const;
 
