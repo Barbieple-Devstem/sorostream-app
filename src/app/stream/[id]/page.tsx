@@ -13,6 +13,7 @@ import StreamProgressBar from "@/components/StreamProgressBar";
 import VestingChart from "@/components/VestingChart";
 import StreamHistory from "@/components/StreamHistory";
 import { StreamErrorBoundary } from "@/components/StreamErrorBoundary";
+import StreamCompletedBanner from "@/components/StreamCompletedBanner";
 import { SkeletonDetail } from "@/components/Skeleton";
 import WalletConnect from "@/components/WalletConnect";
 import KeyboardShortcutsHelp from "@/components/KeyboardShortcutsHelp";
@@ -98,6 +99,10 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
   useFocusTrap(cancelModalRef, showCancelModal);
   const [showQrModal, setShowQrModal] = useState(false);
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
+
+  // ── Stream completion states ───────────────────────────────────────────────
+  const [claimFinalLoading, setClaimFinalLoading] = useState(false);
+  const [claimFinalDone, setClaimFinalDone] = useState(false);
 
   // ── Top-up form state ──────────────────────────────────────────────────────
   const [showTopUp, setShowTopUp] = useState(false);
@@ -374,6 +379,25 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
 
   const isBusy = withdrawLoading || cancelLoading || cancelPending || topUpLoading;
 
+  // ── Stream completion ─────────────────────────────────────────────────────
+  /** True when the current wall-clock time has passed the stream's end time. */
+  const isCompleted = stream
+    ? Date.now() >= new Date(stream.endTime).getTime()
+    : false;
+
+  const handleClaimFinal = useCallback(async () => {
+    setClaimFinalLoading(true);
+    try {
+      const result = await sorostream.withdraw();
+      addToast(`Final amount claimed! Tx: ${result.txHash}`, "success");
+      setClaimFinalDone(true);
+    } catch {
+      addToast("Claim failed. Please try again.", "error");
+    } finally {
+      setClaimFinalLoading(false);
+    }
+  }, [addToast]);
+
   // ── Keyboard shortcuts ────────────────────────────────────────────────────
   const shortcutGroups: ShortcutGroup[] = useMemo(() => [
     {
@@ -625,9 +649,19 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
           </button>
         </div>
 
+        {/* Stream completed banner — shown when currentTime >= endTime */}
+        {isCompleted && (
+          <StreamCompletedBanner
+            streamId={stream.id}
+            finalAmount={formatUSDC(stream.deposit)}
+            onClaim={handleClaimFinal}
+            claiming={claimFinalLoading}
+            claimed={claimFinalDone}
+          />
+        )}
+
         <div className="bg-gray-800 rounded-xl p-6 space-y-6">
           <StreamTimeline startTime={stream.startTime} endTime={stream.endTime} />
-
           <CountdownTimer endTime={stream.endTime} />
 
           <StreamProgressBar stream={stream} />

@@ -9,6 +9,8 @@ import PortfolioChart from "@/components/PortfolioChart";
 import KeyboardShortcutsHelp from "@/components/KeyboardShortcutsHelp";
 import PortfolioChart from "@/components/PortfolioChart";
 import StatusLegend from "@/components/StatusLegend";
+import { StreamErrorBoundary } from "@/components/StreamErrorBoundary";
+import { getMockStreams, watchClaimable, sorostream, getMockStreamHistory, StreamData } from "@/src/lib/sorostream";
 import { getMockStreams, getStreamsForWallet, watchClaimable, sorostream, getMockStreamHistory, StreamData } from "@/src/lib/sorostream";
 import { useRpcFetch } from "@/src/lib/useRpcFetch";
 import { useToast } from "@/src/lib/toast";
@@ -302,7 +304,9 @@ function DashboardContent() {
             <PortfolioChart />
 
             {/* Status legend */}
-            <StatusLegend />
+            <StreamErrorBoundary section="Stats Summary">
+              <StatusLegend />
+            </StreamErrorBoundary>
 
             {/* Portfolio performance chart */}
             <div className="mb-6">
@@ -483,6 +487,7 @@ function DashboardContent() {
               </div>
             )}
 
+            <StreamErrorBoundary section="Stream List">
             {state === "loading" ? (
               <StreamListSkeleton />
             ) : state === "empty" ? (
@@ -542,10 +547,13 @@ function DashboardContent() {
                 />
               </div>
             )}
+            </StreamErrorBoundary>
           </div>
 
           <div className="w-full lg:w-80 shrink-0">
-            <StreamEventFeed />
+            <StreamErrorBoundary section="Activity Feed">
+              <StreamEventFeed />
+            </StreamErrorBoundary>
           </div>
         </div>
       </div>
