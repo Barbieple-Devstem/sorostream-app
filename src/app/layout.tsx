@@ -16,6 +16,7 @@ import "./globals.css";
 import { validateEnv } from "@/src/lib/env";
 import { initAnalytics } from "@/src/lib/analytics";
 import WebVitalsReporter from "@/src/components/WebVitalsReporter";
+import { RpcUnreachableBanner } from "@/components/RpcHealthIndicator";
 
 validateEnv();
 initAnalytics();
@@ -80,6 +81,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   <NotificationProvider>
                     <GlobalShortcutsProvider>
                       <NavHeader />
+                      <RpcUnreachableBanner />
                       <PageViewTracker />
                       <WebVitalsReporter />
                       {children}

@@ -1,0 +1,308 @@
+"use client";
+/**
+ * /admin — Admin dashboard.
+ *
+ * Treasury Stats widget:
+ * - Shows accumulated fee balance per supported token
+ * - USD equivalent via XLM price feed (XLM tokens) or 1:1 assumption for USDC
+ * - Last sweep date and amount
+ * - Sweep button visible only to the admin wallet address
+ * - Zero-balance tokens show "No fees collected"
+ * - Sweep triggers a balance refresh
+ */
+import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
+import {
+  getTreasuryBalances,
+  sweepTreasuryFees,
+  formatStellarAmount,
+  type TreasuryBalance,
+} from "@/src/lib/sorostream";
+import { useXlmPrice } from "@/src/lib/useXlmPrice";
+import { useWallet } from "@/src/context/WalletContext";
+import { useToast } from "@/src/lib/toast";
+
+// ── Env-configurable admin wallet address ───────────────────────────────────
+// Set NEXT_PUBLIC_ADMIN_WALLET to the admin's Stellar public key.
+// If unset, the sweep button is never shown.
+const ADMIN_WALLET = process.env.NEXT_PUBLIC_ADMIN_WALLET ?? "";
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function formatDate(iso: string | null): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+/**
+ * Compute the approximate USD value of a treasury balance.
+ * - USDC is treated as 1:1 with USD.
+ * - XLM uses the live price feed.
+ * - Other tokens: shown as "—" when price is unavailable.
+ */
+function toUsd(
+  token: string,
+  stroops: number,
+  xlmPrice: number | null,
+): string | null {
+  const amount = stroops / 10_000_000;
+  if (token === "USDC") return `$${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  if (token === "XLM" && xlmPrice !== null) {
+    const usd = amount * xlmPrice;
+    return `$${usd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+  return null;
+}
+
+// ── Sub-components ───────────────────────────────────────────────────────────
+
+function Spinner() {
+  return (
+    <svg
+      className="animate-spin h-4 w-4 inline-block align-middle"
+      xmlns="http://www.w3.org/2000/svg"
+      fill="none"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+    </svg>
+  );
+}
+
+interface TreasuryRowProps {
+  entry: TreasuryBalance;
+  isAdmin: boolean;
+  xlmPrice: number | null;
+  onSweep: (token: string) => Promise<void>;
+  sweeping: boolean;
+}
+
+function TreasuryRow({ entry, isAdmin, xlmPrice, onSweep, sweeping }: TreasuryRowProps) {
+  const hasBalance = entry.balanceStroops > 0;
+  const usdValue = hasBalance ? toUsd(entry.token, entry.balanceStroops, xlmPrice) : null;
+
+  return (
+    <div className="bg-gray-800 rounded-xl border border-gray-700 p-5 flex flex-col gap-3">
+      {/* Token name + balance */}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs text-gray-400 uppercase tracking-wider mb-0.5">Token</p>
+          <p className="text-lg font-bold text-white">{entry.token}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-xs text-gray-400 uppercase tracking-wider mb-0.5">Balance</p>
+          {hasBalance ? (
+            <p className="text-lg font-bold text-green-400 font-mono">
+              {formatStellarAmount(entry.balanceStroops)}
+            </p>
+          ) : (
+            <p className="text-sm text-gray-500 italic">No fees collected</p>
+          )}
+        </div>
+      </div>
+
+      {/* USD equivalent */}
+      {hasBalance && (
+        <div className="flex items-center gap-2 text-sm">
+          <span className="text-gray-400">≈</span>
+          <span className="text-gray-300">
+            {usdValue ?? <span className="text-gray-500 text-xs">Price unavailable</span>}
+          </span>
+          {entry.token === "XLM" && xlmPrice !== null && (
+            <span className="text-xs text-gray-500">@ ${xlmPrice.toFixed(4)}/XLM</span>
+          )}
+        </div>
+      )}
+
+      {/* Last sweep info */}
+      <div className="text-xs text-gray-400 space-y-0.5 border-t border-gray-700 pt-3">
+        <div className="flex justify-between">
+          <span>Last sweep</span>
+          <span className="text-gray-300">{formatDate(entry.lastSweepAt)}</span>
+        </div>
+        {entry.lastSweepAmountStroops !== null && (
+          <div className="flex justify-between">
+            <span>Last swept amount</span>
+            <span className="text-gray-300 font-mono">
+              {formatStellarAmount(entry.lastSweepAmountStroops)} {entry.token}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Sweep button — admin only */}
+      {isAdmin && (
+        <button
+          onClick={() => onSweep(entry.token)}
+          disabled={sweeping || !hasBalance}
+          aria-busy={sweeping}
+          className="mt-1 w-full py-2 rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 disabled:opacity-40 disabled:cursor-not-allowed bg-green-700 text-white hover:bg-green-600"
+          title={!hasBalance ? "No fees to sweep" : undefined}
+        >
+          {sweeping ? (
+            <span className="flex items-center justify-center gap-2">
+              <Spinner /> Sweeping…
+            </span>
+          ) : (
+            "Sweep Fees"
+          )}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ── Page ─────────────────────────────────────────────────────────────────────
+
+export default function AdminPage() {
+  const { address } = useWallet();
+  const { price: xlmPrice } = useXlmPrice();
+  const { addToast } = useToast();
+
+  const [balances, setBalances] = useState<TreasuryBalance[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [sweepingToken, setSweepingToken] = useState<string | null>(null);
+
+  // An admin is the connected wallet matching the configured admin address.
+  const isAdmin = Boolean(ADMIN_WALLET && address && address === ADMIN_WALLET);
+
+  const fetchBalances = useCallback(async () => {
+    try {
+      const data = await getTreasuryBalances();
+      setBalances(data);
+    } catch {
+      addToast("Failed to load treasury balances.", "error");
+    } finally {
+      setLoading(false);
+    }
+  }, [addToast]);
+
+  useEffect(() => {
+    void fetchBalances();
+  }, [fetchBalances]);
+
+  const handleSweep = useCallback(
+    async (token: string) => {
+      if (sweepingToken) return;
+      setSweepingToken(token);
+      try {
+        const result = await sweepTreasuryFees(token);
+        addToast(`Swept ${token} fees. TX: ${result.txHash}`, "success");
+        // Refresh balances after a successful sweep
+        await fetchBalances();
+      } catch {
+        addToast(`Failed to sweep ${token} fees. Please try again.`, "error");
+      } finally {
+        setSweepingToken(null);
+      }
+    },
+    [sweepingToken, addToast, fetchBalances],
+  );
+
+  return (
+    <main className="min-h-screen bg-gray-900 text-white p-4 sm:p-8">
+      <div className="max-w-5xl mx-auto">
+        {/* Header */}
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
+          <div>
+            <h1 className="text-2xl font-bold">Admin Dashboard</h1>
+            <p className="text-gray-400 text-sm mt-1">
+              Protocol fee revenue and treasury management.
+            </p>
+          </div>
+          <Link
+            href="/dashboard"
+            className="text-sm text-green-400 hover:text-green-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+          >
+            ← Dashboard
+          </Link>
+        </div>
+
+        {/* Admin wallet notice */}
+        {!ADMIN_WALLET && (
+          <div
+            role="note"
+            className="mb-6 rounded-lg bg-yellow-900/30 border border-yellow-700 text-yellow-300 text-sm px-4 py-3"
+          >
+            <strong>NEXT_PUBLIC_ADMIN_WALLET</strong> is not configured. The
+            Sweep Fees button will not appear until an admin address is set.
+          </div>
+        )}
+
+        {address && ADMIN_WALLET && !isAdmin && (
+          <div
+            role="note"
+            className="mb-6 rounded-lg bg-gray-800 border border-gray-700 text-gray-400 text-sm px-4 py-3"
+          >
+            Connected as <span className="font-mono text-gray-300">{address}</span>. Sweep
+            controls are only available to the admin wallet.
+          </div>
+        )}
+
+        {/* Treasury stats */}
+        <section aria-labelledby="treasury-heading">
+          <div className="flex items-center justify-between mb-4">
+            <h2 id="treasury-heading" className="text-lg font-semibold">
+              Treasury Balances
+            </h2>
+            <button
+              onClick={() => { setLoading(true); void fetchBalances(); }}
+              disabled={loading}
+              className="text-xs text-gray-400 hover:text-white transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 rounded px-2 py-1"
+              aria-label="Refresh treasury balances"
+            >
+              {loading ? <Spinner /> : "↻ Refresh"}
+            </button>
+          </div>
+
+          {loading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="h-44 bg-gray-800 rounded-xl animate-pulse border border-gray-700" />
+              ))}
+            </div>
+          ) : balances.length === 0 ? (
+            <div className="bg-gray-800 rounded-xl border border-gray-700 p-8 text-center text-gray-400 text-sm">
+              No treasury data available.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {balances.map((entry) => (
+                <TreasuryRow
+                  key={entry.token}
+                  entry={entry}
+                  isAdmin={isAdmin}
+                  xlmPrice={xlmPrice}
+                  onSweep={handleSweep}
+                  sweeping={sweepingToken === entry.token}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Summary totals */}
+        {!loading && balances.length > 0 && (
+          <div className="mt-6 bg-gray-800 rounded-xl border border-gray-700 px-5 py-4 flex flex-wrap gap-6">
+            <div>
+              <p className="text-xs text-gray-400 mb-1">Total tokens tracked</p>
+              <p className="text-white font-semibold">{balances.length}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-400 mb-1">Tokens with pending fees</p>
+              <p className="text-white font-semibold">
+                {balances.filter((b) => b.balanceStroops > 0).length}
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+    </main>
+  );
+}

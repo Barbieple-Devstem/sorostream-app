@@ -14,12 +14,14 @@ import { useWallet } from "@/src/context/WalletContext";
 import { APP_NETWORK } from "@/src/lib/freighter";
 import { useTranslations } from "@/src/lib/i18n";
 import { useGlobalShortcuts } from "@/components/GlobalShortcuts";
+import RpcHealthIndicator from "@/components/RpcHealthIndicator";
 
 const NAV_LINKS = [
   { href: "/", key: "home" },
   { href: "/dashboard", key: "dashboard" },
   { href: "/stream/new", key: "create" },
-  { href: "/address-book", key: "contacts" },
+  { href: "/admin", key: "admin" },
+  { href: "/archive", key: "archive" },
   { href: "/settings", key: "settings" },
 ] as const;
 
@@ -133,6 +135,7 @@ export default function NavHeader() {
         <div className="flex items-center gap-3 min-w-0 overflow-hidden">
           <GlobalSearch />
           <NetworkSelector />
+          <RpcHealthIndicator />
           {address && (
             <span
               className="text-xs text-gray-600 dark:text-gray-300 font-mono hidden sm:inline-block"
