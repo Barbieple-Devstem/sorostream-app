@@ -5,10 +5,11 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { StreamListSkeleton } from "@/components/Skeleton";
 import StreamVirtualList from "@/components/StreamVirtualList";
 import StreamEventFeed from "@/components/StreamEventFeed";
+import PortfolioChart from "@/components/PortfolioChart";
 import KeyboardShortcutsHelp from "@/components/KeyboardShortcutsHelp";
 import PortfolioChart from "@/components/PortfolioChart";
 import StatusLegend from "@/components/StatusLegend";
-import { getMockStreams, watchClaimable, sorostream, getMockStreamHistory, StreamData } from "@/src/lib/sorostream";
+import { getMockStreams, getStreamsForWallet, watchClaimable, sorostream, getMockStreamHistory, StreamData } from "@/src/lib/sorostream";
 import { useRpcFetch } from "@/src/lib/useRpcFetch";
 import { useToast } from "@/src/lib/toast";
 import { downloadCSV } from "@/src/lib/export";
@@ -24,6 +25,7 @@ type SortOrder = "asc" | "desc";
 const SORT_STORAGE_KEY = "sorostream_sort";
 
 function loadSort(): { field: SortField; order: SortOrder } {
+  if (typeof window === "undefined") return { field: "created", order: "desc" };
   try {
     const raw = localStorage.getItem(SORT_STORAGE_KEY);
     if (raw) return JSON.parse(raw);
@@ -46,17 +48,11 @@ function DashboardContent() {
   const [search, setSearch] = useState(searchParams.get("search") || "");
   const [bookmarksOnly, setBookmarksOnly] = useState(false);
 
-  // Sort state — persisted to localStorage.
-  // Initialize with the SSR-safe default; sync from localStorage after mount to
-  // avoid a server/client hydration mismatch (localStorage is undefined on the server).
-  const [sortField, setSortField] = useState<SortField>("created");
-  const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
-  useEffect(() => {
-    const saved = loadSort();
-    setSortField(saved.field);
-    setSortOrder(saved.order);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Sort state — persisted to localStorage via a lazy initializer.
+  // Reads synchronously on mount so the saved preference is applied immediately
+  // without a flash of default-sorted content when navigating back.
+  const [sortField, setSortField] = useState<SortField>(() => loadSort().field);
+  const [sortOrder, setSortOrder] = useState<SortOrder>(() => loadSort().order);
 
   function handleSortFieldChange(field: SortField) {
     setSortField(field);
@@ -95,7 +91,7 @@ function DashboardContent() {
     async function load() {
       try {
         const data = await rpcFetch(() =>
-          Promise.resolve(getMockStreams()),
+          Promise.resolve(getStreamsForWallet(address)),
         );
         if (!cancelled) setStreams(data);
       } catch {
@@ -110,7 +106,7 @@ function DashboardContent() {
     pollRef.current = setInterval(async () => {
       try {
         const data = await rpcFetch(() =>
-          Promise.resolve(watchClaimable(getMockStreams())),
+          Promise.resolve(watchClaimable(getStreamsForWallet(address))),
         );
         if (!cancelled) setStreams(data);
       } catch {
@@ -234,7 +230,7 @@ function DashboardContent() {
     try {
       await Promise.all(ids.map(() => sorostream.cancelStream()));
       addToast(`Cancelled ${ids.length} stream(s) successfully.`, "success");
-      const data = await rpcFetch(() => Promise.resolve(getMockStreams()));
+      const data = await rpcFetch(() => Promise.resolve(getStreamsForWallet(address)));
       setStreams(data);
       clearSelection();
     } catch {
@@ -242,7 +238,7 @@ function DashboardContent() {
     } finally {
       setBulkLoading(false);
     }
-  }, [selectedIds, addToast, rpcFetch, clearSelection]);
+  }, [selectedIds, addToast, rpcFetch, clearSelection, address]);
 
   const handleBulkTopUp = useCallback(async () => {
     const ids = Array.from(selectedIds);
@@ -251,7 +247,7 @@ function DashboardContent() {
     try {
       await Promise.all(ids.map(() => sorostream.topUp()));
       addToast(`Topped up ${ids.length} stream(s) successfully.`, "success");
-      const data = await rpcFetch(() => Promise.resolve(getMockStreams()));
+      const data = await rpcFetch(() => Promise.resolve(getStreamsForWallet(address)));
       setStreams(data);
       clearSelection();
     } catch {
@@ -259,7 +255,7 @@ function DashboardContent() {
     } finally {
       setBulkLoading(false);
     }
-  }, [selectedIds, addToast, rpcFetch, clearSelection]);
+  }, [selectedIds, addToast, rpcFetch, clearSelection, address]);
 
   const handleBulkExport = useCallback(() => {
     const ids = Array.from(selectedIds);
@@ -307,6 +303,11 @@ function DashboardContent() {
 
             {/* Status legend */}
             <StatusLegend />
+
+            {/* Portfolio performance chart */}
+            <div className="mb-6">
+              <PortfolioChart />
+            </div>
 
             {/* Filter Bar */}
             <div className="mb-6 space-y-3">
