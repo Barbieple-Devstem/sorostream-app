@@ -307,3 +307,51 @@ test.describe('Create Stream – wallet not connected', () => {
     await expect(errorAlert).toContainText(/freighter/i);
   });
 });
+
+test.describe('Create Stream – template picker prefill flow', () => {
+  test('select template → verify prefill → override one field → submit and verify', async ({ page }) => {
+    // 1. Go to stream creation page
+    await page.goto('/stream/new');
+
+    // Fill recipient first to get to step 2
+    await page.getByLabel('Recipient Address').fill(VALID_RECIPIENT);
+    await page.getByRole('button', { name: 'Next' }).click();
+
+    // 2. Select "Biweekly payroll" template
+    await page.getByRole('button', { name: /biweekly payroll/i }).click();
+
+    // 3. Verify fields are prefilled: amount "5000", days "14", hours "0", minutes "0"
+    await expect(page.getByLabel('Amount (USDC)')).toHaveValue('5000');
+    await expect(page.getByLabel('Days')).toHaveValue('14');
+    await expect(page.getByLabel('Hours')).toHaveValue('0');
+    await expect(page.getByLabel('Minutes')).toHaveValue('0');
+
+    // 4. Override one field (Amount to "2500") and verify only that field changes
+    await page.getByLabel('Amount (USDC)').fill('2500');
+
+    // Verify amount is updated, but duration fields are unchanged
+    await expect(page.getByLabel('Amount (USDC)')).toHaveValue('2500');
+    await expect(page.getByLabel('Days')).toHaveValue('14');
+    await expect(page.getByLabel('Hours')).toHaveValue('0');
+    await expect(page.getByLabel('Minutes')).toHaveValue('0');
+
+    // Next, proceed to review step
+    await page.getByRole('button', { name: 'Next' }).click();
+
+    // 5. Verify review page shows correct values: Amount 2,500/2500 USDC, Duration 14d
+    await expect(page.getByText('2500 USDC')).toBeVisible();
+    await expect(page.getByText('14d')).toBeVisible();
+
+    // Submit stream
+    await page.getByRole('button', { name: 'Create Stream' }).click();
+
+    // Should redirect to stream detail page
+    await expect(page).toHaveURL(/\/stream\/\d+/);
+    const url = page.url();
+    const streamId = url.split('/stream/')[1].split('?')[0];
+    expect(streamId).toBeTruthy();
+
+    // Verify detail page has correct heading
+    await expect(page.locator('h1')).toContainText(`Stream #${streamId}`);
+  });
+});
