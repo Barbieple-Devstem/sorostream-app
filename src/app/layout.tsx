@@ -19,6 +19,7 @@ import "./globals.css";
 import { validateEnv } from "@/src/lib/env";
 import { initAnalytics } from "@/src/lib/analytics";
 import WebVitalsReporter from "@/src/components/WebVitalsReporter";
+import { RpcUnreachableBanner } from "@/components/RpcHealthIndicator";
 
 validateEnv();
 initAnalytics();
@@ -74,31 +75,26 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           Skip to main content
         </a>
         <SettingsProvider>
-          <PreferencesProvider>
-            <WalletProvider>
-              <BookmarksProvider>
-                <ThemeProvider>
-                  <NetworkProvider>
-                    <ToastProvider>
-                      <NotificationProvider>
-                        <GlobalShortcutsProvider>
-                          <NavHeader />
-                          <BottomNav />
-                          <PageViewTracker />
-                          <WebVitalsReporter />
-                          <PwaInit />
-                          <InstallPrompt />
-                          {children}
-                          <OnboardingWizard />
-                          <AppFooter />
-                        </GlobalShortcutsProvider>
-                      </NotificationProvider>
-                    </ToastProvider>
-                  </NetworkProvider>
-                </ThemeProvider>
-              </BookmarksProvider>
-            </WalletProvider>
-          </PreferencesProvider>
+          <WalletProvider>
+            <BookmarksProvider>
+            <ThemeProvider>
+              <NetworkProvider>
+                <ToastProvider>
+                  <NotificationProvider>
+                    <GlobalShortcutsProvider>
+                      <NavHeader />
+                      <RpcUnreachableBanner />
+                      <PageViewTracker />
+                      <WebVitalsReporter />
+                      {children}
+                      <OnboardingWizard />
+                    </GlobalShortcutsProvider>
+                  </NotificationProvider>
+                </ToastProvider>
+              </NetworkProvider>
+            </ThemeProvider>
+            </BookmarksProvider>
+          </WalletProvider>
         </SettingsProvider>
       </body>
     </html>

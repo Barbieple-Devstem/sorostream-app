@@ -55,6 +55,31 @@ const MOCK_STREAMS: StreamData[] = [
     lastWithdrawTime: new Date(Date.now() - 86400000 * 1).toISOString(),
     status: "Cancelled",
   },
+  // --- Archived streams (ended/cancelled > 30 days ago) ---
+  {
+    id: "6", sender: "GBAM...BOEP", recipient: "GARC...H1VE", token: "USDC",
+    flowRate: 200000, deposit: 2000000000,
+    startTime: new Date(Date.now() - 86400000 * 90).toISOString(),
+    endTime: new Date(Date.now() - 86400000 * 60).toISOString(),
+    lastWithdrawTime: new Date(Date.now() - 86400000 * 61).toISOString(),
+    status: "Ended",
+  },
+  {
+    id: "7", sender: "GHIJ...KLMN", recipient: "GBAM...BOEP", token: "XLM",
+    flowRate: 150000, deposit: 1500000000,
+    startTime: new Date(Date.now() - 86400000 * 120).toISOString(),
+    endTime: new Date(Date.now() - 86400000 * 45).toISOString(),
+    lastWithdrawTime: new Date(Date.now() - 86400000 * 46).toISOString(),
+    status: "Cancelled",
+  },
+  {
+    id: "8", sender: "GXYZ...ABC", recipient: "GDEF...XYZ", token: "USDC",
+    flowRate: 400000, deposit: 4000000000,
+    startTime: new Date(Date.now() - 86400000 * 180).toISOString(),
+    endTime: new Date(Date.now() - 86400000 * 31).toISOString(),
+    lastWithdrawTime: new Date(Date.now() - 86400000 * 32).toISOString(),
+    status: "Ended",
+  },
 ];
 
 let nextId = 6;
@@ -135,6 +160,34 @@ export function getMockStreams(): StreamData[] {
   return MOCK_STREAMS;
 }
 
+/** Archive threshold in milliseconds (30 days after end/cancel). */
+const ARCHIVE_THRESHOLD_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Returns streams that are eligible for the archive:
+ * - status is "Ended" or "Cancelled"
+ * - endTime was more than 30 days ago
+ * Active streams are NEVER returned here.
+ */
+export function getArchivedStreams(): StreamData[] {
+  const cutoff = Date.now() - ARCHIVE_THRESHOLD_MS;
+  return MOCK_STREAMS.filter(
+    (s) =>
+      (s.status === "Ended" || s.status === "Cancelled") &&
+      new Date(s.endTime).getTime() <= cutoff,
+  );
+}
+
+/**
+ * Returns non-archived streams: Active streams, or Ended/Cancelled streams
+ * that ended within the last 30 days.
+ */
+export function getActiveDashboardStreams(): StreamData[] {
+  const cutoff = Date.now() - ARCHIVE_THRESHOLD_MS;
+  return MOCK_STREAMS.filter((s) => {
+    if (s.status === "Active") return true;
+    return new Date(s.endTime).getTime() > cutoff;
+  });
 /**
  * Return streams relevant to the given wallet address.
  * A stream is relevant when the address is the sender or recipient.
@@ -244,4 +297,87 @@ export function addStreamEvent(event: Omit<StreamEvent, "id">): StreamEvent {
 export function truncateAddress(address: string): string {
   if (!address) return "";
   return `${address.slice(0, 4)}...${address.slice(-4)}`;
+}
+
+// ── Protocol fee config ──────────────────────────────────────────────────────
+
+export interface FeeConfig {
+  /** Fee rate as a basis-point integer, e.g. 50 = 0.50% */
+  basisPoints: number;
+}
+
+/** Simulates reading the current fee rate from the contract config. */
+export async function getFeeConfig(): Promise<FeeConfig> {
+  // Mock: 0.50% (50 bps). Set to 0 to test zero-fee path.
+  return { basisPoints: 50 };
+}
+
+/**
+ * Break down a withdrawal into claimable amount, protocol fee, and net amount.
+ *
+ * @param claimableStroops  Raw stroop value the user would receive pre-fee
+ * @param basisPoints       Protocol fee rate in basis points (e.g. 50 = 0.5%)
+ */
+export function calcWithdrawBreakdown(
+  claimableStroops: number,
+  basisPoints: number,
+): {
+  claimable: number;
+  fee: number;
+  net: number;
+  feePercent: number;
+} {
+  const feePercent = basisPoints / 100; // e.g. 50 bps → 0.5%
+  const fee = Math.floor((claimableStroops * basisPoints) / 10_000);
+  const net = claimableStroops - fee;
+  return { claimable: claimableStroops, fee, net, feePercent };
+// ── Treasury ────────────────────────────────────────────────────────────────
+
+export interface TreasuryBalance {
+  /** Token symbol, e.g. "USDC" or "XLM" */
+  token: string;
+  /** Raw stroop balance accumulated in the treasury */
+  balanceStroops: number;
+  /** ISO timestamp of the last sweep (null if never swept) */
+  lastSweepAt: string | null;
+  /** Amount swept in the last sweep (stroops), null if never swept */
+  lastSweepAmountStroops: number | null;
+}
+
+/** Mock treasury balances — keyed by token. */
+const MOCK_TREASURY: TreasuryBalance[] = [
+  {
+    token: "USDC",
+    balanceStroops: 3_750_000_000, // 375 USDC
+    lastSweepAt: new Date(Date.now() - 86400000 * 7).toISOString(),
+    lastSweepAmountStroops: 1_200_000_000,
+  },
+  {
+    token: "XLM",
+    balanceStroops: 8_200_000_000, // 820 XLM
+    lastSweepAt: new Date(Date.now() - 86400000 * 14).toISOString(),
+    lastSweepAmountStroops: 2_500_000_000,
+  },
+  {
+    token: "wBTC",
+    balanceStroops: 0, // No fees collected yet
+    lastSweepAt: null,
+    lastSweepAmountStroops: null,
+  },
+];
+
+/** Fetch the treasury balances (simulates a contract query). */
+export async function getTreasuryBalances(): Promise<TreasuryBalance[]> {
+  return [...MOCK_TREASURY];
+}
+
+/** Simulate a sweep_fees contract call. Clears the balance and records sweep metadata. */
+export async function sweepTreasuryFees(token: string): Promise<{ txHash: string }> {
+  const entry = MOCK_TREASURY.find((t) => t.token === token);
+  if (entry) {
+    entry.lastSweepAmountStroops = entry.balanceStroops;
+    entry.lastSweepAt = new Date().toISOString();
+    entry.balanceStroops = 0;
+  }
+  return { txHash: `mock-sweep-tx-${Date.now()}` };
 }
