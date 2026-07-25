@@ -39,7 +39,7 @@ export default function FiatDisplay({ xlmAmount, usdcAmount }: FiatDisplayProps)
     });
     return (
       <span
-        className="text-gray-400 text-xs ml-1"
+        className="text-gray-500 dark:text-gray-400 text-xs ml-1"
         aria-label={t("approximately_usd", { formatted })}
       >
         (~${formatted} USD)
@@ -52,7 +52,7 @@ export default function FiatDisplay({ xlmAmount, usdcAmount }: FiatDisplayProps)
 
     if (price === null) {
       return (
-        <span className="text-gray-500 text-xs ml-1" aria-label={t("price_unavailable")}>
+        <span className="text-gray-500 dark:text-gray-400 text-xs ml-1" aria-label={t("price_unavailable")}>
           ({t("price_unavailable")})
         </span>
       );
@@ -66,7 +66,7 @@ export default function FiatDisplay({ xlmAmount, usdcAmount }: FiatDisplayProps)
 
     return (
       <span
-        className="text-gray-400 text-xs ml-1"
+        className="text-gray-500 dark:text-gray-400 text-xs ml-1"
         aria-label={t("approximately_usd", { formatted })}
       >
         (~${formatted} USD)

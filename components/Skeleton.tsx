@@ -11,7 +11,7 @@ interface StreamListSkeletonProps {
 export function Skeleton({ className = "" }: SkeletonProps) {
   return (
     <div
-      className={`animate-pulse bg-gray-700 rounded ${className}`}
+      className={`animate-pulse bg-gray-200 dark:bg-gray-700 rounded ${className}`}
       aria-hidden="true"
     />
   );
@@ -26,7 +26,7 @@ export function StreamListSkeleton({
         {Array.from({ length: 5 }, (_, index) => (
           <li
             key={index}
-            className="bg-gray-800 rounded-xl p-5 border border-gray-700"
+            className="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-200 dark:border-gray-700"
           >
             <div className="flex justify-between items-start mb-3">
               <Skeleton className="h-5 w-16 rounded-full" />
@@ -51,7 +51,7 @@ export function StreamListSkeleton({
 
 export function SkeletonCard() {
   return (
-    <div className="bg-gray-800 rounded-lg p-4 space-y-3 border border-gray-700">
+    <div className="bg-white dark:bg-gray-800 rounded-lg p-4 space-y-3 border border-gray-200 dark:border-gray-700">
       <div className="flex justify-between">
         <Skeleton className="h-4 w-20" />
         <Skeleton className="h-5 w-16 rounded-full" />
@@ -68,7 +68,7 @@ export function SkeletonCard() {
 
 export function SkeletonDetail() {
   return (
-    <div className="bg-gray-800 rounded-xl p-6 space-y-6">
+    <div className="bg-white dark:bg-gray-800 rounded-xl p-6 space-y-6">
       <Skeleton className="h-2 w-full" />
       <div className="text-center space-y-2">
         <Skeleton className="h-4 w-24 mx-auto" />

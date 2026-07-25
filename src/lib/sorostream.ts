@@ -188,6 +188,17 @@ export function getActiveDashboardStreams(): StreamData[] {
     if (s.status === "Active") return true;
     return new Date(s.endTime).getTime() > cutoff;
   });
+/**
+ * Return streams relevant to the given wallet address.
+ * A stream is relevant when the address is the sender or recipient.
+ * Falls back to returning all streams when address is null or empty.
+ */
+export function getStreamsForWallet(address: string | null): StreamData[] {
+  if (!address) return MOCK_STREAMS;
+  const relevant = MOCK_STREAMS.filter(
+    (s) => s.sender.includes(address.slice(0, 5)) || s.recipient.includes(address.slice(0, 5)),
+  );
+  return relevant.length > 0 ? relevant : MOCK_STREAMS;
 }
 
 export function getMockStreamHistory(id: string): StreamHistoryEntry[] {

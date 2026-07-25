@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import NetworkSelector from "@/components/NetworkSelector";
@@ -14,6 +14,7 @@ import { useWallet } from "@/src/context/WalletContext";
 import { APP_NETWORK } from "@/src/lib/freighter";
 import { useTranslations } from "@/src/lib/i18n";
 import { useGlobalShortcuts } from "@/components/GlobalShortcuts";
+import RpcHealthIndicator from "@/components/RpcHealthIndicator";
 
 const NAV_LINKS = [
   { href: "/", key: "home" },
@@ -36,9 +37,10 @@ export default function NavHeader() {
   const [scrolled, setScrolled] = useState(false);
   const { countFor, clearSection } = useNotifications();
   const { showUsd, toggleShowUsd, language } = useSettings();
-  const { address } = useWallet();
+  const { address, balanceRefreshTrigger } = useWallet();
   const [xlmBalance, setXlmBalance] = useState<string | null>(null);
   const [balanceLoading, setBalanceLoading] = useState(false);
+  const [balanceUpdated, setBalanceUpdated] = useState(false);
   const [changelogOpen, setChangelogOpen] = useState(false);
   const changelogUnread = useChangelogUnread();
   const { openHelp } = useGlobalShortcuts();
@@ -80,17 +82,30 @@ export default function NavHeader() {
     void fetchBalance(address);
     const interval = setInterval(() => void fetchBalance(address), 60_000);
     return () => clearInterval(interval);
-  }, [address, fetchBalance]);
+  // balanceRefreshTrigger: re-fetch immediately when bumped (e.g. after withdrawal)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [address, fetchBalance, balanceRefreshTrigger]);
+
+  // Brief "Balance updated" indicator when balance changes
+  const prevBalanceRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (xlmBalance !== null && prevBalanceRef.current !== null && prevBalanceRef.current !== xlmBalance) {
+      setBalanceUpdated(true);
+      const timer = setTimeout(() => setBalanceUpdated(false), 2000);
+      return () => clearTimeout(timer);
+    }
+    prevBalanceRef.current = xlmBalance;
+  }, [xlmBalance]);
 
   return (
     <>
       <header
         className={`sticky top-0 z-50 border-b transition-colors ${
-          scrolled ? "border-gray-700 bg-gray-900/95 backdrop-blur" : "border-gray-800 bg-gray-900"
+          scrolled ? "border-gray-200 bg-white/95 dark:border-gray-700 dark:bg-gray-900/95 backdrop-blur" : "border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900"
         }`}
       >
       <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between min-w-0">
-        <div className="flex items-center gap-6 min-w-0 shrink-0">
+        <div className="flex items-center gap-6 min-w-0 shrink">
           <Link href="/" className="text-lg font-bold text-green-400 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900">
             SoroStream
           </Link>
@@ -104,13 +119,13 @@ export default function NavHeader() {
                   key={link.href}
                   href={link.href}
                   aria-current={isActive ? "page" : undefined}
-                  className={`text-sm transition-colors rounded-md px-1 py-0.5 inline-flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 ${
-                    isActive ? "text-white font-medium" : "text-gray-300 hover:text-white"
+                  className={`text-sm transition-colors rounded-md px-1 py-0.5 inline-flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 dark:focus-visible:ring-offset-gray-900 ${
+                    isActive ? "text-gray-900 dark:text-white font-medium" : "text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
                   }`}
                 >
                   {label}
                   <NotificationBadge count={unread} label={`${label} update`} />
-                  {isActive && <span className="ml-1 inline-block h-1 w-1 rounded-full bg-green-400" aria-hidden="true" />}
+                  {isActive && <span className="ml-1 inline-block h-1 w-1 rounded-full bg-green-600 dark:bg-green-400" aria-hidden="true" />}
                 </Link>
               );
             })}
@@ -119,15 +134,23 @@ export default function NavHeader() {
         <div className="flex items-center gap-3 min-w-0 overflow-hidden">
           <GlobalSearch />
           <NetworkSelector />
+          <RpcHealthIndicator />
           {address && (
             <span
-              className="text-xs text-gray-300 font-mono hidden sm:inline-block"
+              className="text-xs text-gray-600 dark:text-gray-300 font-mono hidden sm:inline-block"
               aria-label={t("wallet_balance")}
             >
               {balanceLoading && xlmBalance === null ? (
-                <span className="inline-block w-16 h-3 bg-gray-700 rounded animate-pulse" aria-hidden="true" />
+                <span className="inline-block w-16 h-3 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" aria-hidden="true" />
               ) : xlmBalance !== null ? (
-                `${parseFloat(xlmBalance).toLocaleString(language, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} XLM`
+                <span className="inline-flex items-center gap-1.5">
+                  {`${parseFloat(xlmBalance).toLocaleString(language, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} XLM`}
+                  {balanceUpdated && (
+                    <span className="text-[10px] text-green-400 font-normal" aria-live="polite">
+                      updated
+                    </span>
+                  )}
+                </span>
               ) : null}
             </span>
           )}
@@ -136,8 +159,8 @@ export default function NavHeader() {
             onClick={toggleShowUsd}
             className={`text-xs px-2 py-1 rounded border transition-colors ${
               showUsd
-                ? "border-green-600 text-green-400 hover:bg-green-900/30"
-                : "border-gray-600 text-gray-400 hover:bg-gray-700"
+                ? "border-green-600 text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/30"
+                : "border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
             }`}
             aria-pressed={showUsd}
             aria-label={showUsd ? t("hide_usd") : t("show_usd")}
@@ -147,7 +170,7 @@ export default function NavHeader() {
           </button>
           <button
             onClick={() => setChangelogOpen(true)}
-            className="relative text-gray-400 hover:text-white transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 p-1"
+            className="relative text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 dark:focus-visible:ring-offset-gray-900 p-1"
             aria-label={changelogUnread ? t("whats_new_unread") : t("whats_new")}
             title={t("whats_new")}
           >
@@ -156,12 +179,12 @@ export default function NavHeader() {
               <path d="M13.73 21a2 2 0 0 1-3.46 0" />
             </svg>
             {changelogUnread && (
-              <span className="absolute top-0.5 right-0.5 w-2 h-2 bg-green-400 rounded-full" aria-hidden="true" />
+              <span className="absolute top-0.5 right-0.5 w-2 h-2 bg-green-600 dark:bg-green-400 rounded-full" aria-hidden="true" />
             )}
           </button>
           <button
             onClick={openHelp}
-            className="text-xs px-2 py-1 rounded border border-gray-600 text-gray-400 hover:bg-gray-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
+            className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
             title={t("keyboard_shortcuts")}
             aria-label={t("open_keyboard_shortcuts")}
           >

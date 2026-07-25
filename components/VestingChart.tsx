@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { useTheme } from "@/src/lib/theme";
 import {
   LineChart,
   Line,
@@ -26,6 +27,9 @@ interface ChartPoint {
 }
 
 export default function VestingChart({ stream, history }: VestingChartProps) {
+  const { theme } = useTheme();
+  const isDark = theme === "dark";
+
   const { chartData, nowTime, deposit, flowRate, startTime, endTime } = useMemo(() => {
     const start = new Date(stream.startTime).getTime();
     const end = new Date(stream.endTime).getTime();
@@ -57,35 +61,35 @@ export default function VestingChart({ stream, history }: VestingChartProps) {
   const nowVested = Math.min(flowRate * nowElapsed, deposit);
 
   return (
-    <section aria-labelledby="vesting-chart-heading" className="bg-gray-800 rounded-xl p-4 sm:p-6">
-      <h2 id="vesting-chart-heading" className="text-lg font-semibold mb-4">
+    <section aria-labelledby="vesting-chart-heading" className="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 border border-gray-200 dark:border-gray-700">
+      <h2 id="vesting-chart-heading" className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">
         Vesting Curve
       </h2>
       <ResponsiveContainer width="100%" height={300}>
         <LineChart data={chartData} margin={{ top: 20, right: 10, left: 10, bottom: 10 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+          <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#374151" : "#e5e7eb"} />
           <XAxis
             dataKey="time"
             tickFormatter={fmtDate}
-            stroke="#9CA3AF"
-            tick={{ fill: "#9CA3AF", fontSize: 12 }}
+            stroke={isDark ? "#9CA3AF" : "#6b7280"}
+            tick={{ fill: isDark ? "#9CA3AF" : "#6b7280", fontSize: 12 }}
             domain={[startTime, endTime]}
             type="number"
             tickLine={false}
           />
           <YAxis
             tickFormatter={fmtAmount}
-            stroke="#9CA3AF"
-            tick={{ fill: "#9CA3AF", fontSize: 12 }}
+            stroke={isDark ? "#9CA3AF" : "#6b7280"}
+            tick={{ fill: isDark ? "#9CA3AF" : "#6b7280", fontSize: 12 }}
             width={60}
             tickLine={false}
           />
           <Tooltip
             contentStyle={{
-              backgroundColor: "#1F2937",
-              border: "1px solid #374151",
+              backgroundColor: isDark ? "#1F2937" : "#ffffff",
+              border: isDark ? "1px solid #374151" : "1px solid #e5e7eb",
               borderRadius: "8px",
-              color: "#F9FAFB",
+              color: isDark ? "#F9FAFB" : "#111827",
               fontSize: "13px",
             }}
             labelFormatter={(label) => fmtDate(label as number)}
@@ -121,12 +125,12 @@ export default function VestingChart({ stream, history }: VestingChartProps) {
             y={nowVested}
             r={6}
             fill="#22C55E"
-            stroke="#F9FAFB"
+            stroke={isDark ? "#F9FAFB" : "#ffffff"}
             strokeWidth={2}
           />
         </LineChart>
       </ResponsiveContainer>
-      <p className="text-xs text-gray-400 mt-2 text-center">
+      <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center">
         &#x25CF; Current position &mdash; Dashed red lines indicate withdrawals
       </p>
     </section>
