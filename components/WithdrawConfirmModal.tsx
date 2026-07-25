@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useFocusTrap } from "@/src/lib/useFocusTrap";
 
 interface WithdrawConfirmModalProps {
   /** XLM amount being withdrawn (display value, e.g. "1234.5600000") */
@@ -20,11 +21,9 @@ export default function WithdrawConfirmModal({
 }: WithdrawConfirmModalProps) {
   const [typed, setTyped] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
-  // Focus the input on mount for keyboard-first UX
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
+  useFocusTrap(dialogRef, true);
 
   // Close on Escape
   useEffect(() => {
@@ -39,6 +38,7 @@ export default function WithdrawConfirmModal({
 
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-labelledby="withdraw-confirm-title"

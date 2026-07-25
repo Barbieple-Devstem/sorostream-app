@@ -2,6 +2,18 @@
 
 import { useTheme } from "@/src/lib/theme";
 
+const themeLabels: Record<string, string> = {
+  dark: "☀️ Light",
+  light: "🔲 High Contrast",
+  "high-contrast": "🌙 Dark",
+};
+
+const themeAriaLabels: Record<string, string> = {
+  dark: "Switch to light theme",
+  light: "Switch to high contrast theme",
+  "high-contrast": "Switch to dark theme",
+};
+
 export default function ThemeToggle() {
   const { theme, isSystem, toggle, useSystemTheme } = useTheme();
 
@@ -12,8 +24,17 @@ export default function ThemeToggle() {
         className="text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors rounded-md px-2 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 dark:focus-visible:ring-offset-gray-900"
         aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
         title={isSystem ? "Following system preference" : "Theme set manually"}
+        className="text-sm text-gray-300 hover:text-white transition-colors rounded-md px-2 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+        aria-label={themeAriaLabels[theme] ?? "Toggle theme"}
+        title={
+          isSystem
+            ? "Following system preference"
+            : theme === "high-contrast"
+            ? "High contrast mode"
+            : "Theme set manually"
+        }
       >
-        {theme === "dark" ? "☀️ Light" : "🌙 Dark"}
+        {themeLabels[theme] ?? "🌙 Dark"}
       </button>
       {!isSystem && (
         <button

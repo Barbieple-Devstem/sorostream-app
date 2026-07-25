@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import NetworkSelector from "@/components/NetworkSelector";
@@ -35,9 +35,10 @@ export default function NavHeader() {
   const [scrolled, setScrolled] = useState(false);
   const { countFor, clearSection } = useNotifications();
   const { showUsd, toggleShowUsd, language } = useSettings();
-  const { address } = useWallet();
+  const { address, balanceRefreshTrigger } = useWallet();
   const [xlmBalance, setXlmBalance] = useState<string | null>(null);
   const [balanceLoading, setBalanceLoading] = useState(false);
+  const [balanceUpdated, setBalanceUpdated] = useState(false);
   const [changelogOpen, setChangelogOpen] = useState(false);
   const changelogUnread = useChangelogUnread();
   const { openHelp } = useGlobalShortcuts();
@@ -79,7 +80,20 @@ export default function NavHeader() {
     void fetchBalance(address);
     const interval = setInterval(() => void fetchBalance(address), 60_000);
     return () => clearInterval(interval);
-  }, [address, fetchBalance]);
+  // balanceRefreshTrigger: re-fetch immediately when bumped (e.g. after withdrawal)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [address, fetchBalance, balanceRefreshTrigger]);
+
+  // Brief "Balance updated" indicator when balance changes
+  const prevBalanceRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (xlmBalance !== null && prevBalanceRef.current !== null && prevBalanceRef.current !== xlmBalance) {
+      setBalanceUpdated(true);
+      const timer = setTimeout(() => setBalanceUpdated(false), 2000);
+      return () => clearTimeout(timer);
+    }
+    prevBalanceRef.current = xlmBalance;
+  }, [xlmBalance]);
 
   return (
     <>
@@ -89,8 +103,8 @@ export default function NavHeader() {
         }`}
       >
       <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between min-w-0">
-        <div className="flex items-center gap-6 min-w-0 shrink-0">
-          <Link href="/" className="text-lg font-bold text-green-600 dark:text-green-400 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 dark:focus-visible:ring-offset-gray-900">
+        <div className="flex items-center gap-6 min-w-0 shrink">
+          <Link href="/" className="text-lg font-bold text-green-400 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900">
             SoroStream
           </Link>
           <nav className="hidden sm:flex items-center gap-4" aria-label={t("main_navigation")}>
@@ -126,7 +140,14 @@ export default function NavHeader() {
               {balanceLoading && xlmBalance === null ? (
                 <span className="inline-block w-16 h-3 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" aria-hidden="true" />
               ) : xlmBalance !== null ? (
-                `${parseFloat(xlmBalance).toLocaleString(language, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} XLM`
+                <span className="inline-flex items-center gap-1.5">
+                  {`${parseFloat(xlmBalance).toLocaleString(language, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} XLM`}
+                  {balanceUpdated && (
+                    <span className="text-[10px] text-green-400 font-normal" aria-live="polite">
+                      updated
+                    </span>
+                  )}
+                </span>
               ) : null}
             </span>
           )}

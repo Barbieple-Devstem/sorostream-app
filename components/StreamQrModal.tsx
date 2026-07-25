@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { useFocusTrap } from "@/src/lib/useFocusTrap";
 import QRCode from "qrcode";
 
 interface StreamQrModalProps {
@@ -21,6 +22,9 @@ export default function StreamQrModal({
   duration,
 }: StreamQrModalProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useFocusTrap(dialogRef, open);
 
   useEffect(() => {
     if (!open || !canvasRef.current) return;
@@ -52,6 +56,7 @@ export default function StreamQrModal({
 
   return (
     <div
+      ref={dialogRef}
       className="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
       role="dialog"
       aria-modal="true"

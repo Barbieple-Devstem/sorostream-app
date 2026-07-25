@@ -1,5 +1,6 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
+import { useFocusTrap } from "@/src/lib/useFocusTrap";
 
 interface ChangelogEntry {
   icon: string;
@@ -42,6 +43,9 @@ interface Props {
 
 export default function ChangelogModal({ open, onClose }: Props) {
   const [changelog, setChangelog] = useState<Changelog | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useFocusTrap(dialogRef, open);
 
   useEffect(() => {
     if (!open) return;
@@ -72,6 +76,7 @@ export default function ChangelogModal({ open, onClose }: Props) {
 
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-label="What's new in SoroStream"
