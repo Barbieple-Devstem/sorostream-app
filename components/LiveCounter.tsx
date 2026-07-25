@@ -120,6 +120,22 @@ export default function LiveCounter({
     return () => clearInterval(interval);
   }, [baseline, flowRate, optimisticOverride]);
 
+  /** Format stroops as XLM with 7 decimal places. */
+  const formatXlm = (val: number) => (val / 10_000_000).toFixed(7);
+  const xlmAmount = claimable / 10_000_000;
+
+  // Locale-aware display: groups thousands, always shows 7 decimal places
+  const formatUSDC = (val: number) =>
+    (val / 10_000_000).toLocaleString(language, {
+      minimumFractionDigits: 7,
+      maximumFractionDigits: 7,
+    });
+
+  // Stable format for aria-label so screen readers get a consistent value
+  const formatUSDCFixed = (val: number) => (val / 10_000_000).toFixed(7);
+  const isOptimistic = optimisticOverride != null;
+  const displayValue = isOptimistic ? optimisticOverride : claimable;
+
   // Throttle the aria-label update so screen readers hear at most one
   // announcement every 30 seconds, even though the visual counter ticks
   // every second.
@@ -138,22 +154,6 @@ export default function LiveCounter({
     }, remaining);
     return () => clearTimeout(timer);
   }, [displayValue]);
-
-  /** Format stroops as XLM with 7 decimal places. */
-  const formatXlm = (val: number) => (val / 10_000_000).toFixed(7);
-  const xlmAmount = claimable / 10_000_000;
-
-  // Locale-aware display: groups thousands, always shows 7 decimal places
-  const formatUSDC = (val: number) =>
-    (val / 10_000_000).toLocaleString(language, {
-      minimumFractionDigits: 7,
-      maximumFractionDigits: 7,
-    });
-
-  // Stable format for aria-label so screen readers get a consistent value
-  const formatUSDCFixed = (val: number) => (val / 10_000_000).toFixed(7);
-  const isOptimistic = optimisticOverride != null;
-  const displayValue = isOptimistic ? optimisticOverride : claimable;
 
   return (
     <span

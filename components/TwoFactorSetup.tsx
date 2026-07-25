@@ -110,7 +110,7 @@ export default function TwoFactorSetup({
             Add an extra layer of security to your account by requiring a code from your authenticator app when logging in.
           </p>
           <div className="bg-gray-700 rounded-lg p-4 space-y-2">
-            <h3 className="font-medium text-white text-sm">You'll need:</h3>
+            <h3 className="font-medium text-white text-sm">You&apos;ll need:</h3>
             <ul className="text-gray-400 text-xs space-y-1 list-disc list-inside">
               <li>An authenticator app (Google Authenticator, Authy, 1Password, etc.)</li>
               <li>A few minutes to complete the setup</li>
@@ -162,7 +162,7 @@ export default function TwoFactorSetup({
             onClick={() => setStep("verify")}
             className="w-full bg-green-700 text-white py-2 rounded-lg font-medium hover:bg-green-800 transition-colors"
           >
-            I've Scanned the QR Code
+            I&apos;ve Scanned the QR Code
           </button>
           
           <button
@@ -229,7 +229,7 @@ export default function TwoFactorSetup({
 
           <div className="bg-yellow-900/30 border border-yellow-600 rounded-lg p-3">
             <p className="text-yellow-400 text-xs">
-              ⚠️ Important: Store these codes securely. You won't be able to see them again after this step.
+              ⚠️ Important: Store these codes securely. You won&apos;t be able to see them again after this step.
             </p>
           </div>
 
@@ -238,7 +238,7 @@ export default function TwoFactorSetup({
             disabled={loading}
             className="w-full bg-green-700 text-white py-2 rounded-lg font-medium hover:bg-green-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            {loading ? "Saving..." : "I've Saved My Codes"}
+            {loading ? "Saving..." : "I&apos;ve Saved My Codes"}
           </button>
           
           <button
@@ -260,7 +260,7 @@ export default function TwoFactorSetup({
           
           <h2 className="text-xl font-semibold text-white">2FA Enabled</h2>
           <p className="text-gray-400 text-sm">
-            Two-factor authentication is now enabled for your account. You'll be asked for a code when logging in.
+            Two-factor authentication is now enabled for your account. You&apos;ll be asked for a code when logging in.
           </p>
 
           <button
