@@ -188,6 +188,8 @@ export function getActiveDashboardStreams(): StreamData[] {
     if (s.status === "Active") return true;
     return new Date(s.endTime).getTime() > cutoff;
   });
+}
+
 /**
  * Return streams relevant to the given wallet address.
  * A stream is relevant when the address is the sender or recipient.
@@ -312,6 +314,16 @@ export async function getFeeConfig(): Promise<FeeConfig> {
   return { basisPoints: 50 };
 }
 
+// ── Contract version ──────────────────────────────────────────────────────────
+
+/** Version reported by the deployed contract's `version` query instruction. */
+const MOCK_DEPLOYED_CONTRACT_VERSION = "1.2.0";
+
+/** Simulates calling the deployed SoroStream contract's `version` query. */
+export async function getDeployedContractVersion(): Promise<string> {
+  return MOCK_DEPLOYED_CONTRACT_VERSION;
+}
+
 /**
  * Break down a withdrawal into claimable amount, protocol fee, and net amount.
  *
@@ -331,6 +343,8 @@ export function calcWithdrawBreakdown(
   const fee = Math.floor((claimableStroops * basisPoints) / 10_000);
   const net = claimableStroops - fee;
   return { claimable: claimableStroops, fee, net, feePercent };
+}
+
 // ── Treasury ────────────────────────────────────────────────────────────────
 
 export interface TreasuryBalance {
