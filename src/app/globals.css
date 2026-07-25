@@ -58,8 +58,6 @@
 }
 
 body {
-  color: var(--color-text);
-  background: var(--color-bg);
   transition: background 200ms ease-in-out, color 200ms ease-in-out;
 }
 

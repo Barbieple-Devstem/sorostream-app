@@ -40,6 +40,9 @@ function getSystemTheme(): Theme {
 
 function applyTheme(theme: Theme) {
   const root = document.documentElement;
+  root.classList.toggle("dark", theme === "dark");
+  root.classList.remove("light");
+  root.style.colorScheme = theme;
   root.classList.toggle("light", theme === "light");
   root.classList.toggle("dark", theme === "dark" || theme === "high-contrast");
   root.classList.toggle("high-contrast", theme === "high-contrast");
