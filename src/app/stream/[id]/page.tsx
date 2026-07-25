@@ -30,6 +30,8 @@ import {
 import { useToast } from "@/src/lib/toast";
 import StreamQrModal from "@/components/StreamQrModal";
 import WithdrawConfirmModal from "@/components/WithdrawConfirmModal";
+import StartCountdownTimer from "@/components/StartCountdownTimer";
+import EmbedWidgetModal from "@/components/EmbedWidgetModal";
 import { useSettings } from "@/src/context/SettingsContext";
 import { formatStellarAmount } from "@/src/lib/sorostream";
 import { useKeyboardShortcuts, type ShortcutGroup } from "@/src/lib/useKeyboardShortcuts";
@@ -99,6 +101,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
   useFocusTrap(cancelModalRef, showCancelModal);
   const [showQrModal, setShowQrModal] = useState(false);
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
+  const [showEmbedModal, setShowEmbedModal] = useState(false);
 
   // ── Stream completion states ───────────────────────────────────────────────
   const [claimFinalLoading, setClaimFinalLoading] = useState(false);
@@ -662,6 +665,13 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
 
         <div className="bg-gray-800 rounded-xl p-6 space-y-6">
           <StreamTimeline startTime={stream.startTime} endTime={stream.endTime} />
+
+          {/* Scheduled start countdown — shown only when stream hasn't started yet */}
+          {stream.scheduledStartTime &&
+            stream.scheduledStartTime > Math.floor(Date.now() / 1000) && (
+              <StartCountdownTimer scheduledStartTime={stream.scheduledStartTime} />
+            )}
+
           <CountdownTimer endTime={stream.endTime} />
 
           <StreamProgressBar stream={stream} />
@@ -770,6 +780,29 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
             className="w-full border border-gray-600 text-gray-300 py-2 rounded-lg text-sm hover:bg-gray-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
           >
             QR Code
+          </button>
+
+          {/* Embed widget */}
+          <button
+            onClick={() => setShowEmbedModal(true)}
+            className="w-full border border-gray-600 text-gray-300 py-2 rounded-lg text-sm hover:bg-gray-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 flex items-center justify-center gap-2"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <polyline points="16 18 22 12 16 6" />
+              <polyline points="8 6 2 12 8 18" />
+            </svg>
+            Embed Widget
           </button>
 
           {/* Top-up form */}
@@ -893,6 +926,13 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
           amount={withdrawConfirmAmount}
           onConfirm={() => { setWithdrawConfirmAmount(null); void executeWithdraw(); }}
           onCancel={() => setWithdrawConfirmAmount(null)}
+        />
+      )}
+
+      {showEmbedModal && (
+        <EmbedWidgetModal
+          streamId={stream.id}
+          onClose={() => setShowEmbedModal(false)}
         />
       )}
     </main>

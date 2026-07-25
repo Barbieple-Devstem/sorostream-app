@@ -6,6 +6,8 @@ import FlowRatePreview from "@/components/FlowRatePreview";
 import StreamTemplatePicker from "@/components/StreamTemplatePicker";
 import RecipientAutocomplete from "@/components/RecipientAutocomplete";
 import TransactionStepper, { TxStage } from "@/components/TransactionStepper";
+import SchedulingToggle from "@/components/SchedulingToggle";
+import FeeEstimationPanel from "@/components/FeeEstimationPanel";
 import { SkeletonForm } from "@/components/Skeleton";
 import { useTranslations } from "@/src/lib/i18n";
 import { trackEvent } from "@/src/lib/analytics";
@@ -71,6 +73,18 @@ function validateCliffDate(cliffValue: string, endValue: string): string {
   return "";
 }
 
+/**
+ * Validates the scheduled start datetime-local string.
+ * Must be provided and strictly in the future (> now).
+ */
+function validateScheduledStart(value: string): string {
+  if (!value) return "Scheduled start date is required when scheduling is enabled.";
+  const ts = new Date(value).getTime();
+  if (isNaN(ts)) return "Invalid date.";
+  if (ts <= Date.now()) return "Start time must be in the future.";
+  return "";
+}
+
 const stepLabels: Record<Step, { title: string; number: number }> = {
   recipient: { title: "Recipient", number: 1 },
   amount: { title: "Amount & Duration", number: 2 },
@@ -111,13 +125,17 @@ function NewStreamWizard() {
   const [customTokenAddress, setCustomTokenAddress] = useState("");
   const [customTokenError, setCustomTokenError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState({ recipient: "", amount: "", duration: "", endDate: "", cliffDate: "" });
+  const [errors, setErrors] = useState({ recipient: "", amount: "", duration: "", endDate: "", cliffDate: "", scheduledStart: "" });
   const [touched, setTouched] = useState({ recipient: false, amount: false });
   const [durationPickerKey, setDurationPickerKey] = useState(0);
 
   // Optional end date & cliff date (ISO datetime-local value)
   const [endDate, setEndDate] = useState("");
   const [cliffDate, setCliffDate] = useState("");
+
+  // Scheduling
+  const [schedulingEnabled, setSchedulingEnabled] = useState(false);
+  const [scheduledStart, setScheduledStart] = useState("");
 
   // Transaction progress
   const [txStage, setTxStage] = useState<TxStage | null>(null);
@@ -161,8 +179,9 @@ function NewStreamWizard() {
       const dErr = validateDuration(duration);
       const eErr = validateEndDate(endDate);
       const cErr = validateCliffDate(cliffDate, endDate);
-      if (aErr || dErr || eErr || cErr) {
-        setErrors({ ...errors, amount: aErr, duration: dErr, endDate: eErr, cliffDate: cErr });
+      const sErr = schedulingEnabled ? validateScheduledStart(scheduledStart) : "";
+      if (aErr || dErr || eErr || cErr || sErr) {
+        setErrors({ ...errors, amount: aErr, duration: dErr, endDate: eErr, cliffDate: cErr, scheduledStart: sErr });
         return;
       }
       setStep("review");
@@ -190,13 +209,20 @@ function NewStreamWizard() {
     const dErr = validateDuration(duration);
     const eErr = validateEndDate(endDate);
     const cErr = validateCliffDate(cliffDate, endDate);
-    if (rErr || aErr || dErr || eErr || cErr) {
-      setErrors({ recipient: rErr, amount: aErr, duration: dErr, endDate: eErr, cliffDate: cErr });
+    const sErr = schedulingEnabled ? validateScheduledStart(scheduledStart) : "";
+    if (rErr || aErr || dErr || eErr || cErr || sErr) {
+      setErrors({ recipient: rErr, amount: aErr, duration: dErr, endDate: eErr, cliffDate: cErr, scheduledStart: sErr });
       return;
     }
 
     const tokenAddress = resolvedTokenAddress();
     if (!tokenAddress) return;
+
+    // Convert scheduled start datetime-local → Unix timestamp (seconds)
+    const scheduledStartTime =
+      schedulingEnabled && scheduledStart
+        ? Math.floor(new Date(scheduledStart).getTime() / 1000)
+        : undefined;
 
     setLoading(true);
     setTxStage(TxStage.Building);
@@ -223,6 +249,7 @@ function NewStreamWizard() {
         amount,
         durationSeconds: duration,
         token: selectedToken === CUSTOM_TOKEN_VALUE ? tokenAddress : selectedToken,
+        scheduledStartTime,
       });
 
       setTxStage(TxStage.Done);
@@ -236,7 +263,9 @@ function NewStreamWizard() {
       setDuration(0);
       setEndDate("");
       setCliffDate("");
-      setErrors({ recipient: "", amount: "", duration: "", endDate: "", cliffDate: "" });
+      setSchedulingEnabled(false);
+      setScheduledStart("");
+      setErrors({ recipient: "", amount: "", duration: "", endDate: "", cliffDate: "", scheduledStart: "" });
       setTouched({ recipient: false, amount: false });
       setDurationPickerKey((k) => k + 1);
       setTxStage(null);
@@ -452,6 +481,30 @@ function NewStreamWizard() {
               />
             </div>
 
+            {/* Scheduling toggle */}
+            <SchedulingToggle
+              enabled={schedulingEnabled}
+              onToggle={(v) => {
+                setSchedulingEnabled(v);
+                if (!v) {
+                  setScheduledStart("");
+                  setErrors((prev) => ({ ...prev, scheduledStart: "" }));
+                }
+              }}
+              value={scheduledStart}
+              onChange={(v) => {
+                setScheduledStart(v);
+                setErrors((prev) => ({ ...prev, scheduledStart: validateScheduledStart(v) }));
+              }}
+              onBlur={() =>
+                setErrors((prev) => ({
+                  ...prev,
+                  scheduledStart: schedulingEnabled ? validateScheduledStart(scheduledStart) : "",
+                }))
+              }
+              error={errors.scheduledStart || undefined}
+            />
+
             {/* Optional end date */}
             <div>
               <label htmlFor="end-date" className="text-gray-200 text-sm font-medium block mb-2">
@@ -548,10 +601,27 @@ function NewStreamWizard() {
                   })()}
                 </span>
               </div>
+              {schedulingEnabled && scheduledStart && (
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-400 text-sm">Scheduled Start</span>
+                  <span className="text-blue-300 font-mono text-sm">
+                    {new Date(scheduledStart).toLocaleString()}
+                  </span>
+                </div>
+              )}
+              {!schedulingEnabled && (
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-400 text-sm">Start</span>
+                  <span className="text-white font-mono text-sm">Immediately</span>
+                </div>
+              )}
               <div className="border-t border-gray-700 pt-4">
                 <FlowRatePreview amount={amount} durationSeconds={duration} />
               </div>
             </div>
+
+            {/* Fee estimation — simulated pre-sign */}
+            <FeeEstimationPanel active={step === "review"} />
           </div>
         )}
 
