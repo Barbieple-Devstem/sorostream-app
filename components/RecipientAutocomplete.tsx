@@ -82,7 +82,7 @@ export default function RecipientAutocomplete({
     return () => {
       if (federationTimeoutRef.current) clearTimeout(federationTimeoutRef.current);
     };
-  }, [value, onChange];
+  }, [value, onChange]);
 
   const filtered = contacts.filter(
     (c) =>
