@@ -2,14 +2,14 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 
-type Theme = "dark" | "light";
+type Theme = "dark" | "light" | "high-contrast";
 
 interface ThemeContextValue {
   /** The currently applied theme. */
   theme: Theme;
   /** True when the user has not made an explicit choice and we follow the OS. */
   isSystem: boolean;
-  /** Toggle between light and dark (sets an explicit user override). */
+  /** Toggle between dark and light (sets an explicit user override). */
   toggle: () => void;
   /** Explicitly set a theme (user override, persisted to localStorage). */
   setTheme: (theme: Theme) => void;
@@ -27,17 +27,26 @@ const ThemeContext = createContext<ThemeContextValue>({
   useSystemTheme: () => {},
 });
 
+function isValidTheme(v: string): v is Theme {
+  return v === "dark" || v === "light" || v === "high-contrast";
+}
+
 /** Read the OS-level colour-scheme preference. */
 function getSystemTheme(): Theme {
   if (typeof window === "undefined" || !window.matchMedia) return "dark";
+  if (window.matchMedia("(prefers-contrast: more)").matches) return "high-contrast";
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
 function applyTheme(theme: Theme) {
   const root = document.documentElement;
-  root.classList.toggle("light", theme === "light");
   root.classList.toggle("dark", theme === "dark");
+  root.classList.remove("light");
   root.style.colorScheme = theme;
+  root.classList.toggle("light", theme === "light");
+  root.classList.toggle("dark", theme === "dark" || theme === "high-contrast");
+  root.classList.toggle("high-contrast", theme === "high-contrast");
+  root.style.colorScheme = theme === "high-contrast" ? "dark" : theme;
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
@@ -52,7 +61,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     let stored: Theme | null = null;
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (raw === "light" || raw === "dark") stored = raw;
+      if (raw && isValidTheme(raw)) stored = raw;
     } catch {
       // ignore storage access errors (private browsing, etc.)
     }
@@ -75,10 +84,15 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   // While following the system, react live to OS theme changes.
   useEffect(() => {
     if (!mounted || override || !window.matchMedia) return;
-    const mql = window.matchMedia("(prefers-color-scheme: dark)");
-    const onChange = (e: MediaQueryListEvent) => setThemeState(e.matches ? "dark" : "light");
-    mql.addEventListener("change", onChange);
-    return () => mql.removeEventListener("change", onChange);
+    const mqlDark = window.matchMedia("(prefers-color-scheme: dark)");
+    const mqlContrast = window.matchMedia("(prefers-contrast: more)");
+    const onChange = () => setThemeState(getSystemTheme());
+    mqlDark.addEventListener("change", onChange);
+    mqlContrast.addEventListener("change", onChange);
+    return () => {
+      mqlDark.removeEventListener("change", onChange);
+      mqlContrast.removeEventListener("change", onChange);
+    };
   }, [override, mounted]);
 
   // Keep multiple tabs in sync when the stored preference changes elsewhere.
@@ -86,7 +100,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     if (!mounted) return;
     const onStorage = (e: StorageEvent) => {
       if (e.key !== STORAGE_KEY) return;
-      const next = e.newValue === "light" || e.newValue === "dark" ? e.newValue : null;
+      const raw = e.newValue;
+      const next = raw && isValidTheme(raw) ? raw : null;
       setOverride(next);
       setThemeState(next ?? getSystemTheme());
     };
@@ -99,7 +114,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setThemeState(next);
   };
 
-  const toggle = () => setTheme(theme === "dark" ? "light" : "dark");
+  /** Cycle: dark → light → high-contrast → dark */
+  const toggle = () => {
+    const order: Theme[] = ["dark", "light", "high-contrast"];
+    const idx = order.indexOf(theme);
+    setTheme(order[(idx + 1) % order.length]);
+  };
 
   const useSystemTheme = () => {
     setOverride(null);

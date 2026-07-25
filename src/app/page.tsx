@@ -14,7 +14,7 @@ export default function Home() {
   ] as const;
 
   return (
-    <main className="min-h-screen bg-gray-900 text-white">
+    <main id="main-content" tabIndex={-1} className="min-h-screen bg-gray-900 text-white">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-12 sm:py-20 text-center">
         <h1 className="text-3xl sm:text-5xl font-bold mb-4 sm:mb-6 text-green-400">{t("hero_title")}</h1>
         <p className="text-base sm:text-xl text-gray-400 mb-8 sm:mb-10 px-2">{t("hero_subtitle")}</p>

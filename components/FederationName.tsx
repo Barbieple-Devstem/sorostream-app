@@ -49,7 +49,7 @@ export default function FederationName({
       <span className="font-mono">{displayAddress}</span>
       {fedName && (
         <span
-          className="text-green-400 text-xs font-medium bg-green-900/40 px-1.5 py-0.5 rounded"
+          className="text-green-600 dark:text-green-400 text-xs font-medium bg-green-100 dark:bg-green-900/40 px-1.5 py-0.5 rounded"
           title={`Federation address: ${fedName}`}
           aria-label={`Federation name: ${fedName}`}
         >

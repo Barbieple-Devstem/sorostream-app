@@ -29,6 +29,13 @@ interface WalletContextValue {
   expectedNetwork: string;
   connect: () => Promise<string | null>;
   disconnect: () => void;
+  /**
+   * Bumps a counter that signals consumers (e.g. NavHeader balance display)
+   * to immediately re-fetch wallet data instead of waiting for the next
+   * polling interval.
+   */
+  balanceRefreshTrigger: number;
+  refetchBalance: () => void;
 }
 
 const WalletContext = createContext<WalletContextValue | undefined>(undefined);
@@ -44,6 +51,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [networkMismatch, setNetworkMismatch] = useState(false);
+  const [balanceRefreshTrigger, setBalanceRefreshTrigger] = useState(0);
   const watcherRef = useRef<ReturnType<typeof createWatchWalletChanges> | null>(
     null,
   );
@@ -66,6 +74,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setNetworkMismatch(false);
     // Don't stop the watcher on disconnect — keep polling so we notice when
     // the user switches back or reconnects from within Freighter.
+  }, []);
+
+  const refetchBalance = useCallback(() => {
+    setBalanceRefreshTrigger((n) => n + 1);
   }, []);
 
   const handleConnectionTimeout = useCallback(() => {
@@ -161,8 +173,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       expectedNetwork: APP_NETWORK,
       connect,
       disconnect,
+      balanceRefreshTrigger,
+      refetchBalance,
     }),
-    [address, connect, disconnect, error, isConnecting, networkMismatch],
+    [address, connect, disconnect, error, isConnecting, networkMismatch, balanceRefreshTrigger, refetchBalance],
   );
 
   return (

@@ -5,15 +5,20 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { StreamListSkeleton } from "@/components/Skeleton";
 import StreamVirtualList from "@/components/StreamVirtualList";
 import StreamEventFeed from "@/components/StreamEventFeed";
+import PortfolioChart from "@/components/PortfolioChart";
 import KeyboardShortcutsHelp from "@/components/KeyboardShortcutsHelp";
+import PortfolioChart from "@/components/PortfolioChart";
 import StatusLegend from "@/components/StatusLegend";
+import { StreamErrorBoundary } from "@/components/StreamErrorBoundary";
 import { getMockStreams, watchClaimable, sorostream, getMockStreamHistory, StreamData } from "@/src/lib/sorostream";
+import { getMockStreams, getStreamsForWallet, watchClaimable, sorostream, getMockStreamHistory, StreamData } from "@/src/lib/sorostream";
 import { useRpcFetch } from "@/src/lib/useRpcFetch";
 import { useToast } from "@/src/lib/toast";
 import { downloadCSV } from "@/src/lib/export";
 import { useKeyboardShortcuts, type ShortcutGroup } from "@/src/lib/useKeyboardShortcuts";
 import { useBookmarks } from "@/src/context/BookmarksContext";
 import { useWallet } from "@/src/context/WalletContext";
+import ArchiveBanner from "@/components/ArchiveBanner";
 
 type DashboardState = "loading" | "filtered-empty" | "empty" | "ready";
 
@@ -23,6 +28,7 @@ type SortOrder = "asc" | "desc";
 const SORT_STORAGE_KEY = "sorostream_sort";
 
 function loadSort(): { field: SortField; order: SortOrder } {
+  if (typeof window === "undefined") return { field: "created", order: "desc" };
   try {
     const raw = localStorage.getItem(SORT_STORAGE_KEY);
     if (raw) return JSON.parse(raw);
@@ -45,17 +51,11 @@ function DashboardContent() {
   const [search, setSearch] = useState(searchParams.get("search") || "");
   const [bookmarksOnly, setBookmarksOnly] = useState(false);
 
-  // Sort state — persisted to localStorage.
-  // Initialize with the SSR-safe default; sync from localStorage after mount to
-  // avoid a server/client hydration mismatch (localStorage is undefined on the server).
-  const [sortField, setSortField] = useState<SortField>("created");
-  const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
-  useEffect(() => {
-    const saved = loadSort();
-    setSortField(saved.field);
-    setSortOrder(saved.order);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Sort state — persisted to localStorage via a lazy initializer.
+  // Reads synchronously on mount so the saved preference is applied immediately
+  // without a flash of default-sorted content when navigating back.
+  const [sortField, setSortField] = useState<SortField>(() => loadSort().field);
+  const [sortOrder, setSortOrder] = useState<SortOrder>(() => loadSort().order);
 
   function handleSortFieldChange(field: SortField) {
     setSortField(field);
@@ -94,7 +94,7 @@ function DashboardContent() {
     async function load() {
       try {
         const data = await rpcFetch(() =>
-          Promise.resolve(getMockStreams()),
+          Promise.resolve(getStreamsForWallet(address)),
         );
         if (!cancelled) setStreams(data);
       } catch {
@@ -109,7 +109,7 @@ function DashboardContent() {
     pollRef.current = setInterval(async () => {
       try {
         const data = await rpcFetch(() =>
-          Promise.resolve(watchClaimable(getMockStreams())),
+          Promise.resolve(watchClaimable(getStreamsForWallet(address))),
         );
         if (!cancelled) setStreams(data);
       } catch {
@@ -233,7 +233,7 @@ function DashboardContent() {
     try {
       await Promise.all(ids.map(() => sorostream.cancelStream()));
       addToast(`Cancelled ${ids.length} stream(s) successfully.`, "success");
-      const data = await rpcFetch(() => Promise.resolve(getMockStreams()));
+      const data = await rpcFetch(() => Promise.resolve(getStreamsForWallet(address)));
       setStreams(data);
       clearSelection();
     } catch {
@@ -241,7 +241,7 @@ function DashboardContent() {
     } finally {
       setBulkLoading(false);
     }
-  }, [selectedIds, addToast, rpcFetch, clearSelection]);
+  }, [selectedIds, addToast, rpcFetch, clearSelection, address]);
 
   const handleBulkTopUp = useCallback(async () => {
     const ids = Array.from(selectedIds);
@@ -250,7 +250,7 @@ function DashboardContent() {
     try {
       await Promise.all(ids.map(() => sorostream.topUp()));
       addToast(`Topped up ${ids.length} stream(s) successfully.`, "success");
-      const data = await rpcFetch(() => Promise.resolve(getMockStreams()));
+      const data = await rpcFetch(() => Promise.resolve(getStreamsForWallet(address)));
       setStreams(data);
       clearSelection();
     } catch {
@@ -258,7 +258,7 @@ function DashboardContent() {
     } finally {
       setBulkLoading(false);
     }
-  }, [selectedIds, addToast, rpcFetch, clearSelection]);
+  }, [selectedIds, addToast, rpcFetch, clearSelection, address]);
 
   const handleBulkExport = useCallback(() => {
     const ids = Array.from(selectedIds);
@@ -287,7 +287,7 @@ function DashboardContent() {
   useKeyboardShortcuts(shortcutGroups);
 
   return (
-    <main className="min-h-screen bg-gray-900 text-white p-4 sm:p-8">
+    <main id="main-content" tabIndex={-1} className="min-h-screen bg-gray-900 text-white p-4 sm:p-8">
       <div className="max-w-6xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold">Dashboard</h1>
@@ -301,8 +301,20 @@ function DashboardContent() {
 
         <div className="flex flex-col lg:flex-row gap-6">
           <div className="flex-1 min-w-0">
+            {/* Archive banner — shown when streams have been auto-archived */}
+            <ArchiveBanner />
+            {/* Portfolio Chart */}
+            <PortfolioChart />
+
             {/* Status legend */}
-            <StatusLegend />
+            <StreamErrorBoundary section="Stats Summary">
+              <StatusLegend />
+            </StreamErrorBoundary>
+
+            {/* Portfolio performance chart */}
+            <div className="mb-6">
+              <PortfolioChart />
+            </div>
 
             {/* Filter Bar */}
             <div className="mb-6 space-y-3">
@@ -478,6 +490,7 @@ function DashboardContent() {
               </div>
             )}
 
+            <StreamErrorBoundary section="Stream List">
             {state === "loading" ? (
               <StreamListSkeleton />
             ) : state === "empty" ? (
@@ -537,10 +550,13 @@ function DashboardContent() {
                 />
               </div>
             )}
+            </StreamErrorBoundary>
           </div>
 
           <div className="w-full lg:w-80 shrink-0">
-            <StreamEventFeed />
+            <StreamErrorBoundary section="Activity Feed">
+              <StreamEventFeed />
+            </StreamErrorBoundary>
           </div>
         </div>
       </div>
