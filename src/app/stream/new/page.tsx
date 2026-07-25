@@ -179,7 +179,7 @@ function NewStreamWizard() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-gray-900 text-white p-8">
+      <main id="main-content" tabIndex={-1} className="min-h-screen bg-gray-900 text-white p-8">
         <div className="max-w-lg mx-auto">
           <h1 className="text-2xl font-bold mb-8">{t("title")}</h1>
           <SkeletonForm />
@@ -195,7 +195,7 @@ function NewStreamWizard() {
     : true;
 
   return (
-    <main className="min-h-screen bg-gray-900 text-white p-4 sm:p-8">
+    <main id="main-content" tabIndex={-1} className="min-h-screen bg-gray-900 text-white p-4 sm:p-8">
       <div className="max-w-lg mx-auto">
         <div className="mb-8">
           <div className="flex items-center justify-center gap-2 mb-6">
@@ -441,7 +441,7 @@ function NewStreamWizard() {
 
 export default function NewStreamPage() {
   return (
-    <Suspense fallback={<main className="min-h-screen bg-gray-900 text-white p-4 sm:p-8"><div className="max-w-lg mx-auto"><SkeletonForm /></div></main>}>
+    <Suspense fallback={<main id="main-content" tabIndex={-1} className="min-h-screen bg-gray-900 text-white p-4 sm:p-8"><div className="max-w-lg mx-auto"><SkeletonForm /></div></main>}>
       <NewStreamWizard />
     </Suspense>
   );

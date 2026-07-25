@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useFocusTrap } from "@/src/lib/useFocusTrap";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import LiveCounter from "@/components/LiveCounter";
@@ -36,6 +37,9 @@ import { useWallet } from "@/src/context/WalletContext";
 
 /** Grace period in seconds before a cancel is submitted on-chain. */
 const CANCEL_GRACE_SECONDS = 5;
+
+/** Timeout in milliseconds for the stream data fetch. */
+const STREAM_FETCH_TIMEOUT_MS = 10_000;
 
 /** Spinner used inside transaction buttons */
 function Spinner() {
@@ -80,7 +84,9 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
   const [historyEntries, setHistoryEntries] = useState<StreamHistoryEntry[]>([]);
   const [pageLoading, setPageLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isNetworkError, setIsNetworkError] = useState(false);
   const [routeError, setRouteError] = useState<Error | null>(null);
+  const [fetchKey, setFetchKey] = useState(0);
 
   // ── Action loading states ──────────────────────────────────────────────────
   const [withdrawLoading, setWithdrawLoading] = useState(false);
@@ -88,6 +94,8 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
   /** True while the 5-second cancel grace period is active. */
   const [cancelPending, setCancelPending] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const cancelModalRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(cancelModalRef, showCancelModal);
   const [showQrModal, setShowQrModal] = useState(false);
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
 
@@ -175,8 +183,15 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
     async function loadStream() {
       setPageLoading(true);
       setError(null);
+      setIsNetworkError(false);
       try {
-        const data = await sorostream.getStream(params.id);
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Network timeout: stream data could not be loaded within 10 seconds.")), STREAM_FETCH_TIMEOUT_MS),
+        );
+        const data = await Promise.race([
+          sorostream.getStream(params.id),
+          timeoutPromise,
+        ]);
         if (cancelled) return;
         if (!data) {
           setError("Stream not found.");
@@ -186,10 +201,11 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
         setHistoryEntries(getMockStreamHistory(params.id).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
       } catch (err) {
         console.error("Failed to load stream", err);
-        if (!cancelled) setError("Stream not found.");
         if (!cancelled) {
+          const message = err instanceof Error ? err.message : "Failed to load stream data.";
+          setError(message);
+          setIsNetworkError(true);
           const nextError = err instanceof Error ? err : new Error("Failed to load stream data.");
-          setError("Failed to load stream data.");
           setRouteError(nextError);
         }
       } finally {
@@ -202,7 +218,12 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
     return () => {
       cancelled = true;
     };
-  }, [params.id]);
+  }, [params.id, fetchKey]);
+
+  const handleRetry = useCallback(() => {
+    setRouteError(null);
+    setFetchKey((k) => k + 1);
+  }, []);
 
   if (routeError) {
     throw routeError;
@@ -379,7 +400,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
   // ── Render: wallet not connected ──────────────────────────────────────────
   if (address === null) {
     return (
-      <main className="min-h-screen bg-gray-900 text-white p-4 sm:p-8">
+      <main id="main-content" tabIndex={-1} className="min-h-screen bg-gray-900 text-white p-4 sm:p-8">
         <div className="max-w-sm mx-auto mt-20 text-center space-y-6">
           <div className="text-5xl" aria-hidden="true">🔒</div>
           <h1 className="text-xl font-semibold">Connect your wallet</h1>
@@ -403,7 +424,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
   // ── Render: loading ────────────────────────────────────────────────────────
   if (pageLoading) {
     return (
-      <main className="min-h-screen bg-gray-900 text-white p-4 sm:p-8">
+      <main id="main-content" tabIndex={-1} className="min-h-screen bg-gray-900 text-white p-4 sm:p-8">
         <div className="max-w-2xl mx-auto">
           <div className="mb-4">
             <Link
@@ -423,7 +444,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
   // ── Render: not found / error ─────────────────────────────────────────────
   if (!stream) {
     return (
-      <main className="min-h-screen bg-gray-900 text-white p-4 sm:p-8">
+      <main id="main-content" tabIndex={-1} className="min-h-screen bg-gray-900 text-white p-4 sm:p-8">
         <div className="max-w-2xl mx-auto">
           <div className="mb-6">
             <Link
@@ -434,18 +455,39 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
             </Link>
           </div>
           <div className="flex flex-col items-center gap-4 py-16 text-center">
-            <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-              <circle cx="40" cy="40" r="36" fill="#1f2937" stroke="#374151" strokeWidth="2" />
-              <path d="M28 28 L52 52 M52 28 L28 52" stroke="#ef4444" strokeWidth="3" strokeLinecap="round" />
-            </svg>
-            <h1 className="text-2xl font-bold">Stream Not Found</h1>
-            <p className="text-gray-400 text-sm max-w-sm">{error ?? "The stream you're looking for doesn't exist or may have been removed."}</p>
-            <Link
-              href="/dashboard"
-              className="mt-2 inline-flex items-center gap-2 bg-green-700 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-green-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
-            >
-              ← Back to Dashboard
-            </Link>
+            {isNetworkError ? (
+              <>
+                <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                  <circle cx="40" cy="40" r="36" fill="#1f2937" stroke="#374151" strokeWidth="2" />
+                  <path d="M28 40h24M40 28v24" stroke="#f59e0b" strokeWidth="3" strokeLinecap="round" />
+                </svg>
+                <h1 className="text-2xl font-bold">Connection Error</h1>
+                <p className="text-gray-400 text-sm max-w-sm">
+                  {error ?? "Unable to reach the Soroban RPC. Please check your network connection and try again."}
+                </p>
+                <button
+                  onClick={handleRetry}
+                  className="mt-2 inline-flex items-center gap-2 bg-green-700 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-green-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+                >
+                  Try Again
+                </button>
+              </>
+            ) : (
+              <>
+                <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                  <circle cx="40" cy="40" r="36" fill="#1f2937" stroke="#374151" strokeWidth="2" />
+                  <path d="M28 28 L52 52 M52 28 L28 52" stroke="#ef4444" strokeWidth="3" strokeLinecap="round" />
+                </svg>
+                <h1 className="text-2xl font-bold">Stream Not Found</h1>
+                <p className="text-gray-400 text-sm max-w-sm">{error ?? "The stream you're looking for doesn't exist or may have been removed."}</p>
+                <Link
+                  href="/dashboard"
+                  className="mt-2 inline-flex items-center gap-2 bg-green-700 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-green-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+                >
+                  ← Back to Dashboard
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </main>
@@ -458,7 +500,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
 
   // ── Render: detail ─────────────────────────────────────────────────────────
   return (
-    <main className="min-h-screen bg-gray-900 text-white p-4 sm:p-8">
+    <main id="main-content" tabIndex={-1} className="min-h-screen bg-gray-900 text-white p-4 sm:p-8">
       {successPhase !== null && (
         <div
           aria-live="polite"
@@ -779,6 +821,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
       {/* Cancel confirmation modal */}
       {showCancelModal && (
         <div
+          ref={cancelModalRef}
           role="dialog"
           aria-modal="true"
           aria-labelledby="cancel-modal-title"

@@ -99,6 +99,32 @@ body {
   outline-offset: 2px;
 }
 
+/*
+ * Skip-to-content link: visually hidden by default, visible when focused.
+ * Must be the first focusable element in the document for keyboard users.
+ */
+.skip-link {
+  position: absolute;
+  top: -100%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  background-color: #16a34a;
+  color: #ffffff;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0 0 0.5rem 0.5rem;
+  font-weight: 600;
+  font-size: 0.875rem;
+  text-decoration: none;
+  transition: top 0.15s ease-in-out;
+}
+
+.skip-link:focus {
+  top: 0;
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+
 @keyframes slide-up {
   from {
     opacity: 0;

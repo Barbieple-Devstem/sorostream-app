@@ -1,6 +1,8 @@
 "use client";
 
+import { useRef } from "react";
 import type { ShortcutGroup } from "@/src/lib/useKeyboardShortcuts";
+import { useFocusTrap } from "@/src/lib/useFocusTrap";
 
 interface KeyboardShortcutsHelpProps {
   open: boolean;
@@ -13,10 +15,15 @@ export default function KeyboardShortcutsHelp({
   onClose,
   groups,
 }: KeyboardShortcutsHelpProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useFocusTrap(dialogRef, open);
+
   if (!open) return null;
 
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-labelledby="shortcuts-help-title"

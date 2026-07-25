@@ -119,7 +119,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-900 text-white p-4 sm:p-8">
+    <main id="main-content" tabIndex={-1} className="min-h-screen bg-gray-900 text-white p-4 sm:p-8">
       <div className="max-w-lg mx-auto">
         <div className="mb-4">
           <Link href="/dashboard" className="text-sm text-gray-400 hover:text-white transition-colors">
