@@ -7,10 +7,8 @@ import StreamVirtualList from "@/components/StreamVirtualList";
 import StreamEventFeed from "@/components/StreamEventFeed";
 import PortfolioChart from "@/components/PortfolioChart";
 import KeyboardShortcutsHelp from "@/components/KeyboardShortcutsHelp";
-import PortfolioChart from "@/components/PortfolioChart";
 import StatusLegend from "@/components/StatusLegend";
 import { StreamErrorBoundary } from "@/components/StreamErrorBoundary";
-import { getMockStreams, watchClaimable, sorostream, getMockStreamHistory, StreamData } from "@/src/lib/sorostream";
 import { getMockStreams, getStreamsForWallet, watchClaimable, sorostream, getMockStreamHistory, StreamData } from "@/src/lib/sorostream";
 import { useRpcFetch } from "@/src/lib/useRpcFetch";
 import { useToast } from "@/src/lib/toast";
@@ -303,8 +301,6 @@ function DashboardContent() {
           <div className="flex-1 min-w-0">
             {/* Archive banner — shown when streams have been auto-archived */}
             <ArchiveBanner />
-            {/* Portfolio Chart */}
-            <PortfolioChart />
 
             {/* Status legend */}
             <StreamErrorBoundary section="Stats Summary">
