@@ -22,10 +22,15 @@ import { useXlmPrice } from "@/src/lib/useXlmPrice";
 import { useWallet } from "@/src/context/WalletContext";
 import { useToast } from "@/src/lib/toast";
 
-// ── Env-configurable admin wallet address ───────────────────────────────────
-// Set NEXT_PUBLIC_ADMIN_WALLET to the admin's Stellar public key.
-// If unset, the sweep button is never shown.
-const ADMIN_WALLET = process.env.NEXT_PUBLIC_ADMIN_WALLET ?? "";
+// ── Env-configurable admin wallet address(es) ───────────────────────────────
+// Prefer NEXT_PUBLIC_ADMIN_ADDRESS. A comma-separated list enables multiple
+// admin wallets. NEXT_PUBLIC_ADMIN_WALLET remains a backward-compatible alias.
+const ADMIN_ADDRESS_SOURCE =
+  process.env.NEXT_PUBLIC_ADMIN_ADDRESS ?? process.env.NEXT_PUBLIC_ADMIN_WALLET ?? "";
+
+const ADMIN_ADDRESSES = ADMIN_ADDRESS_SOURCE.split(/[\s,]+/)
+  .map((address) => address.trim())
+  .filter(Boolean);
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -169,8 +174,9 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [sweepingToken, setSweepingToken] = useState<string | null>(null);
 
-  // An admin is the connected wallet matching the configured admin address.
-  const isAdmin = Boolean(ADMIN_WALLET && address && address === ADMIN_WALLET);
+  // An admin is any connected wallet that matches one of the configured
+  // client-side addresses.
+  const isAdmin = Boolean(address && ADMIN_ADDRESSES.includes(address));
 
   const fetchBalances = useCallback(async () => {
     try {
@@ -225,23 +231,23 @@ export default function AdminPage() {
         </div>
 
         {/* Admin wallet notice */}
-        {!ADMIN_WALLET && (
+        {ADMIN_ADDRESSES.length === 0 && (
           <div
             role="note"
             className="mb-6 rounded-lg bg-yellow-900/30 border border-yellow-700 text-yellow-300 text-sm px-4 py-3"
           >
-            <strong>NEXT_PUBLIC_ADMIN_WALLET</strong> is not configured. The
-            Sweep Fees button will not appear until an admin address is set.
+            <strong>NEXT_PUBLIC_ADMIN_ADDRESS</strong> is not configured. The
+            Sweep Fees button will not appear until at least one admin address is set.
           </div>
         )}
 
-        {address && ADMIN_WALLET && !isAdmin && (
+        {address && ADMIN_ADDRESSES.length > 0 && !isAdmin && (
           <div
             role="note"
             className="mb-6 rounded-lg bg-gray-800 border border-gray-700 text-gray-400 text-sm px-4 py-3"
           >
             Connected as <span className="font-mono text-gray-300">{address}</span>. Sweep
-            controls are only available to the admin wallet.
+            controls are only available to the configured admin wallet addresses.
           </div>
         )}
 

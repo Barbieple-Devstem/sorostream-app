@@ -1,18 +1,18 @@
 /**
  * Stellar Federation lookup
  *
- * Resolves a Stellar public key (G…) to a federation name (e.g. alice*stellar.org)
- * using the Stellar Federation protocol (SEP-2).
+ * Resolves between Stellar federation addresses and public keys:
+ *  1. Federation address → G-address: resolveFederationAddress()
+ *  2. G-address → Federation name: resolveFederationName()
  *
- * Flow:
- *  1. Fetch <domain>/.well-known/stellar.toml  →  FEDERATION_SERVER url
- *  2. GET <federation_server>?q=<address>&type=id
+ * Using the Stellar Federation protocol (SEP-2).
  *
- * We probe a curated list of well-known domains that commonly register
- * federation addresses against public keys (reverse lookup).
+ * Flow (federation address to G-address):
+ *  1. Parse federation address (alice*stellar.org → domain=stellar.org, name=alice)
+ *  2. Fetch <domain>/.well-known/stellar.toml  →  FEDERATION_SERVER url
+ *  3. GET <federation_server>?q=<name>*<domain>&type=name
  *
- * Results are cached in sessionStorage so repeated page visits in the same
- * session don't hit the network again.
+ * Results are cached in sessionStorage to avoid repeated lookups in the same session.
  *
  * Returns `null` when:
  *  - No federation record exists for the address
@@ -102,12 +102,73 @@ function writeCache(address: string, result: string | null): void {
 }
 
 /**
- * Resolve a Stellar public key to a federation address string, or `null`.
+ * Resolve a Stellar federation address (e.g. alice*stellar.org) to a G-address.
+ * This is the forward lookup.
+ *
+ * @param federationAddress  e.g. "alice*stellar.org"
+ * @returns  e.g. "GAAAAAAA...", or null if not found / unavailable
+ */
+export async function resolveFederationName(
+  addressOrFederation: string,
+): Promise<string | null> {
+  // Handle both federation address (forward) and G-address (reverse)
+  if (!addressOrFederation) return null;
+
+  // If it looks like a federation address (contains *), do forward lookup
+  if (addressOrFederation.includes("*")) {
+    return resolveFederationAddress(addressOrFederation);
+  }
+
+  // If it starts with G, do reverse lookup
+  if (addressOrFederation.startsWith("G")) {
+    return resolveFederationNameReverse(addressOrFederation);
+  }
+
+  return null;
+}
+
+/**
+ * Resolve a Stellar federation address (e.g. alice*stellar.org) to a G-address.
+ *
+ * @param federationAddress  e.g. "alice*stellar.org"
+ * @returns  e.g. "GAAAAAAA...", or null if not found / unavailable
+ */
+async function resolveFederationAddress(
+  federationAddress: string,
+): Promise<string | null> {
+  // Check session cache first
+  const cached = readCache(federationAddress);
+  if (cached !== undefined) return cached;
+
+  try {
+    // Extract domain from federation address
+    const parts = federationAddress.split("*");
+    if (parts.length !== 2 || !parts[1]) return null;
+
+    const domain = parts[1];
+    const server = await getFederationServer(domain);
+    if (!server) {
+      writeCache(federationAddress, null);
+      return null;
+    }
+
+    // Query the federation server for the full federation address
+    const result = await queryFederationAddressServer(server, federationAddress);
+    writeCache(federationAddress, result);
+    return result;
+  } catch {
+    writeCache(federationAddress, null);
+    return null;
+  }
+}
+
+/**
+ * Resolve a Stellar public key to a federation address string (reverse lookup), or `null`.
  *
  * @param address  G… Stellar public key
  * @returns  e.g. "alice*stellar.org", or null if not found / unavailable
  */
-export async function resolveFederationName(
+async function resolveFederationNameReverse(
   address: string,
 ): Promise<string | null> {
   if (!address || !address.startsWith("G")) return null;
@@ -135,4 +196,21 @@ export async function resolveFederationName(
 
   writeCache(address, found);
   return found;
+}
+
+/** Query a federation server for a federation address lookup (forward). */
+async function queryFederationAddressServer(
+  serverUrl: string,
+  federationAddress: string,
+): Promise<string | null> {
+  try {
+    const url = `${serverUrl}?q=${encodeURIComponent(federationAddress)}&type=name`;
+    const res = await fetchWithTimeout(url, LOOKUP_TIMEOUT_MS);
+    if (!res.ok) return null;
+    const json = await res.json();
+    const address: unknown = json?.account_id;
+    return typeof address === "string" && address.startsWith("G") ? address : null;
+  } catch {
+    return null;
+  }
 }
