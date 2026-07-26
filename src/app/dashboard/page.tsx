@@ -1,4 +1,5 @@
 "use client";
+
 import { useState, useEffect, useMemo, useRef, useCallback, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -9,6 +10,7 @@ import PortfolioChart from "@/components/PortfolioChart";
 import KeyboardShortcutsHelp from "@/components/KeyboardShortcutsHelp";
 import StatusLegend from "@/components/StatusLegend";
 import { StreamErrorBoundary } from "@/components/StreamErrorBoundary";
+import { getStreamsForWallet, watchClaimable, sorostream, getMockStreamHistory, type StreamData } from "@/src/lib/sorostream";
 import { getMockStreams, getStreamsForWallet, watchClaimable, sorostream, getMockStreamHistory, StreamData } from "@/src/lib/sorostream";
 import { useRpcFetch } from "@/src/lib/useRpcFetch";
 import { useToast } from "@/src/lib/toast";
@@ -308,11 +310,6 @@ function DashboardContent() {
             <StreamErrorBoundary section="Stats Summary">
               <StatusLegend />
             </StreamErrorBoundary>
-
-            {/* Portfolio performance chart */}
-            <div className="mb-6">
-              <PortfolioChart />
-            </div>
 
             {/* Filter Bar */}
             <div className="mb-6 space-y-3">

@@ -239,7 +239,7 @@ export default function TwoFactorSetup({
             disabled={loading}
             className="w-full bg-green-700 text-white py-2 rounded-lg font-medium hover:bg-green-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            {loading ? "Saving..." : "I've Saved My Codes"}
+            {loading ? "Saving..." : "I&apos;ve Saved My Codes"}
           </button>
           
           <button

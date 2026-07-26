@@ -104,6 +104,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                         <RpcUnreachableBanner />
                         <PageViewTracker />
                         <WebVitalsReporter />
+                        <PwaInit />
+                        <InstallPrompt />
                         {children}
                         <OnboardingWizard />
                       </GlobalShortcutsProvider>

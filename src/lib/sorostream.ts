@@ -80,6 +80,34 @@ export async function simulateTransactionFee(): Promise<FeeEstimate> {
   };
 }
 
+export interface TvlStreamLike {
+  deposit: number;
+  status: StreamData["status"];
+  /**
+   * Optional amount already withdrawn from the stream, in stroops.
+   * This lets unit tests model partial withdrawals without changing the
+   * existing stream shape everywhere else in the app.
+   */
+  withdrawnStroops?: number;
+}
+
+/**
+ * Calculate the total value locked from active streams only.
+ * Cancelled and ended streams are excluded entirely.
+ */
+export function calculateTotalValueLocked(streams: TvlStreamLike[]): number {
+  return streams.reduce((total, stream) => {
+    if (stream.status !== "Active") return total;
+
+    const deposit = Number.isFinite(stream.deposit) ? Math.max(0, stream.deposit) : 0;
+    const withdrawn = Number.isFinite(stream.withdrawnStroops ?? 0)
+      ? Math.max(0, stream.withdrawnStroops ?? 0)
+      : 0;
+
+    return total + Math.max(0, deposit - withdrawn);
+  }, 0);
+}
+
 /** Mutable stream store — seeded with test data, extended by createStream(). */
 const MOCK_STREAMS: StreamData[] = [
   {
