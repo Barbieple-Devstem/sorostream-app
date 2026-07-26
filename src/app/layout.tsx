@@ -5,7 +5,9 @@ import { WalletProvider } from "@/src/context/WalletContext";
 import { SettingsProvider } from "@/src/context/SettingsContext";
 import { BookmarksProvider } from "@/src/context/BookmarksContext";
 import { NotificationProvider } from "@/src/context/NotificationContext";
+import { ContractVersionProvider } from "@/src/context/ContractVersionContext";
 import NavHeader from "@/components/NavHeader";
+import AppFooter from "@/components/AppFooter";
 import OnboardingWizard from "@/components/OnboardingWizard";
 import { ThemeProvider } from "@/src/lib/theme";
 import PwaInit from "@/src/components/PwaInit";
@@ -52,7 +54,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         {/*
          * Apply the persisted/system theme before first paint to avoid a
-         * flash of the wrong theme (#192). Mirrors the logic in ThemeProvider.
+         * flash of the wrong theme. Mirrors the logic in ThemeProvider.
          */}
         <script
           dangerouslySetInnerHTML={{
@@ -78,6 +80,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   <ToastProvider>
                     <NotificationProvider>
                       <GlobalShortcutsProvider>
+                        <ContractVersionProvider>
+                          <NavHeader />
+                          <PageViewTracker />
+                          <WebVitalsReporter />
+                          <div className="flex-1">
+                            {children}
+                          </div>
+                          <AppFooter />
+                          <OnboardingWizard />
+                        </ContractVersionProvider>
                         <NavHeader />
                         <RpcUnreachableBanner />
                         <PageViewTracker />
