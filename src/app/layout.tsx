@@ -3,12 +3,15 @@ import { ToastProvider } from "@/src/lib/toast";
 import { NetworkProvider } from "@/src/lib/network";
 import { WalletProvider } from "@/src/context/WalletContext";
 import { SettingsProvider } from "@/src/context/SettingsContext";
+import { PreferencesProvider } from "@/src/context/PreferencesContext";
 import { BookmarksProvider } from "@/src/context/BookmarksContext";
 import { NotificationProvider } from "@/src/context/NotificationContext";
 import { ContractVersionProvider } from "@/src/context/ContractVersionContext";
 import NavHeader from "@/components/NavHeader";
+import BottomNav from "@/components/BottomNav";
 import AppFooter from "@/components/AppFooter";
 import OnboardingWizard from "@/components/OnboardingWizard";
+import AppFooter from "@/components/AppFooter";
 import { ThemeProvider } from "@/src/lib/theme";
 import PwaInit from "@/src/components/PwaInit";
 import InstallPrompt from "@/src/components/InstallPrompt";
@@ -54,6 +57,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         {/*
          * Apply the persisted/system theme before first paint to avoid a
+         * flash of the wrong theme (#192). Mirrors the logic in ThemeProvider.
+         * Also handles high-contrast preference.
+         */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var s=localStorage.getItem('theme');var t=(s==='light'||s==='dark'||s==='high-contrast')?s:(window.matchMedia&&window.matchMedia('(prefers-contrast: more)').matches?'high-contrast':window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');var r=document.documentElement;r.classList.add(t==='high-contrast'?'dark':t);r.classList.remove(t==='light'?'dark':t==='dark'?'light':'light');if(t==='high-contrast'){r.classList.add('high-contrast');}r.style.colorScheme=t==='high-contrast'?'dark':t;}catch(e){}})();`,
          * flash of the wrong theme. Mirrors the logic in ThemeProvider.
          */}
         <script
@@ -68,6 +77,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
       </head>
+      <body className="min-h-screen">
       <body className="min-h-screen bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100">
         <a href="#main-content" className="skip-link">
           Skip to main content
