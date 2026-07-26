@@ -150,6 +150,36 @@ export const sorostream = {
     txHash: "mock-batch-tx-hash",
     amounts: Object.fromEntries(streamIds.map(id => [id, "0"])),
   }),
+  /** Returns the deployed contract version string (e.g. "1.0.0"). */
+  get_version: async (): Promise<string> => {
+    // In production this would call the Soroban contract's get_version() method.
+    // Return a simulated short delay to mimic real async fetch.
+    await new Promise((r) => setTimeout(r, 200));
+    return "1.0.0";
+  },
+  /** Batch-create multiple streams in a single transaction. */
+  batch_create: async (streams: CreateStreamParams[]): Promise<{
+    txHash: string;
+    results: Array<{ index: number; streamId: string | null; error: string | null }>;
+  }> => {
+    // Simulate a short confirmation delay
+    await new Promise((r) => setTimeout(r, 600));
+    const results = await Promise.all(
+      streams.map(async (params, index) => {
+        try {
+          const result = await sorostream.createStream(params);
+          return { index, streamId: result.streamId, error: null };
+        } catch (err) {
+          return {
+            index,
+            streamId: null,
+            error: err instanceof Error ? err.message : "Unknown error",
+          };
+        }
+      }),
+    );
+    return { txHash: `mock-batch-tx-${Date.now()}`, results };
+  },
 };
 
 export function getMockStream(id: string): StreamData | null {
