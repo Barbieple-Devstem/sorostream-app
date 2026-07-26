@@ -101,14 +101,18 @@ export function watchClaimable(streams: StreamData[]): StreamData[] {
 }
 
 export function simulateNewEvent(): StreamEvent {
-  const types: StreamEvent["type"][] = ["withdrawal", "top-up", "creation"];
+  const types: StreamEvent["type"][] = ["withdrawal", "top-up", "creation", "alert"];
   const type = types[Math.floor(Math.random() * types.length)];
   const streamId = String(Math.floor(Math.random() * 5) + 1);
-  const amount = type !== "creation" ? String(Math.floor(Math.random() * 5000000000) + 1000000000) : undefined;
+  const asset = Math.random() < 0.5 ? "USDC" : "XLM";
+  const amount = type !== "creation" && type !== "alert" ? String(Math.floor(Math.random() * 5000000000) + 1000000000) : undefined;
+  const message = type === "alert" ? `Stream #${streamId} expires in 24 hours` : undefined;
   return addStreamEvent({
     type,
     streamId,
     amount,
+    asset,
+    message,
     timestamp: new Date().toISOString(),
     txHash: `0x${Math.random().toString(36).slice(2, 8)}`,
   });
@@ -269,25 +273,97 @@ export function claimableNow(stream: any): string {
 
 export interface StreamEvent {
   id: string;
-  type: "withdrawal" | "top-up" | "creation" | "cancellation";
+  type: "withdrawal" | "top-up" | "creation" | "cancellation" | "alert";
   streamId: string;
   timestamp: string;
   amount?: string;
   txHash: string;
+  /** Token/asset code this event relates to, e.g. "USDC" or "XLM". */
+  asset?: string;
+  /** Short human-readable detail, used mainly by "alert" events. */
+  message?: string;
 }
 
 const MOCK_EVENTS: StreamEvent[] = [
-  { id: "e1", type: "creation", streamId: "4", timestamp: new Date(Date.now() - 30000).toISOString(), txHash: "0xabc" },
-  { id: "e2", type: "withdrawal", streamId: "1", timestamp: new Date(Date.now() - 120000).toISOString(), amount: "2500000000", txHash: "0xdef" },
-  { id: "e3", type: "top-up", streamId: "2", timestamp: new Date(Date.now() - 300000).toISOString(), amount: "5000000000", txHash: "0xghi" },
-  { id: "e4", type: "withdrawal", streamId: "3", timestamp: new Date(Date.now() - 600000).toISOString(), amount: "1000000000", txHash: "0xjkl" },
-  { id: "e5", type: "creation", streamId: "5", timestamp: new Date(Date.now() - 900000).toISOString(), txHash: "0xmno" },
+  { id: "e1", type: "creation", streamId: "4", timestamp: new Date(Date.now() - 30000).toISOString(), txHash: "0xabc", asset: "USDC" },
+  { id: "e2", type: "withdrawal", streamId: "1", timestamp: new Date(Date.now() - 120000).toISOString(), amount: "2500000000", txHash: "0xdef", asset: "USDC" },
+  { id: "e3", type: "top-up", streamId: "2", timestamp: new Date(Date.now() - 300000).toISOString(), amount: "5000000000", txHash: "0xghi", asset: "USDC" },
+  { id: "e4", type: "withdrawal", streamId: "3", timestamp: new Date(Date.now() - 600000).toISOString(), amount: "1000000000", txHash: "0xjkl", asset: "XLM" },
+  { id: "e5", type: "creation", streamId: "5", timestamp: new Date(Date.now() - 900000).toISOString(), txHash: "0xmno", asset: "XLM" },
+  { id: "e6", type: "alert", streamId: "4", timestamp: new Date(Date.now() - 1_500_000).toISOString(), txHash: "0xp01", asset: "USDC", message: "Stream #4 expires in 24 hours" },
+  { id: "e7", type: "cancellation", streamId: "5", timestamp: new Date(Date.now() - 2_400_000).toISOString(), txHash: "0xq12", asset: "XLM" },
+  { id: "e8", type: "withdrawal", streamId: "2", timestamp: new Date(Date.now() - 3_600_000).toISOString(), amount: "1800000000", txHash: "0xr23", asset: "USDC" },
+  { id: "e9", type: "alert", streamId: "1", timestamp: new Date(Date.now() - 5_400_000).toISOString(), txHash: "0xs34", asset: "USDC", message: "Withdrawal available on Stream #1" },
+  { id: "e10", type: "top-up", streamId: "3", timestamp: new Date(Date.now() - 7_200_000).toISOString(), amount: "3000000000", txHash: "0xt45", asset: "XLM" },
+  { id: "e11", type: "creation", streamId: "2", timestamp: new Date(Date.now() - 9_000_000).toISOString(), txHash: "0xu56", asset: "USDC" },
+  { id: "e12", type: "withdrawal", streamId: "4", timestamp: new Date(Date.now() - 10_800_000).toISOString(), amount: "900000000", txHash: "0xv67", asset: "USDC" },
+  { id: "e13", type: "alert", streamId: "3", timestamp: new Date(Date.now() - 12_600_000).toISOString(), txHash: "0xw78", asset: "XLM", message: "Stream #3 expires in 24 hours" },
+  { id: "e14", type: "cancellation", streamId: "1", timestamp: new Date(Date.now() - 14_400_000).toISOString(), txHash: "0xx89", asset: "USDC" },
+  { id: "e15", type: "top-up", streamId: "5", timestamp: new Date(Date.now() - 16_200_000).toISOString(), amount: "2200000000", txHash: "0xy90", asset: "XLM" },
+  { id: "e16", type: "withdrawal", streamId: "3", timestamp: new Date(Date.now() - 18_000_000).toISOString(), amount: "1400000000", txHash: "0xz01", asset: "XLM" },
+  { id: "e17", type: "creation", streamId: "1", timestamp: new Date(Date.now() - 19_800_000).toISOString(), txHash: "0xa12b", asset: "USDC" },
+  { id: "e18", type: "alert", streamId: "2", timestamp: new Date(Date.now() - 21_600_000).toISOString(), txHash: "0xb23c", asset: "USDC", message: "Withdrawal available on Stream #2" },
+  { id: "e19", type: "withdrawal", streamId: "5", timestamp: new Date(Date.now() - 23_400_000).toISOString(), amount: "700000000", txHash: "0xc34d", asset: "XLM" },
+  { id: "e20", type: "cancellation", streamId: "4", timestamp: new Date(Date.now() - 25_200_000).toISOString(), txHash: "0xd45e", asset: "USDC" },
 ];
 
-let nextEventId = 6;
+let nextEventId = 21;
 
 export function getStreamEvents(): StreamEvent[] {
   return [...MOCK_EVENTS];
+}
+
+export interface ActivityQuery {
+  /** Exclusive cursor — an event id. Results start after this event. */
+  cursor?: string | null;
+  /** Page size. Defaults to 10. */
+  limit?: number;
+  /** When set, only events whose type is in this list are returned. */
+  types?: StreamEvent["type"][];
+  /** When set, only events for this asset/token are returned. */
+  asset?: string;
+  /** ISO date (inclusive lower bound). */
+  from?: string;
+  /** ISO date (inclusive upper bound, end-of-day). */
+  to?: string;
+}
+
+export interface ActivityPage {
+  events: StreamEvent[];
+  nextCursor: string | null;
+}
+
+/**
+ * Cursor-paginated, filterable activity feed over all stream events
+ * (newest first). Filters are applied before pagination so `nextCursor`
+ * always points at the next matching event, not just the next raw event.
+ */
+export function getActivityEvents(query: ActivityQuery = {}): ActivityPage {
+  const { cursor = null, limit = 10, types, asset, from, to } = query;
+
+  const fromMs = from ? new Date(from).getTime() : null;
+  const toMs = to ? new Date(to).getTime() + 86_400_000 - 1 : null;
+
+  const filtered = MOCK_EVENTS.filter((ev) => {
+    if (types && types.length > 0 && !types.includes(ev.type)) return false;
+    if (asset && ev.asset !== asset) return false;
+    const ts = new Date(ev.timestamp).getTime();
+    if (fromMs !== null && ts < fromMs) return false;
+    if (toMs !== null && ts > toMs) return false;
+    return true;
+  });
+
+  const startIndex = cursor ? filtered.findIndex((ev) => ev.id === cursor) + 1 : 0;
+  const page = filtered.slice(startIndex, startIndex + limit);
+  const nextCursor =
+    startIndex + limit < filtered.length ? page[page.length - 1]?.id ?? null : null;
+
+  return { events: page, nextCursor };
+}
+
+/** Unique asset codes seen across all events, for the asset filter dropdown. */
+export function getActivityAssets(): string[] {
+  return Array.from(new Set(MOCK_EVENTS.map((e) => e.asset).filter((a): a is string => !!a))).sort();
 }
 
 export function addStreamEvent(event: Omit<StreamEvent, "id">): StreamEvent {
