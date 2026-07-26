@@ -139,7 +139,13 @@ export const sorostream = {
     return { streamId: id, txHash: `mock-tx-${id}` };
   },
   withdraw: async () => ({ txHash: "mock-tx-hash", amount: "0" }),
-  cancelStream: async () => ({ txHash: "mock-tx-hash" }),
+  cancelStream: async (id?: string) => {
+    if (id) {
+      const stream = MOCK_STREAMS.find((s) => s.id === id);
+      if (stream) stream.status = "Cancelled";
+    }
+    return { txHash: "mock-tx-hash" };
+  },
   topUp: async () => ({ txHash: "", newEndTime: new Date() }),
   getStream: async (id: string) => getMockStream(id),
   getClaimable: async (streamId: string) => claimableNow(getMockStream(streamId)),
@@ -188,6 +194,8 @@ export function getActiveDashboardStreams(): StreamData[] {
     if (s.status === "Active") return true;
     return new Date(s.endTime).getTime() > cutoff;
   });
+}
+
 /**
  * Return streams relevant to the given wallet address.
  * A stream is relevant when the address is the sender or recipient.
@@ -331,6 +339,8 @@ export function calcWithdrawBreakdown(
   const fee = Math.floor((claimableStroops * basisPoints) / 10_000);
   const net = claimableStroops - fee;
   return { claimable: claimableStroops, fee, net, feePercent };
+}
+
 // ── Treasury ────────────────────────────────────────────────────────────────
 
 export interface TreasuryBalance {

@@ -32,6 +32,10 @@ vi.mock('@/src/context/SettingsContext', () => ({
   useSettings: () => ({ withdrawThreshold: 1000 }),
 }));
 
+vi.mock('@/src/context/WalletContext', () => ({
+  useWallet: () => ({ refetchBalance: vi.fn() }),
+}));
+
 // LiveCounter doesn't matter for these tests
 vi.mock('@/components/LiveCounter', () => ({
   default: () => <span data-testid="live-counter">0.00</span>,

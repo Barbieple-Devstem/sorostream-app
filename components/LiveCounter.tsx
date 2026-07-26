@@ -30,6 +30,11 @@ function getEstimatedClaimable(flowRate: number, lastWithdrawTime: Date) {
   return Math.max(0, flowRate * elapsed);
 }
 
+/** Stable format for aria-label so screen readers get a consistent value */
+function formatUSDCFixed(val: number) {
+  return (val / 10_000_000).toFixed(7);
+}
+
 function parseClaimable(value: string | number | bigint): number | null {
   const amount = typeof value === "bigint" ? Number(value) : Number(value);
   return Number.isFinite(amount) && amount >= 0 ? amount : null;
@@ -62,11 +67,11 @@ export default function LiveCounter({
 
   // Throttled aria-label: only update at most once per 30 seconds to avoid
   // spammy screen-reader narration while the counter ticks every second.
-  const lastAnnounceTimeRef = useRef(0);
+  // Initialize to -(throttle interval) so the first update is always immediate.
+  const lastAnnounceTimeRef = useRef(-ANNOUNCE_THROTTLE_MS);
   const [ariaLabel, setAriaLabel] = useState(() =>
     formatUSDCFixed(getEstimatedClaimable(flowRate, lastWithdrawTime))
   );
-
   // Reset baseline when props change (e.g. after a withdrawal).
   useEffect(() => {
     const next = {
@@ -123,10 +128,13 @@ export default function LiveCounter({
   // Throttle the aria-label update so screen readers hear at most one
   // announcement every 30 seconds, even though the visual counter ticks
   // every second.
+  const isOptimistic = optimisticOverride != null;
+  const displayValue = isOptimistic ? optimisticOverride : claimable;
+
   useEffect(() => {
     const now = Date.now();
     const timeSinceLast = now - lastAnnounceTimeRef.current;
-    if (timeSinceLast >= ANNOUNCE_THROTTLE_MS || lastAnnounceTimeRef.current === 0) {
+    if (timeSinceLast >= ANNOUNCE_THROTTLE_MS) {
       lastAnnounceTimeRef.current = now;
       setAriaLabel(formatUSDCFixed(displayValue));
       return;
@@ -150,18 +158,13 @@ export default function LiveCounter({
       maximumFractionDigits: 7,
     });
 
-  // Stable format for aria-label so screen readers get a consistent value
-  const formatUSDCFixed = (val: number) => (val / 10_000_000).toFixed(7);
-  const isOptimistic = optimisticOverride != null;
-  const displayValue = isOptimistic ? optimisticOverride : claimable;
-
   return (
     <span
       className="font-mono font-semibold tabular-nums inline-flex items-baseline gap-1.5"
       role="status"
       aria-live="polite"
       aria-atomic="true"
-      aria-label={t("claimable", { val: ariaLabel }) + (isOptimistic ? t("pending_confirmation") : "")}
+      aria-label={`Claimable: ${formatUSDCFixed(displayValue)} USDC`}
     >
       <span className={isOptimistic ? "text-yellow-400" : "text-green-600"}>
         {formatUSDC(displayValue)} USDC
