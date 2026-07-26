@@ -124,7 +124,13 @@ function NewStreamWizard() {
   const [txFailedStage, setTxFailedStage] = useState<TxStage | undefined>(undefined);
   const [txError, setTxError] = useState<string | undefined>(undefined);
 
-  function handleTemplateSelect(seconds: number, suggestedAmount?: string, recipientOverride?: string) {
+  function handleTemplateSelect(
+    seconds: number,
+    suggestedAmount?: string,
+    recipientOverride?: string,
+    tokenOverride?: string,
+    cliffDateOverride?: string,
+  ) {
     setDuration(seconds);
     setErrors((prev) => ({ ...prev, duration: "" }));
     if (suggestedAmount) {
@@ -134,6 +140,13 @@ function NewStreamWizard() {
     if (recipientOverride && /^G[A-Z2-7]{55}$/.test(recipientOverride)) {
       setRecipient(recipientOverride);
       setErrors((prev) => ({ ...prev, recipient: "" }));
+    }
+    if (tokenOverride && SUPPORTED_TOKENS.some((t) => t.symbol === tokenOverride)) {
+      setSelectedToken(tokenOverride);
+    }
+    if (cliffDateOverride) {
+      setCliffDate(cliffDateOverride);
+      setErrors((prev) => ({ ...prev, cliffDate: validateCliffDate(cliffDateOverride, endDate) }));
     }
   }
 
@@ -437,6 +450,8 @@ function NewStreamWizard() {
               currentRecipient={recipient}
               currentAmount={amount}
               currentDuration={duration}
+              currentToken={selectedToken !== CUSTOM_TOKEN_VALUE ? selectedToken : undefined}
+              currentCliffDate={cliffDate}
             />
 
             <div>

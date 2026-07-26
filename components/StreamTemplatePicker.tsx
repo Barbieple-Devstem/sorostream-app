@@ -26,10 +26,12 @@ const BUILT_IN_TEMPLATES: BuiltInTemplate[] = [
 ];
 
 interface StreamTemplatePickerProps {
-  onSelect: (seconds: number, amount?: string, recipient?: string) => void;
+  onSelect: (seconds: number, amount?: string, recipient?: string, token?: string, cliffDate?: string) => void;
   currentRecipient?: string;
   currentAmount?: string;
   currentDuration?: number;
+  currentToken?: string;
+  currentCliffDate?: string;
 }
 
 export default function StreamTemplatePicker({
@@ -37,6 +39,8 @@ export default function StreamTemplatePicker({
   currentRecipient,
   currentAmount,
   currentDuration,
+  currentToken,
+  currentCliffDate,
 }: StreamTemplatePickerProps) {
   const [savedTemplates, setSavedTemplates] = useState<SavedTemplate[]>([]);
   const [showSaveForm, setShowSaveForm] = useState(false);
@@ -64,6 +68,8 @@ export default function StreamTemplatePicker({
       minutes,
       suggestedAmount: currentAmount || undefined,
       recipient: currentRecipient || undefined,
+      token: currentToken || undefined,
+      cliffDate: currentCliffDate || undefined,
     });
     if (result) {
       setShowSaveForm(false);
@@ -137,7 +143,7 @@ export default function StreamTemplatePicker({
           <button
             key={t.id}
             type="button"
-            onClick={() => onSelect(templateToSeconds(t), t.suggestedAmount, t.recipient)}
+            onClick={() => onSelect(templateToSeconds(t), t.suggestedAmount, t.recipient, t.token, t.cliffDate)}
             className="text-left bg-gray-800 border border-green-500/40 rounded-lg px-3 py-2 hover:border-green-500 transition-colors group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
           >
             <div className="flex items-center justify-between">
