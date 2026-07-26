@@ -7,10 +7,8 @@ import StreamVirtualList from "@/components/StreamVirtualList";
 import StreamEventFeed from "@/components/StreamEventFeed";
 import PortfolioChart from "@/components/PortfolioChart";
 import KeyboardShortcutsHelp from "@/components/KeyboardShortcutsHelp";
-import PortfolioChart from "@/components/PortfolioChart";
 import StatusLegend from "@/components/StatusLegend";
 import { StreamErrorBoundary } from "@/components/StreamErrorBoundary";
-import { getMockStreams, watchClaimable, sorostream, getMockStreamHistory, StreamData } from "@/src/lib/sorostream";
 import { getMockStreams, getStreamsForWallet, watchClaimable, sorostream, getMockStreamHistory, StreamData } from "@/src/lib/sorostream";
 import { useRpcFetch } from "@/src/lib/useRpcFetch";
 import { useToast } from "@/src/lib/toast";
@@ -18,6 +16,7 @@ import { downloadCSV } from "@/src/lib/export";
 import { useKeyboardShortcuts, type ShortcutGroup } from "@/src/lib/useKeyboardShortcuts";
 import { useBookmarks } from "@/src/context/BookmarksContext";
 import { useWallet } from "@/src/context/WalletContext";
+import ArchiveBanner from "@/components/ArchiveBanner";
 
 type DashboardState = "loading" | "filtered-empty" | "empty" | "ready";
 
@@ -300,6 +299,8 @@ function DashboardContent() {
 
         <div className="flex flex-col lg:flex-row gap-6">
           <div className="flex-1 min-w-0">
+            {/* Archive banner — shown when streams have been auto-archived */}
+            <ArchiveBanner />
             {/* Portfolio Chart */}
             <PortfolioChart />
 

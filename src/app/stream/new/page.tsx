@@ -1,10 +1,11 @@
 "use client";
-import { useState, Suspense } from "react";
+import { useState, Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import DurationPicker from "@/components/DurationPicker";
 import FlowRatePreview from "@/components/FlowRatePreview";
 import StreamTemplatePicker from "@/components/StreamTemplatePicker";
 import RecipientAutocomplete from "@/components/RecipientAutocomplete";
+import VestingPreviewChart from "@/components/VestingPreviewChart";
 import TransactionStepper, { TxStage } from "@/components/TransactionStepper";
 import BatchCreateTab from "@/components/BatchCreateTab";
 import { SkeletonForm } from "@/components/Skeleton";
@@ -14,6 +15,7 @@ import { sorostream } from "@/src/lib/sorostream";
 import { usePreferences } from "@/src/context/PreferencesContext";
 
 type PageTab = "single" | "batch";
+import { useSettings } from "@/src/context/SettingsContext";
 
 type Step = "recipient" | "amount" | "review";
 
@@ -90,6 +92,7 @@ function NewStreamWizard() {
   const [step, setStep] = useState<Step>("recipient");
   const searchParams = useSearchParams();
   const { defaultToken, defaultDuration, defaultCliffDuration } = usePreferences();
+  const settings = useSettings();
 
   const recipientParam = searchParams.get("recipient");
   const amountParam = searchParams.get("amount");
@@ -105,9 +108,9 @@ function NewStreamWizard() {
     return !isNaN(num) && num > 0 ? amountParam : "";
   })();
   const initialDuration = (() => {
-    if (!durationParam) return 0;
+    if (!durationParam) return settings.defaultDurationSeconds;
     const num = parseFloat(durationParam);
-    return !isNaN(num) && num > 0 ? Math.round(num) : 0;
+    return !isNaN(num) && num > 0 ? Math.round(num) : settings.defaultDurationSeconds;
   })();
 
   const [recipient, setRecipient] = useState(initialRecipient);
@@ -118,6 +121,8 @@ function NewStreamWizard() {
   const [selectedToken, setSelectedToken] = useState<string>(
     SUPPORTED_TOKENS.find((t) => t.symbol === defaultToken)?.symbol ?? SUPPORTED_TOKENS[0].symbol,
   );
+  const [duration, setDuration] = useState(initialDuration);
+  const [selectedToken, setSelectedToken] = useState<string>(settings.defaultToken || SUPPORTED_TOKENS[0].symbol);
   const [customTokenAddress, setCustomTokenAddress] = useState("");
   const [customTokenError, setCustomTokenError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -557,6 +562,15 @@ function NewStreamWizard() {
                 </p>
               )}
             </div>
+
+            {amount && duration > 0 && (
+              <VestingPreviewChart
+                amount={amount}
+                durationSeconds={duration}
+                cliffSeconds={cliffDate ? Math.max(0, Math.floor((new Date(cliffDate).getTime() - Date.now()) / 1000)) : undefined}
+                token={selectedToken === CUSTOM_TOKEN_VALUE ? "tokens" : selectedToken}
+              />
+            )}
 
             {amount && duration > 0 && (
               <FlowRatePreview amount={amount} durationSeconds={duration} />
