@@ -310,6 +310,8 @@ export default function PortfolioChart() {
                 color: "#F9FAFB",
                 fontSize: "13px",
               }}
+              labelFormatter={(label) => new Date(label as number).toLocaleString()}
+              formatter={(value: any, name: any) => [`${fmtAmount(Number(value))} ${name}`, name]}
               labelFormatter={(label) => formatDate(label as number)}
               formatter={tooltipFormatter}
             />

@@ -6,7 +6,6 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { StreamListSkeleton } from "@/components/Skeleton";
 import StreamVirtualList from "@/components/StreamVirtualList";
 import StreamEventFeed from "@/components/StreamEventFeed";
-import PortfolioChart from "@/components/PortfolioChart";
 import KeyboardShortcutsHelp from "@/components/KeyboardShortcutsHelp";
 import StatusLegend from "@/components/StatusLegend";
 import { StreamErrorBoundary } from "@/components/StreamErrorBoundary";
