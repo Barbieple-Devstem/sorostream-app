@@ -61,6 +61,11 @@ body {
   transition: background 200ms ease-in-out, color 200ms ease-in-out;
 }
 
+/* Safe area bottom inset for iOS devices with home indicator */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
 /*
  * Light-theme utility remaps. Selectors are scoped under `html.light` so they
  * carry higher specificity than the base Tailwind utilities and win without

@@ -8,9 +8,7 @@ import {
   YAxis,
   Tooltip,
   ResponsiveContainer,
-  ReferenceDot,
   CartesianGrid,
-  Legend,
 } from "recharts";
 import { useWallet } from "@/src/context/WalletContext";
 import {
@@ -271,7 +269,7 @@ export default function PortfolioChart() {
               tickFormatter={fmtAmount}
               stroke="#9CA3AF"
               tick={{ fill: "#9CA3AF", fontSize: 12 }}
-              width={70}
+              width={60}
               tickLine={false}
             />
             <Tooltip
@@ -291,6 +289,13 @@ export default function PortfolioChart() {
             {assets.length > 1 && (
               <Legend wrapperStyle={{ fontSize: "12px", color: "#9CA3AF" }} />
             )}
+              formatter={(value: any) => {
+                if (typeof value === "number") {
+                  return [`${fmtAmount(value)}`, "Balance"];
+                }
+                return [];
+              }}
+            />
             {assets.map((asset) => (
               <Line
                 key={asset}
