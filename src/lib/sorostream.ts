@@ -11,6 +11,73 @@ export interface StreamData {
   endTime: string;
   lastWithdrawTime: string;
   status: "Active" | "Cancelled" | "Ended";
+  /** Unix timestamp (seconds). When set and > now, stream is scheduled. */
+  scheduledStartTime?: number;
+}
+
+// ── Protocol stats ───────────────────────────────────────────────────────────
+
+export interface ProtocolStats {
+  tvlStroops: number;
+  activeStreams: number;
+  totalStreams: number;
+  totalWithdrawnStroops: number;
+  uniqueSenders: number;
+  uniqueRecipients: number;
+  /** ISO timestamps for sparkline history (last 10 data points) */
+  tvlHistory: number[];
+  activeStreamsHistory: number[];
+}
+
+/** Simulates reading protocol-wide stats from the contract / indexer. */
+export async function getProtocolStats(): Promise<ProtocolStats> {
+  const now = Date.now();
+  // Build a realistic mock sparkline (10 points over the last hour)
+  const tvlHistory = Array.from({ length: 10 }, (_, i) => {
+    const base = 45_000_000_000_000; // ~4.5M USDC in stroops
+    return base + Math.round(Math.sin(i * 0.7) * 2_000_000_000_000 + i * 500_000_000_000);
+  });
+  const activeStreamsHistory = Array.from({ length: 10 }, (_, i) =>
+    Math.max(1, 3 + Math.round(Math.sin(i * 0.5) * 1)),
+  );
+  void now;
+  return {
+    tvlStroops: 47_500_000_000_000,       // 4,750,000 USDC
+    activeStreams: MOCK_STREAMS.filter((s) => s.status === "Active").length,
+    totalStreams: MOCK_STREAMS.length,
+    totalWithdrawnStroops: 8_200_000_000_000,
+    uniqueSenders: 4,
+    uniqueRecipients: 6,
+    tvlHistory,
+    activeStreamsHistory,
+  };
+}
+
+// ── Fee simulation ────────────────────────────────────────────────────────────
+
+export interface FeeEstimate {
+  inclusionFeeLumens: string;
+  resourceFeeLumens: string;
+  totalFeeLumens: string;
+}
+
+/**
+ * Simulates a Soroban RPC `simulateTransaction` call to estimate fees.
+ * In production this would call `server.simulateTransaction(tx)`.
+ */
+export async function simulateTransactionFee(): Promise<FeeEstimate> {
+  // Simulate network latency
+  await new Promise((r) => setTimeout(r, 800 + Math.random() * 400));
+  // Mock Soroban fee breakdown (realistic testnet values)
+  const inclusionFee = 0.00001 + Math.random() * 0.00002;
+  const resourceFee = 0.00005 + Math.random() * 0.0001;
+  const total = inclusionFee + resourceFee;
+  const fmt = (n: number) => n.toFixed(7);
+  return {
+    inclusionFeeLumens: fmt(inclusionFee),
+    resourceFeeLumens: fmt(resourceFee),
+    totalFeeLumens: fmt(total),
+  };
 }
 
 /** Mutable stream store — seeded with test data, extended by createStream(). */
@@ -55,6 +122,15 @@ const MOCK_STREAMS: StreamData[] = [
     lastWithdrawTime: new Date(Date.now() - 86400000 * 1).toISOString(),
     status: "Cancelled",
   },
+  {
+    id: "9", sender: "GBAM...BOEP", recipient: "GSCH...DULD", token: "USDC",
+    flowRate: 600000, deposit: 6000000000,
+    startTime: new Date(Date.now() + 86400000 * 2).toISOString(),
+    endTime: new Date(Date.now() + 86400000 * 12).toISOString(),
+    lastWithdrawTime: new Date(Date.now() + 86400000 * 2).toISOString(),
+    status: "Active",
+    scheduledStartTime: Math.floor((Date.now() + 86400000 * 2) / 1000),
+  },
   // --- Archived streams (ended/cancelled > 30 days ago) ---
   {
     id: "6", sender: "GBAM...BOEP", recipient: "GARC...H1VE", token: "USDC",
@@ -89,6 +165,8 @@ export interface CreateStreamParams {
   amount?: string;
   durationSeconds?: number;
   token?: string;
+  /** Unix timestamp (seconds) for a scheduled start. Omit or set to 0 for immediate start. */
+  scheduledStartTime?: number;
 }
 
 export function watchClaimable(streams: StreamData[]): StreamData[] {
@@ -123,6 +201,10 @@ export const sorostream = {
       : 0;
     const flowRate = durationSeconds > 0 ? Math.round(deposit / durationSeconds) : 0;
     const now = new Date();
+    const scheduledStartTime = params?.scheduledStartTime && params.scheduledStartTime > Math.floor(Date.now() / 1000)
+      ? params.scheduledStartTime
+      : undefined;
+    const startDate = scheduledStartTime ? new Date(scheduledStartTime * 1000) : now;
     const stream: StreamData = {
       id,
       sender: "GTEST...SENDER",
@@ -130,10 +212,11 @@ export const sorostream = {
       token: params?.token ?? "USDC",
       flowRate,
       deposit,
-      startTime: now.toISOString(),
-      endTime: new Date(now.getTime() + durationSeconds * 1000).toISOString(),
-      lastWithdrawTime: now.toISOString(),
+      startTime: startDate.toISOString(),
+      endTime: new Date(startDate.getTime() + durationSeconds * 1000).toISOString(),
+      lastWithdrawTime: startDate.toISOString(),
       status: "Active",
+      scheduledStartTime,
     };
     MOCK_STREAMS.push(stream);
     return { streamId: id, txHash: `mock-tx-${id}` };

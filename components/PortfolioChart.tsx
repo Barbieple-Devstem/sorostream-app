@@ -104,7 +104,6 @@ export default function PortfolioChart() {
       const shouldSave = await shouldSnapshot(address!);
       if (!shouldSave) return;
 
-      // Fetch current balance from Horizon (reuse NavHeader's approach)
       try {
         const network = process.env.NEXT_PUBLIC_STELLAR_NETWORK || "testnet";
         const horizonUrl =
@@ -282,6 +281,14 @@ export default function PortfolioChart() {
                 fontSize: "13px",
               }}
               labelFormatter={(label) => fmtDate(label as number)}
+              formatter={(value: unknown, name: unknown) => [
+                `${fmtAmount(Number(value))} ${String(name)}`,
+                String(name),
+              ]}
+            />
+            {assets.length > 1 && (
+              <Legend wrapperStyle={{ fontSize: "12px", color: "#9CA3AF" }} />
+            )}
               formatter={(value: any) => {
                 if (typeof value === "number") {
                   return [`${fmtAmount(value)}`, "Balance"];
@@ -301,9 +308,20 @@ export default function PortfolioChart() {
                 name={asset}
               />
             ))}
+            {filteredPoints.length > 0 && assets.length > 0 && (
+              <ReferenceDot
+                x={filteredPoints[filteredPoints.length - 1].time}
+                y={filteredPoints[filteredPoints.length - 1][assets[0]] as number}
+                r={6}
+                fill={ASSET_COLORS[assets[0]] ?? "#22C55E"}
+                stroke="#F9FAFB"
+                strokeWidth={2}
+              />
+            )}
           </LineChart>
         </ResponsiveContainer>
       )}
+
       <p className="text-xs text-gray-400 mt-2 text-center">
         &#x25CF; Current balance &mdash; Snapshots stored in IndexedDB, expires after 90 days
       </p>
