@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import QRCode from "qrcode";
 import {
   generateSecret,
@@ -143,7 +144,7 @@ export default function TwoFactorSetup({
           
           {qrCodeUrl ? (
             <div className="flex justify-center bg-white p-4 rounded-lg">
-              <img src={qrCodeUrl} alt="TOTP QR Code" className="w-48 h-48" />
+              <Image src={qrCodeUrl} alt="TOTP QR Code" width={192} height={192} />
             </div>
           ) : (
             <div className="flex justify-center bg-gray-700 p-4 rounded-lg">

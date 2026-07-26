@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import {
   CartesianGrid,
   Legend,
@@ -11,6 +12,9 @@ import {
   XAxis,
   YAxis,
   ReferenceDot,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
 } from "recharts";
 import { useWallet } from "@/src/context/WalletContext";
 import {
@@ -284,9 +288,18 @@ export default function PortfolioChart() {
             />
             <YAxis
               tickFormatter={formatAmount}
+              tickFormatter={fmtDate}
               stroke="#9CA3AF"
               tick={{ fill: "#9CA3AF", fontSize: 12 }}
-              width={70}
+              type="number"
+              domain={["dataMin", "dataMax"]}
+              tickLine={false}
+            />
+            <YAxis
+              tickFormatter={fmtAmount}
+              stroke="#9CA3AF"
+              tick={{ fill: "#9CA3AF", fontSize: 12 }}
+              width={60}
               tickLine={false}
             />
             <Tooltip
@@ -301,6 +314,22 @@ export default function PortfolioChart() {
               formatter={tooltipFormatter}
             />
             {assets.length > 1 && <Legend wrapperStyle={{ fontSize: "12px", color: "#9CA3AF" }} />}
+              labelFormatter={(label) => fmtDate(label as number)}
+              formatter={(value: unknown, name: unknown) => [
+                `${fmtAmount(Number(value))} ${String(name)}`,
+                String(name),
+              ]}
+            />
+            {assets.length > 1 && (
+              <Legend wrapperStyle={{ fontSize: "12px", color: "#9CA3AF" }} />
+            )}
+              formatter={(value: any) => {
+                if (typeof value === "number") {
+                  return [`${fmtAmount(value)}`, "Balance"];
+                }
+                return [];
+              }}
+            />
             {assets.map((asset) => (
               <Line
                 key={asset}
@@ -314,6 +343,7 @@ export default function PortfolioChart() {
               />
             ))}
             {assets[0] && filteredPoints.length > 0 && (
+            {filteredPoints.length > 0 && assets.length > 0 && (
               <ReferenceDot
                 x={filteredPoints[filteredPoints.length - 1].time}
                 y={filteredPoints[filteredPoints.length - 1][assets[0]] as number}

@@ -11,6 +11,7 @@ import KeyboardShortcutsHelp from "@/components/KeyboardShortcutsHelp";
 import StatusLegend from "@/components/StatusLegend";
 import { StreamErrorBoundary } from "@/components/StreamErrorBoundary";
 import { getStreamsForWallet, watchClaimable, sorostream, getMockStreamHistory, type StreamData } from "@/src/lib/sorostream";
+import { getMockStreams, getStreamsForWallet, watchClaimable, sorostream, getMockStreamHistory, StreamData } from "@/src/lib/sorostream";
 import { useRpcFetch } from "@/src/lib/useRpcFetch";
 import { useToast } from "@/src/lib/toast";
 import { downloadCSV } from "@/src/lib/export";
