@@ -20,11 +20,15 @@
   "stream_new": {
     "title": "Create Stream",
     "recipient_label": "Recipient Address",
-    "recipient_placeholder": "G...",
+    "recipient_placeholder": "G... or alice*stellar.org",
     "amount_label": "Amount (USDC)",
     "amount_placeholder": "100",
     "duration_label": "Duration",
-    "submit": "Create Stream"
+    "submit": "Create Stream",
+    "cliff_label": "Cliff Date",
+    "cliff_optional": "(optional)",
+    "end_date_label": "End Date",
+    "vesting_preview": "Vesting Preview"
   },
   "stream_detail": {
     "title": "Stream #{id}",
@@ -86,6 +90,8 @@
     "home": "Home",
     "dashboard": "Dashboard",
     "create": "Create",
+    "admin": "Admin",
+    "archive": "Archive",
     "settings": "Settings",
     "usd": "USD",
     "usd_active": "USD ✓",

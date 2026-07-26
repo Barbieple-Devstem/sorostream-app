@@ -39,6 +39,11 @@ interface Settings {
   withdrawThreshold: number;
   language: string;
   keyboardShortcuts: ShortcutMap;
+  // Stream creation preferences
+  defaultToken: string;
+  defaultDurationSeconds: number;
+  defaultCliffDurationSeconds: number;
+  preferredTheme: "light" | "dark" | "system";
 }
 
 interface SettingsContextValue extends Settings {
@@ -48,6 +53,12 @@ interface SettingsContextValue extends Settings {
   setKeyboardShortcuts: (shortcuts: ShortcutMap) => void;
   resetKeyboardShortcuts: () => void;
   getShortcutLabel: (id: ShortcutId) => string;
+  // Stream preferences
+  setDefaultToken: (token: string) => void;
+  setDefaultDurationSeconds: (seconds: number) => void;
+  setDefaultCliffDurationSeconds: (seconds: number) => void;
+  setPreferredTheme: (theme: "light" | "dark" | "system") => void;
+  resetStreamPreferences: () => void;
 }
 
 const defaultSettings: Settings = {
@@ -55,6 +66,10 @@ const defaultSettings: Settings = {
   withdrawThreshold: 1000,
   language: "en",
   keyboardShortcuts: DEFAULT_SHORTCUTS,
+  defaultToken: "USDC",
+  defaultDurationSeconds: 0,
+  defaultCliffDurationSeconds: 0,
+  preferredTheme: "system",
 };
 
 const SettingsContext = createContext<SettingsContextValue | undefined>(undefined);
@@ -70,6 +85,10 @@ function loadSettings(): Settings {
       withdrawThreshold: parsed.withdrawThreshold ?? defaultSettings.withdrawThreshold,
       language: parsed.language ?? defaultSettings.language,
       keyboardShortcuts: parsed.keyboardShortcuts ?? defaultSettings.keyboardShortcuts,
+      defaultToken: parsed.defaultToken ?? defaultSettings.defaultToken,
+      defaultDurationSeconds: parsed.defaultDurationSeconds ?? defaultSettings.defaultDurationSeconds,
+      defaultCliffDurationSeconds: parsed.defaultCliffDurationSeconds ?? defaultSettings.defaultCliffDurationSeconds,
+      preferredTheme: (parsed.preferredTheme as any) ?? defaultSettings.preferredTheme,
     };
   } catch {
     return defaultSettings;
@@ -139,6 +158,52 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const setDefaultToken = useCallback((token: string) => {
+    setSettings((prev) => {
+      const next = { ...prev, defaultToken: token };
+      persist(next);
+      return next;
+    });
+  }, []);
+
+  const setDefaultDurationSeconds = useCallback((seconds: number) => {
+    setSettings((prev) => {
+      const next = { ...prev, defaultDurationSeconds: Math.max(0, seconds) };
+      persist(next);
+      return next;
+    });
+  }, []);
+
+  const setDefaultCliffDurationSeconds = useCallback((seconds: number) => {
+    setSettings((prev) => {
+      const next = { ...prev, defaultCliffDurationSeconds: Math.max(0, seconds) };
+      persist(next);
+      return next;
+    });
+  }, []);
+
+  const setPreferredTheme = useCallback((theme: "light" | "dark" | "system") => {
+    setSettings((prev) => {
+      const next = { ...prev, preferredTheme: theme };
+      persist(next);
+      return next;
+    });
+  }, []);
+
+  const resetStreamPreferences = useCallback(() => {
+    setSettings((prev) => {
+      const next = {
+        ...prev,
+        defaultToken: defaultSettings.defaultToken,
+        defaultDurationSeconds: defaultSettings.defaultDurationSeconds,
+        defaultCliffDurationSeconds: defaultSettings.defaultCliffDurationSeconds,
+        preferredTheme: defaultSettings.preferredTheme,
+      };
+      persist(next);
+      return next;
+    });
+  }, []);
+
   const getShortcutLabel = useCallback(
     (id: ShortcutId): string => {
       const raw = settings.keyboardShortcuts[id] ?? DEFAULT_SHORTCUTS[id];
@@ -159,6 +224,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       setKeyboardShortcuts,
       resetKeyboardShortcuts,
       getShortcutLabel,
+      setDefaultToken,
+      setDefaultDurationSeconds,
+      setDefaultCliffDurationSeconds,
+      setPreferredTheme,
+      resetStreamPreferences,
     }),
     [
       settings,
@@ -168,6 +238,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       setKeyboardShortcuts,
       resetKeyboardShortcuts,
       getShortcutLabel,
+      setDefaultToken,
+      setDefaultDurationSeconds,
+      setDefaultCliffDurationSeconds,
+      setPreferredTheme,
+      resetStreamPreferences,
     ],
   );
 
