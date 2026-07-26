@@ -35,6 +35,7 @@ import { formatStellarAmount } from "@/src/lib/sorostream";
 import { useKeyboardShortcuts, type ShortcutGroup } from "@/src/lib/useKeyboardShortcuts";
 import { useBookmarks } from "@/src/context/BookmarksContext";
 import { useWallet } from "@/src/context/WalletContext";
+import StreamShareButtons from "@/components/StreamShareButtons";
 
 /** Grace period in seconds before a cancel is submitted on-chain. */
 const CANCEL_GRACE_SECONDS = 5;
@@ -619,34 +620,14 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
             </svg>
             Clone
           </button>
-          <button
-            onClick={() => {
-              const url = window.location.origin + `/stream/${stream.id}`;
-              navigator.clipboard.writeText(url).then(
-                () => addToast("Deep link copied to clipboard!", "success"),
-                () => {
-                  const textarea = document.createElement("textarea");
-                  textarea.value = url;
-                  textarea.style.cssText = "position:fixed;top:-9999px;left:-9999px;opacity:0;";
-                  document.body.appendChild(textarea);
-                  textarea.focus();
-                  textarea.select();
-                  document.execCommand("copy");
-                  document.body.removeChild(textarea);
-                  addToast("Deep link copied to clipboard!", "success");
-                },
-              );
-            }}
-            aria-label="Copy share link for this stream"
-            className="inline-flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-white py-2 px-4 rounded-lg text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
-            title={`${window.location.origin}/stream/${stream.id}`}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
-              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.51" />
-            </svg>
-            Share
-          </button>
+        </div>
+
+        {/* Social sharing buttons — visible without scrolling, below action bar */}
+        <div className="mt-4 mb-2">
+          <StreamShareButtons
+            streamId={stream.id}
+            shareText={`Check out Stream #${stream.id} on SoroStream — real-time payment streaming on Stellar Soroban.`}
+          />
         </div>
 
         {/* Stream completed banner — shown when currentTime >= endTime */}
