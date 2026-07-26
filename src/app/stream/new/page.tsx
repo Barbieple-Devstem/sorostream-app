@@ -1,16 +1,26 @@
 "use client";
 import { useState, useEffect, useRef, Suspense } from "react";
+import { useState, Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import DurationPicker from "@/components/DurationPicker";
 import FlowRatePreview from "@/components/FlowRatePreview";
 import StreamTemplatePicker from "@/components/StreamTemplatePicker";
 import RecipientAutocomplete from "@/components/RecipientAutocomplete";
+import VestingPreviewChart from "@/components/VestingPreviewChart";
 import TransactionStepper, { TxStage } from "@/components/TransactionStepper";
+import SchedulingToggle from "@/components/SchedulingToggle";
+import FeeEstimationPanel from "@/components/FeeEstimationPanel";
+import BatchCreateTab from "@/components/BatchCreateTab";
 import { SkeletonForm } from "@/components/Skeleton";
 import { useTranslations } from "@/src/lib/i18n";
 import { trackEvent } from "@/src/lib/analytics";
 import { sorostream, getCollateralConfig, checkIsNewSender, calcCollateral, getGasFeeEstimate, type GasFeeEstimate } from "@/src/lib/sorostream";
 import { useWallet } from "@/src/context/WalletContext";
+import { sorostream } from "@/src/lib/sorostream";
+import { usePreferences } from "@/src/context/PreferencesContext";
+
+type PageTab = "single" | "batch";
+import { useSettings } from "@/src/context/SettingsContext";
 
 type Step = "recipient" | "amount" | "review";
 
@@ -72,6 +82,18 @@ function validateCliffDate(cliffValue: string, endValue: string): string {
   return "";
 }
 
+/**
+ * Validates the scheduled start datetime-local string.
+ * Must be provided and strictly in the future (> now).
+ */
+function validateScheduledStart(value: string): string {
+  if (!value) return "Scheduled start date is required when scheduling is enabled.";
+  const ts = new Date(value).getTime();
+  if (isNaN(ts)) return "Invalid date.";
+  if (ts <= Date.now()) return "Start time must be in the future.";
+  return "";
+}
+
 const stepLabels: Record<Step, { title: string; number: number }> = {
   recipient: { title: "Recipient", number: 1 },
   amount: { title: "Amount & Duration", number: 2 },
@@ -83,9 +105,12 @@ const STEPS: Step[] = ["recipient", "amount", "review"];
 function NewStreamWizard() {
   const router = useRouter();
   const t = useTranslations("stream_new");
+  const [activeTab, setActiveTab] = useState<PageTab>("single");
   const [step, setStep] = useState<Step>("recipient");
   const searchParams = useSearchParams();
   const { address } = useWallet();
+  const { defaultToken, defaultDuration, defaultCliffDuration } = usePreferences();
+  const settings = useSettings();
 
   const recipientParam = searchParams.get("recipient");
   const amountParam = searchParams.get("amount");
@@ -101,25 +126,41 @@ function NewStreamWizard() {
     return !isNaN(num) && num > 0 ? amountParam : "";
   })();
   const initialDuration = (() => {
-    if (!durationParam) return 0;
+    if (!durationParam) return settings.defaultDurationSeconds;
     const num = parseFloat(durationParam);
-    return !isNaN(num) && num > 0 ? Math.round(num) : 0;
+    return !isNaN(num) && num > 0 ? Math.round(num) : settings.defaultDurationSeconds;
   })();
 
   const [recipient, setRecipient] = useState(initialRecipient);
   const [amount, setAmount] = useState(initialAmount);
+  // Use URL param first, then saved preference, then 0
+  const [duration, setDuration] = useState(initialDuration || defaultDuration || 0);
+  // Pre-select token from preference when no URL param overrides
+  const [selectedToken, setSelectedToken] = useState<string>(
+    SUPPORTED_TOKENS.find((t) => t.symbol === defaultToken)?.symbol ?? SUPPORTED_TOKENS[0].symbol,
+  );
   const [duration, setDuration] = useState(initialDuration);
-  const [selectedToken, setSelectedToken] = useState<string>(SUPPORTED_TOKENS[0].symbol);
+  const [selectedToken, setSelectedToken] = useState<string>(settings.defaultToken || SUPPORTED_TOKENS[0].symbol);
   const [customTokenAddress, setCustomTokenAddress] = useState("");
   const [customTokenError, setCustomTokenError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState({ recipient: "", amount: "", duration: "", endDate: "", cliffDate: "" });
+  const [errors, setErrors] = useState({ recipient: "", amount: "", duration: "", endDate: "", cliffDate: "", scheduledStart: "" });
   const [touched, setTouched] = useState({ recipient: false, amount: false });
   const [durationPickerKey, setDurationPickerKey] = useState(0);
 
   // Optional end date & cliff date (ISO datetime-local value)
   const [endDate, setEndDate] = useState("");
-  const [cliffDate, setCliffDate] = useState("");
+  // Pre-fill cliff from preference (convert seconds offset to a future datetime-local string)
+  const [cliffDate, setCliffDate] = useState(() => {
+    if (!defaultCliffDuration || defaultCliffDuration <= 0) return "";
+    const dt = new Date(Date.now() + defaultCliffDuration * 1000);
+    // datetime-local format: "YYYY-MM-DDTHH:MM"
+    return dt.toISOString().slice(0, 16);
+  });
+
+  // Scheduling
+  const [schedulingEnabled, setSchedulingEnabled] = useState(false);
+  const [scheduledStart, setScheduledStart] = useState("");
 
   // Transaction progress
   const [txStage, setTxStage] = useState<TxStage | null>(null);
@@ -222,8 +263,9 @@ function NewStreamWizard() {
       const dErr = validateDuration(duration);
       const eErr = validateEndDate(endDate);
       const cErr = validateCliffDate(cliffDate, endDate);
-      if (aErr || dErr || eErr || cErr) {
-        setErrors({ ...errors, amount: aErr, duration: dErr, endDate: eErr, cliffDate: cErr });
+      const sErr = schedulingEnabled ? validateScheduledStart(scheduledStart) : "";
+      if (aErr || dErr || eErr || cErr || sErr) {
+        setErrors({ ...errors, amount: aErr, duration: dErr, endDate: eErr, cliffDate: cErr, scheduledStart: sErr });
         return;
       }
       setStep("review");
@@ -251,13 +293,20 @@ function NewStreamWizard() {
     const dErr = validateDuration(duration);
     const eErr = validateEndDate(endDate);
     const cErr = validateCliffDate(cliffDate, endDate);
-    if (rErr || aErr || dErr || eErr || cErr) {
-      setErrors({ recipient: rErr, amount: aErr, duration: dErr, endDate: eErr, cliffDate: cErr });
+    const sErr = schedulingEnabled ? validateScheduledStart(scheduledStart) : "";
+    if (rErr || aErr || dErr || eErr || cErr || sErr) {
+      setErrors({ recipient: rErr, amount: aErr, duration: dErr, endDate: eErr, cliffDate: cErr, scheduledStart: sErr });
       return;
     }
 
     const tokenAddress = resolvedTokenAddress();
     if (!tokenAddress) return;
+
+    // Convert scheduled start datetime-local → Unix timestamp (seconds)
+    const scheduledStartTime =
+      schedulingEnabled && scheduledStart
+        ? Math.floor(new Date(scheduledStart).getTime() / 1000)
+        : undefined;
 
     setLoading(true);
     setTxStage(TxStage.Building);
@@ -286,6 +335,7 @@ function NewStreamWizard() {
         token: selectedToken === CUSTOM_TOKEN_VALUE ? tokenAddress : selectedToken,
         autoRenew,
         autoRenewDurationSeconds: autoRenew && autoRenewDuration > 0 ? autoRenewDuration : undefined,
+        scheduledStartTime,
       });
 
       setTxStage(TxStage.Done);
@@ -304,6 +354,9 @@ function NewStreamWizard() {
       setShowAdvanced(false);
       setGasFee(null);
       setErrors({ recipient: "", amount: "", duration: "", endDate: "", cliffDate: "" });
+      setSchedulingEnabled(false);
+      setScheduledStart("");
+      setErrors({ recipient: "", amount: "", duration: "", endDate: "", cliffDate: "", scheduledStart: "" });
       setTouched({ recipient: false, amount: false });
       setDurationPickerKey((k) => k + 1);
       setTxStage(null);
@@ -357,8 +410,48 @@ function NewStreamWizard() {
     : true;
 
   return (
-    <main id="main-content" tabIndex={-1} className="min-h-screen bg-gray-900 text-white p-4 sm:p-8">
+    <main id="main-content" tabIndex={-1} className="min-h-screen bg-gray-900 text-white p-4 sm:p-8 pb-24 md:pb-8">
       <div className="max-w-lg mx-auto">
+        {/* Tab switcher */}
+        <div className="flex rounded-xl bg-gray-800 p-1 mb-8" role="tablist" aria-label="Create stream mode">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "single"}
+            onClick={() => setActiveTab("single")}
+            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 ${
+              activeTab === "single"
+                ? "bg-gray-700 text-white"
+                : "text-gray-400 hover:text-white"
+            }`}
+          >
+            Single Stream
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "batch"}
+            onClick={() => setActiveTab("batch")}
+            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 ${
+              activeTab === "batch"
+                ? "bg-gray-700 text-white"
+                : "text-gray-400 hover:text-white"
+            }`}
+          >
+            Batch Create
+          </button>
+        </div>
+
+        {/* Batch tab */}
+        {activeTab === "batch" && (
+          <div role="tabpanel" aria-label="Batch create">
+            <BatchCreateTab />
+          </div>
+        )}
+
+        {/* Single stream tab */}
+        {activeTab === "single" && (
+        <div role="tabpanel" aria-label="Single stream">
         <div className="mb-8">
           <div className="flex items-center justify-center gap-2 mb-6">
             {STEPS.map((s, i) => (
@@ -519,6 +612,30 @@ function NewStreamWizard() {
               />
             </div>
 
+            {/* Scheduling toggle */}
+            <SchedulingToggle
+              enabled={schedulingEnabled}
+              onToggle={(v) => {
+                setSchedulingEnabled(v);
+                if (!v) {
+                  setScheduledStart("");
+                  setErrors((prev) => ({ ...prev, scheduledStart: "" }));
+                }
+              }}
+              value={scheduledStart}
+              onChange={(v) => {
+                setScheduledStart(v);
+                setErrors((prev) => ({ ...prev, scheduledStart: validateScheduledStart(v) }));
+              }}
+              onBlur={() =>
+                setErrors((prev) => ({
+                  ...prev,
+                  scheduledStart: schedulingEnabled ? validateScheduledStart(scheduledStart) : "",
+                }))
+              }
+              error={errors.scheduledStart || undefined}
+            />
+
             {/* Optional end date */}
             <div>
               <label htmlFor="end-date" className="text-gray-200 text-sm font-medium block mb-2">
@@ -568,6 +685,15 @@ function NewStreamWizard() {
                 </p>
               )}
             </div>
+
+            {amount && duration > 0 && (
+              <VestingPreviewChart
+                amount={amount}
+                durationSeconds={duration}
+                cliffSeconds={cliffDate ? Math.max(0, Math.floor((new Date(cliffDate).getTime() - Date.now()) / 1000)) : undefined}
+                token={selectedToken === CUSTOM_TOKEN_VALUE ? "tokens" : selectedToken}
+              />
+            )}
 
             {amount && duration > 0 && (
               <FlowRatePreview amount={amount} durationSeconds={duration} />
@@ -733,6 +859,20 @@ function NewStreamWizard() {
                   })()}
                 </span>
               </div>
+              {schedulingEnabled && scheduledStart && (
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-400 text-sm">Scheduled Start</span>
+                  <span className="text-blue-300 font-mono text-sm">
+                    {new Date(scheduledStart).toLocaleString()}
+                  </span>
+                </div>
+              )}
+              {!schedulingEnabled && (
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-400 text-sm">Start</span>
+                  <span className="text-white font-mono text-sm">Immediately</span>
+                </div>
+              )}
               <div className="border-t border-gray-700 pt-4">
                 <FlowRatePreview amount={amount} durationSeconds={duration} />
               </div>
@@ -819,6 +959,8 @@ function NewStreamWizard() {
                 </div>
               );
             })()}
+            {/* Fee estimation — simulated pre-sign */}
+            <FeeEstimationPanel active={step === "review"} />
           </div>
         )}
 
@@ -854,6 +996,8 @@ function NewStreamWizard() {
             </button>
           )}
         </div>
+        </div>
+        )}
       </div>
     </main>
   );

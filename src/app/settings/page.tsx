@@ -36,17 +36,43 @@ const emptyForm: FormState = { id: "", name: "", address: "" };
 export default function SettingsPage() {
   const t = useTranslations("settings");
   const { addToast } = useToast();
-  const { withdrawThreshold, setWithdrawThreshold, language, setLanguage } = useSettings();
+  const {
+    withdrawThreshold,
+    setWithdrawThreshold,
+    language,
+    setLanguage,
+    defaultToken,
+    setDefaultToken,
+    defaultDurationSeconds,
+    setDefaultDurationSeconds,
+    defaultCliffDurationSeconds,
+    setDefaultCliffDurationSeconds,
+    preferredTheme,
+    setPreferredTheme,
+    resetStreamPreferences,
+  } = useSettings();
   const { address } = useWallet();
   const [thresholdInput, setThresholdInput] = useState(String(withdrawThreshold));
   const [thresholdError, setThresholdError] = useState("");
   const [showTwoFactorSetup, setShowTwoFactorSetup] = useState(false);
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+  
+  // Preferences
+  const [selectedToken, setSelectedToken] = useState(defaultToken);
+  const [durationInput, setDurationInput] = useState(String(defaultDurationSeconds));
+  const [cliffDurationInput, setCliffDurationInput] = useState(String(defaultCliffDurationSeconds));
 
   // Sync input when context hydrates from localStorage
   useEffect(() => {
     setThresholdInput(String(withdrawThreshold));
   }, [withdrawThreshold]);
+
+  // Sync preferences
+  useEffect(() => {
+    setSelectedToken(defaultToken);
+    setDurationInput(String(defaultDurationSeconds));
+    setCliffDurationInput(String(defaultCliffDurationSeconds));
+  }, [defaultToken, defaultDurationSeconds, defaultCliffDurationSeconds]);
   const [contacts, setContacts] = useState<AddressBookContact[]>([]);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [errors, setErrors] = useState({ name: "", address: "" });
@@ -195,6 +221,150 @@ export default function SettingsPage() {
               <option value="pt">{t("language_pt")}</option>
               <option value="es">{t("language_es")}</option>
             </select>
+          </div>
+        </div>
+
+        {/* Stream Creation Preferences */}
+        <div className="bg-gray-800 rounded-xl p-6 space-y-4 mb-8">
+          <div className="flex items-start justify-between">
+            <div>
+              <h2 className="text-lg font-semibold">Stream Preferences</h2>
+              <p className="text-gray-400 text-sm mt-1">
+                Set defaults for new stream creation
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                resetStreamPreferences();
+                addToast("Stream preferences reset to defaults", "info");
+              }}
+              className="text-gray-400 hover:text-gray-300 text-xs px-2 py-1 border border-gray-600 rounded transition-colors"
+            >
+              Reset
+            </button>
+          </div>
+
+          <div>
+            <label htmlFor="default-token" className="text-gray-200 text-sm font-medium block mb-1">
+              Default Token
+            </label>
+            <select
+              id="default-token"
+              value={selectedToken}
+              onChange={(e) => {
+                setSelectedToken(e.target.value);
+                setDefaultToken(e.target.value);
+              }}
+              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
+            >
+              <option value="USDC">USDC (USD Coin)</option>
+              <option value="XLM">XLM (Stellar Lumens)</option>
+              <option value="AQUA">AQUA (Aquarius)</option>
+              <option value="yXLM">yXLM (Yield XLM)</option>
+            </select>
+            <p className="text-gray-500 text-xs mt-1">Will be pre-selected when creating new streams</p>
+          </div>
+
+          <div>
+            <label htmlFor="default-duration" className="text-gray-200 text-sm font-medium block mb-1">
+              Default Duration (seconds, 0 = none)
+            </label>
+            <input
+              id="default-duration"
+              type="number"
+              min="0"
+              step="1"
+              value={durationInput}
+              onChange={(e) => setDurationInput(e.target.value)}
+              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
+            />
+            <p className="text-gray-500 text-xs mt-1">
+              {durationInput && durationInput !== "0" ? (
+                <>
+                  {(() => {
+                    const secs = parseInt(durationInput);
+                    if (secs >= 86400) {
+                      const days = Math.floor(secs / 86400);
+                      return `${days} day${days > 1 ? "s" : ""}`;
+                    }
+                    if (secs >= 3600) {
+                      const hours = Math.floor(secs / 3600);
+                      return `${hours} hour${hours > 1 ? "s" : ""}`;
+                    }
+                    const mins = Math.floor(secs / 60);
+                    return `${mins} minute${mins > 1 ? "s" : ""}`;
+                  })()}
+                </>
+              ) : (
+                "No default"
+              )}
+            </p>
+          </div>
+
+          <div>
+            <label htmlFor="default-cliff" className="text-gray-200 text-sm font-medium block mb-1">
+              Default Cliff Duration (seconds, 0 = none)
+            </label>
+            <input
+              id="default-cliff"
+              type="number"
+              min="0"
+              step="1"
+              value={cliffDurationInput}
+              onChange={(e) => setCliffDurationInput(e.target.value)}
+              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
+            />
+            <p className="text-gray-500 text-xs mt-1">
+              {cliffDurationInput && cliffDurationInput !== "0" ? (
+                <>
+                  {(() => {
+                    const secs = parseInt(cliffDurationInput);
+                    if (secs >= 86400) {
+                      const days = Math.floor(secs / 86400);
+                      return `${days} day${days > 1 ? "s" : ""}`;
+                    }
+                    if (secs >= 3600) {
+                      const hours = Math.floor(secs / 3600);
+                      return `${hours} hour${hours > 1 ? "s" : ""}`;
+                    }
+                    const mins = Math.floor(secs / 60);
+                    return `${mins} minute${mins > 1 ? "s" : ""}`;
+                  })()}
+                </>
+              ) : (
+                "No default"
+              )}
+            </p>
+          </div>
+
+          <div>
+            <label htmlFor="preferred-theme" className="text-gray-200 text-sm font-medium block mb-1">
+              Preferred Theme
+            </label>
+            <select
+              id="preferred-theme"
+              value={preferredTheme}
+              onChange={(e) => setPreferredTheme(e.target.value as "light" | "dark" | "system")}
+              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
+            >
+              <option value="system">System (follow device settings)</option>
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+            </select>
+          </div>
+
+          <div className="pt-3 flex gap-3">
+            <button
+              onClick={() => {
+                setDefaultToken(selectedToken);
+                setDefaultDurationSeconds(parseInt(durationInput) || 0);
+                setDefaultCliffDurationSeconds(parseInt(cliffDurationInput) || 0);
+                addToast("Stream preferences saved", "success");
+              }}
+              className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
+            >
+              Save Preferences
+            </button>
           </div>
         </div>
 
