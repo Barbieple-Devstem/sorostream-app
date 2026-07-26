@@ -455,6 +455,16 @@ export async function getFeeConfig(): Promise<FeeConfig> {
   return { basisPoints: 50 };
 }
 
+// ── Contract version ──────────────────────────────────────────────────────────
+
+/** Version reported by the deployed contract's `version` query instruction. */
+const MOCK_DEPLOYED_CONTRACT_VERSION = "1.2.0";
+
+/** Simulates calling the deployed SoroStream contract's `version` query. */
+export async function getDeployedContractVersion(): Promise<string> {
+  return MOCK_DEPLOYED_CONTRACT_VERSION;
+}
+
 /**
  * Break down a withdrawal into claimable amount, protocol fee, and net amount.
  *

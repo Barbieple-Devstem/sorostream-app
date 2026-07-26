@@ -22,6 +22,7 @@ import { validateEnv } from "@/src/lib/env";
 import { initAnalytics } from "@/src/lib/analytics";
 import WebVitalsReporter from "@/src/components/WebVitalsReporter";
 import { RpcUnreachableBanner } from "@/components/RpcHealthIndicator";
+import ContractVersionBanner from "@/components/ContractVersionBanner";
 
 validateEnv();
 initAnalytics();
@@ -85,6 +86,23 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <SettingsProvider>
           <WalletProvider>
             <BookmarksProvider>
+            <ThemeProvider>
+              <NetworkProvider>
+                <ToastProvider>
+                  <NotificationProvider>
+                    <GlobalShortcutsProvider>
+                      <NavHeader />
+                      <RpcUnreachableBanner />
+                      <ContractVersionBanner />
+                      <PageViewTracker />
+                      <WebVitalsReporter />
+                      {children}
+                      <OnboardingWizard />
+                    </GlobalShortcutsProvider>
+                  </NotificationProvider>
+                </ToastProvider>
+              </NetworkProvider>
+            </ThemeProvider>
               <ThemeProvider>
                 <NetworkProvider>
                   <ToastProvider>
