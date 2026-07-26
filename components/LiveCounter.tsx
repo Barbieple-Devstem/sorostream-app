@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import FiatDisplay from "@/components/FiatDisplay";
 import { sorostream } from "@/src/lib/sorostream";
 import { useRpcFetch } from "@/src/lib/useRpcFetch";
@@ -126,9 +126,42 @@ export default function LiveCounter({
     return () => clearInterval(interval);
   }, [baseline, flowRate, optimisticOverride]);
 
+  /** Format stroops as XLM with 7 decimal places. */
+  const formatXlm = (val: number) => (val / 10_000_000).toFixed(7);
+  const xlmAmount = claimable / 10_000_000;
+
+  // Locale-aware display: groups thousands, always shows 7 decimal places
+  const formatUSDC = (val: number) =>
+    (val / 10_000_000).toLocaleString(language, {
+      minimumFractionDigits: 7,
+      maximumFractionDigits: 7,
+    });
+
+  // Stable format for aria-label so screen readers get a consistent value
+  const formatUSDCFixed = (val: number) => (val / 10_000_000).toFixed(7);
+  const isOptimistic = optimisticOverride != null;
+  const displayValue = isOptimistic ? optimisticOverride : claimable;
+
   // Throttle the aria-label update so screen readers hear at most one
   // announcement every 30 seconds, even though the visual counter ticks
   // every second.
+  const isOptimistic = optimisticOverride != null;
+  const displayValue = isOptimistic ? optimisticOverride : claimable;
+
+  /** Format stroops as XLM with 7 decimal places. */
+  const formatXlm = (val: number) => (val / 10_000_000).toFixed(7);
+  const xlmAmount = claimable / 10_000_000;
+
+  // Locale-aware display: groups thousands, always shows 7 decimal places
+  const formatUSDC = (val: number) =>
+    (val / 10_000_000).toLocaleString(language, {
+      minimumFractionDigits: 7,
+      maximumFractionDigits: 7,
+    });
+
+  // Stable format for aria-label so screen readers get a consistent value
+  const formatUSDCFixed = useCallback((val: number) => (val / 10_000_000).toFixed(7), []);
+
   useEffect(() => {
     const isTest = typeof process !== "undefined" && process.env.NODE_ENV === "test";
     if (isTest) {
@@ -163,6 +196,7 @@ export default function LiveCounter({
     });
 
 
+  }, [displayValue, formatUSDCFixed]);
 
   return (
     <span

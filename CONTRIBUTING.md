@@ -29,6 +29,7 @@ npm run lint   # ESLint check
 | `NEXT_PUBLIC_STELLAR_NETWORK` | `testnet` or `mainnet` |
 | `NEXT_PUBLIC_CONTRACT_ID` | Deployed StreamContract address |
 | `NEXT_PUBLIC_RPC_URL` | Soroban RPC endpoint |
+| `NEXT_PUBLIC_ADMIN_ADDRESS` | Comma-separated list of admin wallet public keys for `/admin` |
 
 ## Project Structure
 
@@ -136,6 +137,7 @@ describe("Utility Function", () => {
 - **Framework**: Playwright
 - **Location**: `e2e/`
 - **Run**: `npm run test:e2e` or `npm run test:e2e:ui`
+- **Visual baselines**: update the create-stream dark-mode snapshot with `npx playwright test e2e/visual-regression.spec.ts --update-snapshots`
 
 ```bash
 # Run E2E tests
@@ -150,6 +152,7 @@ npm run test:e2e:ui
 - **Utility functions**: 100% coverage for core logic
 - **Components**: Test critical paths and user interactions
 - **New features**: At least one E2E test for the main user flow
+- **Visual regression**: create-stream form changes should include the dark-mode screenshot baseline update when the styling change is intentional
 
 ## Contributing Translations (i18n)
 
@@ -245,10 +248,10 @@ Before submitting your PR, ensure:
 - [ ] Components are mobile-responsive
 - [ ] Accessibility requirements are met (ARIA labels, keyboard navigation)
 - [ ] Translation keys are added/updated if UI text changed
+- [ ] If the create-stream form changed, the dark-mode visual baseline was reviewed and updated intentionally
 
 ## Getting Help
 
 - Check existing issues for similar problems
 - Review the codebase for examples of similar implementations
 - Ask questions in the PR description if something is unclear
-
