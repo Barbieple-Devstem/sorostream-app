@@ -385,3 +385,58 @@ export async function sweepTreasuryFees(token: string): Promise<{ txHash: string
   }
   return { txHash: `mock-sweep-tx-${Date.now()}` };
 }
+
+// ── Admin: contract state (pause, whitelist, fee rate) ──────────────────────
+
+export interface ContractState {
+  paused: boolean;
+  feeBasisPoints: number;
+  whitelistedTokens: string[];
+}
+
+const MOCK_CONTRACT_STATE: ContractState = {
+  paused: false,
+  feeBasisPoints: 50,
+  whitelistedTokens: ["USDC", "XLM", "AQUA"],
+};
+
+/** Fetch current contract-level admin state (simulates a contract query). */
+export async function getContractState(): Promise<ContractState> {
+  return {
+    ...MOCK_CONTRACT_STATE,
+    whitelistedTokens: [...MOCK_CONTRACT_STATE.whitelistedTokens],
+  };
+}
+
+/** Simulate a set_paused admin contract call. */
+export async function setContractPaused(paused: boolean): Promise<{ txHash: string }> {
+  MOCK_CONTRACT_STATE.paused = paused;
+  return { txHash: `mock-pause-tx-${Date.now()}` };
+}
+
+/** Simulate a set_fee_rate admin contract call. `basisPoints` must be 0-1000 (0-10%). */
+export async function setFeeRate(basisPoints: number): Promise<{ txHash: string }> {
+  if (!Number.isInteger(basisPoints) || basisPoints < 0 || basisPoints > 1000) {
+    throw new Error("Fee rate must be an integer between 0 and 1000 basis points.");
+  }
+  MOCK_CONTRACT_STATE.feeBasisPoints = basisPoints;
+  return { txHash: `mock-fee-tx-${Date.now()}` };
+}
+
+/** Simulate adding a token to the admin whitelist. */
+export async function addWhitelistToken(token: string): Promise<{ txHash: string }> {
+  const symbol = token.trim().toUpperCase();
+  if (!symbol) throw new Error("Token symbol is required.");
+  if (!MOCK_CONTRACT_STATE.whitelistedTokens.includes(symbol)) {
+    MOCK_CONTRACT_STATE.whitelistedTokens.push(symbol);
+  }
+  return { txHash: `mock-whitelist-add-tx-${Date.now()}` };
+}
+
+/** Simulate removing a token from the admin whitelist. */
+export async function removeWhitelistToken(token: string): Promise<{ txHash: string }> {
+  MOCK_CONTRACT_STATE.whitelistedTokens = MOCK_CONTRACT_STATE.whitelistedTokens.filter(
+    (t) => t !== token,
+  );
+  return { txHash: `mock-whitelist-remove-tx-${Date.now()}` };
+}
