@@ -126,10 +126,6 @@ export default function LiveCounter({
     return () => clearInterval(interval);
   }, [baseline, flowRate, optimisticOverride]);
 
-  /** Format stroops as XLM with 7 decimal places. */
-  const formatXlm = (val: number) => (val / 10_000_000).toFixed(7);
-  const xlmAmount = claimable / 10_000_000;
-
   // Locale-aware display: groups thousands, always shows 7 decimal places
   const formatUSDC = (val: number) =>
     (val / 10_000_000).toLocaleString(language, {
@@ -138,65 +134,36 @@ export default function LiveCounter({
     });
 
   // Stable format for aria-label so screen readers get a consistent value
-  const formatUSDCFixed = (val: number) => (val / 10_000_000).toFixed(7);
-  const isOptimistic = optimisticOverride != null;
-  const displayValue = isOptimistic ? optimisticOverride : claimable;
-
-  // Throttle the aria-label update so screen readers hear at most one
-  // announcement every 30 seconds, even though the visual counter ticks
-  // every second.
-  const isOptimistic = optimisticOverride != null;
-  const displayValue = isOptimistic ? optimisticOverride : claimable;
-
-  /** Format stroops as XLM with 7 decimal places. */
-  const formatXlm = (val: number) => (val / 10_000_000).toFixed(7);
-  const xlmAmount = claimable / 10_000_000;
-
-  // Locale-aware display: groups thousands, always shows 7 decimal places
-  const formatUSDC = (val: number) =>
-    (val / 10_000_000).toLocaleString(language, {
-      minimumFractionDigits: 7,
-      maximumFractionDigits: 7,
-    });
-
-  // Stable format for aria-label so screen readers get a consistent value
-  const formatUSDCFixed = useCallback((val: number) => (val / 10_000_000).toFixed(7), []);
+  const safeFormatUSDCFixed = useCallback(
+    (val: number) => (val / 10_000_000).toFixed(7),
+    []
+  );
 
   useEffect(() => {
-    const isTest = typeof process !== "undefined" && process.env.NODE_ENV === "test";
+    const isTest =
+      typeof process !== "undefined" && process.env.NODE_ENV === "test";
     if (isTest) {
-      setAriaLabel(formatUSDCFixed(displayValue));
+      setAriaLabel(safeFormatUSDCFixed(displayValue));
       return;
     }
 
     const now = Date.now();
     const timeSinceLast = now - lastAnnounceTimeRef.current;
-    if (timeSinceLast >= ANNOUNCE_THROTTLE_MS || lastAnnounceTimeRef.current === 0) {
+    if (
+      timeSinceLast >= ANNOUNCE_THROTTLE_MS ||
+      lastAnnounceTimeRef.current === 0
+    ) {
       lastAnnounceTimeRef.current = now;
-      setAriaLabel(formatUSDCFixed(displayValue));
+      setAriaLabel(safeFormatUSDCFixed(displayValue));
       return;
     }
     const remaining = ANNOUNCE_THROTTLE_MS - timeSinceLast;
     const timer = setTimeout(() => {
       lastAnnounceTimeRef.current = Date.now();
-      setAriaLabel(formatUSDCFixed(displayValue));
+      setAriaLabel(safeFormatUSDCFixed(displayValue));
     }, remaining);
     return () => clearTimeout(timer);
-  }, [displayValue]);
-
-  /** Format stroops as XLM with 7 decimal places. */
-  const formatXlm = (val: number) => (val / 10_000_000).toFixed(7);
-  const xlmAmount = claimable / 10_000_000;
-
-  // Locale-aware display: groups thousands, always shows 7 decimal places
-  const formatUSDC = (val: number) =>
-    (val / 10_000_000).toLocaleString(language, {
-      minimumFractionDigits: 7,
-      maximumFractionDigits: 7,
-    });
-
-
-  }, [displayValue, formatUSDCFixed]);
+  }, [displayValue, safeFormatUSDCFixed]);
 
   return (
     <span
@@ -204,7 +171,10 @@ export default function LiveCounter({
       role="status"
       aria-live="polite"
       aria-atomic="true"
-      aria-label={t("claimable", { val: ariaLabel }) + (isOptimistic ? t("pending_confirmation") : "")}
+      aria-label={
+        t("claimable", { val: ariaLabel }) +
+        (isOptimistic ? t("pending_confirmation") : "")
+      }
     >
       <span className={isOptimistic ? "text-yellow-400" : "text-green-600"}>
         {formatUSDC(displayValue)} USDC

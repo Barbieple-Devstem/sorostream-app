@@ -233,8 +233,6 @@ export default function AdminPage() {
     setStreamPage(1);
   }, [statusFilter, tokenFilter]);
 
-  // An admin is the connected wallet matching the configured admin address.
-  const isAdmin = Boolean(ADMIN_WALLET && address && address === ADMIN_WALLET);
   // An admin is any connected wallet that matches one of the configured
   // client-side addresses.
   const isAdmin = Boolean(address && ADMIN_ADDRESSES.includes(address));

@@ -24,7 +24,11 @@
     "amount_label": "Cantidad (USDC)",
     "amount_placeholder": "100",
     "duration_label": "Duración",
-    "submit": "Crear Flujo"
+    "submit": "Crear Flujo",
+    "cliff_label": "Fecha de Carecia",
+    "cliff_optional": "(opcional)",
+    "end_date_label": "Fecha de Fin",
+    "vesting_preview": "Vista Previa de Adquisición"
   },
   "stream_detail": {
     "title": "Flujo #{id}",

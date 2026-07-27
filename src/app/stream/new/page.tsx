@@ -1,6 +1,5 @@
 "use client";
 import { useState, useEffect, useRef, Suspense } from "react";
-import { useState, Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import DurationPicker from "@/components/DurationPicker";
 import FlowRatePreview from "@/components/FlowRatePreview";
@@ -16,7 +15,6 @@ import { useTranslations } from "@/src/lib/i18n";
 import { trackEvent } from "@/src/lib/analytics";
 import { sorostream, getCollateralConfig, checkIsNewSender, calcCollateral, getGasFeeEstimate, type GasFeeEstimate } from "@/src/lib/sorostream";
 import { useWallet } from "@/src/context/WalletContext";
-import { sorostream } from "@/src/lib/sorostream";
 import { usePreferences } from "@/src/context/PreferencesContext";
 
 type PageTab = "single" | "batch";
@@ -139,8 +137,6 @@ function NewStreamWizard() {
   const [selectedToken, setSelectedToken] = useState<string>(
     SUPPORTED_TOKENS.find((t) => t.symbol === defaultToken)?.symbol ?? SUPPORTED_TOKENS[0].symbol,
   );
-  const [duration, setDuration] = useState(initialDuration);
-  const [selectedToken, setSelectedToken] = useState<string>(settings.defaultToken || SUPPORTED_TOKENS[0].symbol);
   const [customTokenAddress, setCustomTokenAddress] = useState("");
   const [customTokenError, setCustomTokenError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -353,10 +349,9 @@ function NewStreamWizard() {
       setAutoRenewDuration(0);
       setShowAdvanced(false);
       setGasFee(null);
-      setErrors({ recipient: "", amount: "", duration: "", endDate: "", cliffDate: "" });
+      setErrors({ recipient: "", amount: "", duration: "", endDate: "", cliffDate: "", scheduledStart: "" });
       setSchedulingEnabled(false);
       setScheduledStart("");
-      setErrors({ recipient: "", amount: "", duration: "", endDate: "", cliffDate: "", scheduledStart: "" });
       setTouched({ recipient: false, amount: false });
       setDurationPickerKey((k) => k + 1);
       setTxStage(null);
@@ -570,10 +565,18 @@ function NewStreamWizard() {
                 }}
                 onPaste={(e) => {
                   const pasted = e.clipboardData.getData("text");
-                  if (!/^\d*\.?\d*$/.test(pasted.trim())) {
+                  // Strip non-numeric characters, keeping digits and at most one decimal point
+                  let cleaned = pasted.replace(/[^0-9.]/g, "");
+                  const dotIndex = cleaned.indexOf(".");
+                  if (dotIndex !== -1) {
+                    cleaned = cleaned.slice(0, dotIndex + 1) + cleaned.slice(dotIndex + 1).replace(/\./g, "");
+                  }
+                  if (cleaned !== pasted) {
                     e.preventDefault();
-                    setTouched((prev) => ({ ...prev, amount: true }));
-                    setErrors((prev) => ({ ...prev, amount: "Amount must contain only numbers." }));
+                    setAmount(cleaned);
+                    if (touched.amount) {
+                      setErrors((prev) => ({ ...prev, amount: validateAmount(cleaned) }));
+                    }
                   }
                 }}
                 onBlur={handleAmountBlur}
