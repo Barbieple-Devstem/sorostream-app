@@ -26,14 +26,17 @@ import {
   claimableNow,
   getMockStream,
   toStroops,
+  getStreamsForWallet,
 } from "@/src/lib/sorostream";
 import { useToast } from "@/src/lib/toast";
 import StreamQrModal from "@/components/StreamQrModal";
 import WithdrawConfirmModal from "@/components/WithdrawConfirmModal";
 import StartCountdownTimer from "@/components/StartCountdownTimer";
 import EmbedWidgetModal from "@/components/EmbedWidgetModal";
+import StreamComparisonModal from "@/components/StreamComparisonModal";
 import { useSettings } from "@/src/context/SettingsContext";
 import { formatStellarAmount } from "@/src/lib/sorostream";
+import { useTranslations } from "@/src/lib/i18n";
 import { useKeyboardShortcuts, type ShortcutGroup } from "@/src/lib/useKeyboardShortcuts";
 import { useBookmarks } from "@/src/context/BookmarksContext";
 import { useWallet } from "@/src/context/WalletContext";
@@ -86,6 +89,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
   const { withdrawThreshold } = useSettings();
   const { address, refetchBalance } = useWallet();
   const { isBookmarked, toggleBookmark } = useBookmarks();
+  const t = useTranslations("stream_detail");
   const [withdrawConfirmAmount, setWithdrawConfirmAmount] = useState<string | null>(null);
 
   // ── Stream data ────────────────────────────────────────────────────────────
@@ -133,6 +137,10 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  // ── Stream comparison modal state ──────────────────────────────────────────
+  const [showComparisonModal, setShowComparisonModal] = useState(false);
+  const [allStreams, setAllStreams] = useState<StreamData[]>([]);
 
   // ── Optimistic UI state ────────────────────────────────────────────────────
   /**
@@ -246,6 +254,26 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
       cancelled = true;
     };
   }, [params.id, fetchKey]);
+
+  // ── Load all streams for comparison modal ──────────────────────────────────
+  useEffect(() => {
+    if (!address) {
+      setAllStreams([]);
+      return;
+    }
+
+    async function loadAllStreams() {
+      try {
+        const streams = await getStreamsForWallet(address);
+        setAllStreams(streams);
+      } catch (err) {
+        console.error("Failed to load streams for comparison", err);
+        // Silently fail — comparison feature is optional
+      }
+    }
+
+    void loadAllStreams();
+  }, [address]);
 
   const handleRetry = useCallback(() => {
     setRouteError(null);
@@ -934,6 +962,37 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
             Embed Widget
           </button>
 
+          {/* Compare streams */}
+          <button
+            onClick={() => setShowComparisonModal(true)}
+            disabled={allStreams.length <= 1}
+            className="w-full border border-gray-600 text-gray-300 py-2 rounded-lg text-sm hover:bg-gray-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            title={allStreams.length <= 1 ? t("compare_button_tooltip") : ""}
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="9" cy="5" r="1" />
+              <circle cx="9" cy="19" r="1" />
+              <circle cx="20" cy="5" r="1" />
+              <circle cx="20" cy="19" r="1" />
+              <path d="M9 6v6" />
+              <path d="M20 6v6" />
+              <path d="M9 18v-6" />
+              <path d="M20 18v-6" />
+            </svg>
+            {t("compare")}
+          </button>
+
           {/* Top-up form */}
           {showTopUp && (
             <div className="space-y-2">
@@ -1062,6 +1121,15 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
         <EmbedWidgetModal
           streamId={stream.id}
           onClose={() => setShowEmbedModal(false)}
+        />
+      )}
+
+      {stream && (
+        <StreamComparisonModal
+          open={showComparisonModal}
+          onClose={() => setShowComparisonModal(false)}
+          currentStream={stream}
+          availableStreams={allStreams}
         />
       )}
     </main>
