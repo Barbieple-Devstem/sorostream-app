@@ -18,6 +18,7 @@ import { useBookmarks } from "@/src/context/BookmarksContext";
 import { useWallet } from "@/src/context/WalletContext";
 import ArchiveBanner from "@/components/ArchiveBanner";
 import PortfolioChart from "@/components/PortfolioChart";
+import { getAllTags, getTagMap } from "@/src/lib/streamTags";
 
 type DashboardState = "loading" | "filtered-empty" | "empty" | "ready";
 
@@ -49,6 +50,9 @@ function DashboardContent() {
   const [tokenFilter, setTokenFilter] = useState(searchParams.get("token") || "");
   const [search, setSearch] = useState(searchParams.get("search") || "");
   const [bookmarksOnly, setBookmarksOnly] = useState(false);
+  // Tag filter — multiselect, client-side only
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [allTags, setAllTags] = useState<string[]>([]);
 
   // Sort state — persisted to localStorage via a lazy initializer.
   // Reads synchronously on mount so the saved preference is applied immediately
@@ -129,7 +133,13 @@ function DashboardContent() {
     return Array.from(tokens).sort();
   }, [streams]);
 
+  // Refresh all tags from localStorage whenever streams change
+  useEffect(() => {
+    setAllTags(getAllTags());
+  }, [streams]);
+
   const filtered = useMemo(() => {
+    const tagMap = selectedTags.length > 0 ? getTagMap() : null;
     return streams.filter((s) => {
       if (bookmarksOnly && !bookmarkedIds.has(s.id)) return false;
       if (statusFilter && s.status !== statusFilter) return false;
@@ -142,9 +152,14 @@ function DashboardContent() {
           s.id.toLowerCase().includes(q);
         if (!matchesSearch) return false;
       }
+      if (tagMap && selectedTags.length > 0) {
+        const streamTags = tagMap[s.id] ?? [];
+        const hasAllTags = selectedTags.every((t) => streamTags.includes(t));
+        if (!hasAllTags) return false;
+      }
       return true;
     });
-  }, [streams, statusFilter, tokenFilter, search, bookmarksOnly, bookmarkedIds]);
+  }, [streams, statusFilter, tokenFilter, search, bookmarksOnly, bookmarkedIds, selectedTags]);
 
   // Sort filtered streams, pinning bookmarks first, then by the chosen sort field.
   const sortedFiltered = useMemo(() => {
@@ -189,9 +204,10 @@ function DashboardContent() {
     setTokenFilter("");
     setSearch("");
     setBookmarksOnly(false);
+    setSelectedTags([]);
   };
 
-  const hasActiveFilters = statusFilter || tokenFilter || search.trim() || bookmarksOnly;
+  const hasActiveFilters = statusFilter || tokenFilter || search.trim() || bookmarksOnly || selectedTags.length > 0;
 
   const state: DashboardState = loading
     ? "loading"
@@ -354,6 +370,33 @@ function DashboardContent() {
                   Bookmarks
                 </button>
 
+                {/* Tag filter — shown only when tags exist */}
+                {allTags.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 items-center">
+                    <span className="text-xs text-gray-400">Tags:</span>
+                    {allTags.map((tag) => (
+                      <button
+                        key={tag}
+                        onClick={() =>
+                          setSelectedTags((prev) =>
+                            prev.includes(tag)
+                              ? prev.filter((t) => t !== tag)
+                              : [...prev, tag],
+                          )
+                        }
+                        aria-pressed={selectedTags.includes(tag)}
+                        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 ${
+                          selectedTags.includes(tag)
+                            ? "bg-green-900/60 border-green-600 text-green-300"
+                            : "bg-gray-800 border-gray-700 text-gray-400 hover:border-green-700 hover:text-green-300"
+                        }`}
+                      >
+                        {tag}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 {/* Search Input */}
                 <input
                   ref={searchRef}
@@ -397,6 +440,11 @@ function DashboardContent() {
                   {bookmarksOnly && (
                     <span className="bg-yellow-900/30 text-yellow-400 px-2 py-1 rounded">
                       ★ Bookmarks only
+                    </span>
+                  )}
+                  {selectedTags.length > 0 && (
+                    <span className="bg-green-900/30 text-green-400 px-2 py-1 rounded">
+                      Tags: {selectedTags.join(", ")}
                     </span>
                   )}
                 </div>

@@ -43,6 +43,7 @@ import {
   generateCopyLinkUrl
 } from "@/src/lib/share";
 import StreamShareButtons from "@/components/StreamShareButtons";
+import StreamTagEditor from "@/components/StreamTagEditor";
 
 /** Grace period in seconds before a cancel is submitted on-chain. */
 const CANCEL_GRACE_SECONDS = 5;
@@ -974,6 +975,9 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
           >
             {showTopUp ? "Cancel Top-up" : "Top Up Stream"}
           </button>
+
+          {/* Tags */}
+          <StreamTagEditor streamId={stream.id} />
 
           {/* Transaction history */}
           <StreamErrorBoundary section="Transaction History" resetKey={stream.id}>
