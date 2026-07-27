@@ -224,6 +224,21 @@ export default function SettingsPage() {
           </div>
         </div>
 
+        {/* Notification Preferences */}
+        <Link
+          href="/settings/notifications"
+          className="block bg-gray-800 rounded-xl p-6 mb-8 hover:bg-gray-750 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
+        >
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold">Notification Preferences</h2>
+              <p className="text-gray-400 text-sm mt-1">
+                Configure browser push and email alerts for stream events.
+              </p>
+            </div>
+            <span className="text-green-400 text-sm shrink-0">Manage →</span>
+          </div>
+        </Link>
         {/* Stream Creation Preferences */}
         <div className="bg-gray-800 rounded-xl p-6 space-y-4 mb-8">
           <div className="flex items-start justify-between">

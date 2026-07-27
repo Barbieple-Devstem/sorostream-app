@@ -1,4 +1,5 @@
 "use client";
+import { useState, useEffect, Suspense } from "react";
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import DurationPicker from "@/components/DurationPicker";
@@ -13,8 +14,12 @@ import BatchCreateTab from "@/components/BatchCreateTab";
 import { SkeletonForm } from "@/components/Skeleton";
 import { useTranslations } from "@/src/lib/i18n";
 import { trackEvent } from "@/src/lib/analytics";
+import { sorostream, getFeeConfig, calcWithdrawBreakdown } from "@/src/lib/sorostream";
+import { useWallet } from "@/src/context/WalletContext";
 import { sorostream, getCollateralConfig, checkIsNewSender, calcCollateral, getGasFeeEstimate, type GasFeeEstimate } from "@/src/lib/sorostream";
 import { useWallet } from "@/src/context/WalletContext";
+import { sorostream } from "@/src/lib/sorostream";
+import { readDraft, useFormPersist } from "@/src/lib/useFormPersist";
 import { usePreferences } from "@/src/context/PreferencesContext";
 
 type PageTab = "single" | "batch";
@@ -114,16 +119,28 @@ function NewStreamWizard() {
   const amountParam = searchParams.get("amount");
   const durationParam = searchParams.get("duration");
 
-  const initialRecipient =
-    recipientParam && /^G[A-Z2-7]{55}$/.test(recipientParam)
-      ? recipientParam
-      : "";
+  // ----- sessionStorage draft -----
+  // Read once before any useState initialisation so we can use draft values
+  // as initial state. URL query params take priority over the draft.
+  const draft = readDraft();
+
+  const initialRecipient = (() => {
+    if (recipientParam && /^G[A-Z2-7]{55}$/.test(recipientParam)) return recipientParam;
+    return draft?.recipient ?? "";
+  })();
   const initialAmount = (() => {
-    if (!amountParam) return "";
-    const num = parseFloat(amountParam);
-    return !isNaN(num) && num > 0 ? amountParam : "";
+    if (amountParam) {
+      const num = parseFloat(amountParam);
+      if (!isNaN(num) && num > 0) return amountParam;
+    }
+    return draft?.amount ?? "";
   })();
   const initialDuration = (() => {
+    if (durationParam) {
+      const num = parseFloat(durationParam);
+      if (!isNaN(num) && num > 0) return Math.round(num);
+    }
+    return draft?.duration ?? 0;
     if (!durationParam) return settings.defaultDurationSeconds;
     const num = parseFloat(durationParam);
     return !isNaN(num) && num > 0 ? Math.round(num) : settings.defaultDurationSeconds;
@@ -137,6 +154,12 @@ function NewStreamWizard() {
   const [selectedToken, setSelectedToken] = useState<string>(
     SUPPORTED_TOKENS.find((t) => t.symbol === defaultToken)?.symbol ?? SUPPORTED_TOKENS[0].symbol,
   );
+  const [duration, setDuration] = useState(initialDuration);
+  const [selectedToken, setSelectedToken] = useState<string>(
+    draft?.selectedToken ?? SUPPORTED_TOKENS[0].symbol,
+  );
+  const [customTokenAddress, setCustomTokenAddress] = useState(draft?.customTokenAddress ?? "");
+  const [selectedToken, setSelectedToken] = useState<string>(settings.defaultToken || SUPPORTED_TOKENS[0].symbol);
   const [customTokenAddress, setCustomTokenAddress] = useState("");
   const [customTokenError, setCustomTokenError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -145,6 +168,33 @@ function NewStreamWizard() {
   const [durationPickerKey, setDurationPickerKey] = useState(0);
 
   // Optional end date & cliff date (ISO datetime-local value)
+  const [endDate, setEndDate] = useState(draft?.endDate ?? "");
+  const [cliffDate, setCliffDate] = useState(draft?.cliffDate ?? "");
+
+  // ----- persistence helpers -----
+  const { saveDraft, clearDraft } = useFormPersist();
+
+  /** Helper: persist the entire current form state after any field change. */
+  function persist(overrides: Partial<{
+    recipient: string;
+    amount: string;
+    duration: number;
+    selectedToken: string;
+    customTokenAddress: string;
+    endDate: string;
+    cliffDate: string;
+  }> = {}) {
+    saveDraft({
+      recipient,
+      amount,
+      duration,
+      selectedToken,
+      customTokenAddress,
+      endDate,
+      cliffDate,
+      ...overrides,
+    });
+  }
   const [endDate, setEndDate] = useState("");
   // Pre-fill cliff from preference (convert seconds offset to a future datetime-local string)
   const [cliffDate, setCliffDate] = useState(() => {
@@ -163,6 +213,34 @@ function NewStreamWizard() {
   const [txFailedStage, setTxFailedStage] = useState<TxStage | undefined>(undefined);
   const [txError, setTxError] = useState<string | undefined>(undefined);
 
+  function handleTemplateSelect(
+    seconds: number,
+    suggestedAmount?: string,
+    recipientOverride?: string,
+    tokenOverride?: string,
+    cliffDateOverride?: string,
+  ) {
+  // Protocol fee state for review step
+  const [feeBasisPoints, setFeeBasisPoints] = useState<number>(0);
+  const [feeLoading, setFeeLoading] = useState(false);
+
+  // Load protocol fee config whenever we enter the review step
+  useEffect(() => {
+    if (step !== "review") return;
+    let active = true;
+    setFeeLoading(true);
+    getFeeConfig()
+      .then(({ basisPoints }) => {
+        if (active) setFeeBasisPoints(basisPoints);
+      })
+      .catch(() => {
+        if (active) setFeeBasisPoints(0);
+      })
+      .finally(() => {
+        if (active) setFeeLoading(false);
+      });
+    return () => { active = false; };
+  }, [step]);
   // Auto-renewal settings
   const [autoRenew, setAutoRenew] = useState(false);
   const [autoRenewDuration, setAutoRenewDuration] = useState(0); // 0 = same as stream duration
@@ -225,6 +303,11 @@ function NewStreamWizard() {
   function handleTemplateSelect(seconds: number, suggestedAmount?: string, recipientOverride?: string) {
     setDuration(seconds);
     setErrors((prev) => ({ ...prev, duration: "" }));
+    const newAmount = suggestedAmount ?? amount;
+    const newRecipient =
+      recipientOverride && /^G[A-Z2-7]{55}$/.test(recipientOverride)
+        ? recipientOverride
+        : recipient;
     if (suggestedAmount) {
       setAmount(suggestedAmount);
       setErrors((prev) => ({ ...prev, amount: "" }));
@@ -233,6 +316,14 @@ function NewStreamWizard() {
       setRecipient(recipientOverride);
       setErrors((prev) => ({ ...prev, recipient: "" }));
     }
+    if (tokenOverride && SUPPORTED_TOKENS.some((t) => t.symbol === tokenOverride)) {
+      setSelectedToken(tokenOverride);
+    }
+    if (cliffDateOverride) {
+      setCliffDate(cliffDateOverride);
+      setErrors((prev) => ({ ...prev, cliffDate: validateCliffDate(cliffDateOverride, endDate) }));
+    }
+    persist({ duration: seconds, amount: newAmount, recipient: newRecipient });
   }
 
   function handleRecipientBlur() {
@@ -340,6 +431,9 @@ function NewStreamWizard() {
       // Auto-close after 2 seconds, then redirect
       await new Promise((r) => setTimeout(r, 2000));
 
+      // Clear persisted draft on successful creation
+      clearDraft();
+
       setRecipient("");
       setAmount("");
       setDuration(0);
@@ -383,7 +477,7 @@ function NewStreamWizard() {
               {txFailedStage && (
                 <button
                   type="button"
-                  onClick={() => { setLoading(false); setTxStage(null); setTxFailedStage(undefined); setTxError(undefined); }}
+                  onClick={() => { setLoading(false); setTxStage(null); setTxFailedStage(undefined); setTxError(undefined); clearDraft(); }}
                   className="w-full border border-gray-600 text-gray-300 py-3 rounded-lg font-medium hover:bg-gray-700 transition-colors"
                 >
                   Back to Form
@@ -486,6 +580,7 @@ function NewStreamWizard() {
                 onChange={(v) => {
                   setRecipient(v);
                   setErrors((prev) => ({ ...prev, recipient: "" }));
+                  persist({ recipient: v });
                 }}
                 onBlur={handleRecipientBlur}
                 placeholder={t("recipient_placeholder")}
@@ -515,6 +610,7 @@ function NewStreamWizard() {
                 onChange={(e) => {
                   setSelectedToken(e.target.value);
                   setCustomTokenError("");
+                  persist({ selectedToken: e.target.value });
                 }}
                 className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-3 text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
               >
@@ -531,7 +627,7 @@ function NewStreamWizard() {
                     id="custom-token-address"
                     type="text"
                     value={customTokenAddress}
-                    onChange={(e) => { setCustomTokenAddress(e.target.value); setCustomTokenError(""); }}
+                    onChange={(e) => { setCustomTokenAddress(e.target.value); setCustomTokenError(""); persist({ customTokenAddress: e.target.value }); }}
                     placeholder="Contract address (e.g. C…)"
                     className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-3 text-white text-sm font-mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
                     aria-label="Custom token contract address"
@@ -562,6 +658,7 @@ function NewStreamWizard() {
                   } else {
                     setErrors((prev) => ({ ...prev, amount: "" }));
                   }
+                  persist({ amount: val });
                 }}
                 onPaste={(e) => {
                   const pasted = e.clipboardData.getData("text");
@@ -600,6 +697,8 @@ function NewStreamWizard() {
               currentRecipient={recipient}
               currentAmount={amount}
               currentDuration={duration}
+              currentToken={selectedToken !== CUSTOM_TOKEN_VALUE ? selectedToken : undefined}
+              currentCliffDate={cliffDate}
             />
 
             <div>
@@ -610,6 +709,7 @@ function NewStreamWizard() {
                 onChange={(s) => {
                   setDuration(s);
                   if (s > 0) setErrors((prev) => ({ ...prev, duration: "" }));
+                  persist({ duration: s });
                 }}
                 error={errors.duration || undefined}
               />
@@ -651,6 +751,7 @@ function NewStreamWizard() {
                 onChange={(e) => {
                   setEndDate(e.target.value);
                   setErrors((prev) => ({ ...prev, endDate: validateEndDate(e.target.value) }));
+                  persist({ endDate: e.target.value });
                 }}
                 onBlur={() => setErrors((prev) => ({ ...prev, endDate: validateEndDate(endDate) }))}
                 className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-3 text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
@@ -676,6 +777,7 @@ function NewStreamWizard() {
                 onChange={(e) => {
                   setCliffDate(e.target.value);
                   setErrors((prev) => ({ ...prev, cliffDate: validateCliffDate(e.target.value, endDate) }));
+                  persist({ cliffDate: e.target.value });
                 }}
                 onBlur={() => setErrors((prev) => ({ ...prev, cliffDate: validateCliffDate(cliffDate, endDate) }))}
                 className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-3 text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
@@ -826,10 +928,23 @@ function NewStreamWizard() {
         {step === "review" && (
           <div className="space-y-6">
             <div className="bg-gray-800 rounded-xl p-5 space-y-4 border border-gray-700">
-              <div className="flex justify-between items-center">
-                <span className="text-gray-400 text-sm">Recipient</span>
-                <span className="text-white font-mono text-sm">{recipient}</span>
+              {/* Sender */}
+              <div className="flex justify-between items-start">
+                <span className="text-gray-400 text-sm">Sender</span>
+                <span className="text-white font-mono text-xs text-right max-w-[60%] break-all">
+                  {address ?? "—"}
+                </span>
               </div>
+
+              {/* Recipient */}
+              <div className="flex justify-between items-start">
+                <span className="text-gray-400 text-sm">Recipient</span>
+                <span className="text-white font-mono text-xs text-right max-w-[60%] break-all">
+                  {recipient}
+                </span>
+              </div>
+
+              {/* Token */}
               <div className="flex justify-between items-center">
                 <span className="text-gray-400 text-sm">Token</span>
                 <span className="text-white font-mono text-sm">
@@ -838,12 +953,16 @@ function NewStreamWizard() {
                     : selectedToken}
                 </span>
               </div>
+
+              {/* Total amount */}
               <div className="flex justify-between items-center">
-                <span className="text-gray-400 text-sm">Amount</span>
+                <span className="text-gray-400 text-sm">Total amount</span>
                 <span className="text-white font-mono text-sm">
                   {amount} {selectedToken === CUSTOM_TOKEN_VALUE ? "tokens" : selectedToken}
                 </span>
               </div>
+
+              {/* Duration */}
               <div className="flex justify-between items-center">
                 <span className="text-gray-400 text-sm">Duration</span>
                 <span className="text-white font-mono text-sm">
@@ -862,6 +981,64 @@ function NewStreamWizard() {
                   })()}
                 </span>
               </div>
+
+              {/* Start / End dates */}
+              {(() => {
+                const startDate = new Date();
+                const endDate = new Date(startDate.getTime() + duration * 1000);
+                return (
+                  <>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-400 text-sm">Start date</span>
+                      <span className="text-white font-mono text-sm">
+                        {startDate.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-400 text-sm">End date</span>
+                      <span className="text-white font-mono text-sm">
+                        {endDate.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                      </span>
+                    </div>
+                  </>
+                );
+              })()}
+
+              {/* Fee breakdown */}
+              <div className="border-t border-gray-700 pt-4 space-y-3">
+                {feeLoading ? (
+                  <p className="text-gray-400 text-xs text-center">Loading fee info…</p>
+                ) : (
+                  (() => {
+                    const amountNum = parseFloat(amount) || 0;
+                    const amountStroops = Math.round(amountNum * 10_000_000);
+                    const { fee, net, feePercent } = calcWithdrawBreakdown(amountStroops, feeBasisPoints);
+                    const feeDisplay = (fee / 10_000_000).toFixed(7).replace(/\.?0+$/, "") || "0";
+                    const netDisplay = (net / 10_000_000).toFixed(7).replace(/\.?0+$/, "");
+                    const tokenLabel = selectedToken === CUSTOM_TOKEN_VALUE ? "tokens" : selectedToken;
+                    return (
+                      <>
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-400 text-sm">
+                            Protocol fee{" "}
+                            <span className="text-gray-500 text-xs">({feePercent}%)</span>
+                          </span>
+                          <span className="text-yellow-400 font-mono text-sm" data-testid="protocol-fee">
+                            {feeDisplay} {tokenLabel}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-400 text-sm">Net to recipient</span>
+                          <span className="text-green-400 font-mono text-sm font-semibold" data-testid="net-amount">
+                            {netDisplay} {tokenLabel}
+                          </span>
+                        </div>
+                      </>
+                    );
+                  })()
+                )}
+              </div>
+
               {schedulingEnabled && scheduledStart && (
                 <div className="flex justify-between items-center">
                   <span className="text-gray-400 text-sm">Scheduled Start</span>
@@ -993,9 +1170,26 @@ function NewStreamWizard() {
               type="button"
               onClick={handleCreateStream}
               disabled={loading}
-              className="flex-1 bg-green-700 text-white py-3 rounded-lg font-medium hover:bg-green-800 disabled:opacity-50 transition-colors"
+              aria-label="Confirm and sign transaction"
+              className="flex-1 bg-green-700 text-white py-3 rounded-lg font-medium hover:bg-green-800 disabled:opacity-50 transition-colors inline-flex items-center justify-center gap-2"
             >
-              {t("submit")}
+              {loading ? (
+                <>
+                  <svg
+                    className="animate-spin h-4 w-4"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                  </svg>
+                  Waiting for wallet…
+                </>
+              ) : (
+                "Confirm and Sign"
+              )}
             </button>
           )}
         </div>

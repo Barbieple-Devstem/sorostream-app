@@ -13,6 +13,8 @@ import { useTranslations } from "@/src/lib/i18n";
 import CopyButton from "@/components/CopyButton";
 import { trackEvent } from "@/src/lib/analytics";
 import { useWallet } from "@/src/context/WalletContext";
+import FreighterInstallPrompt from "@/components/FreighterInstallPrompt";
+import { isFreighterInstalled } from "@/src/lib/freighter";
 
 interface WalletConnectProps {
   onConnect?: (publicKey: string, walletType: WalletType) => void;
@@ -41,6 +43,43 @@ export default function WalletConnect({ onConnect, compact = false }: WalletConn
   const [adapter, setAdapter] = useState<WalletAdapter | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // ── Freighter extension detection ──────────────────────────────────────
+  // Start as `null` (unknown) so we don't flash the install prompt during SSR
+  // or before the first check completes. Once determined, it stays stable
+  // unless the user installs the extension while the page is open (we poll
+  // every 2 s for that case).
+  const [freighterPresent, setFreighterPresent] = useState<boolean | null>(null);
+  const freighterCheckRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function check() {
+      const present = await isFreighterInstalled();
+      if (!cancelled) {
+        setFreighterPresent(present);
+        // Once installed, stop polling — no need to keep checking.
+        if (present && freighterCheckRef.current !== null) {
+          clearInterval(freighterCheckRef.current);
+          freighterCheckRef.current = null;
+        }
+      }
+    }
+
+    // Run immediately, then poll every 2 s so the CTA swaps as soon as the
+    // user finishes the extension install without requiring a manual refresh.
+    check();
+    freighterCheckRef.current = setInterval(check, 2000);
+
+    return () => {
+      cancelled = true;
+      if (freighterCheckRef.current !== null) {
+        clearInterval(freighterCheckRef.current);
+        freighterCheckRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!dropdownOpen) return;
@@ -175,6 +214,15 @@ export default function WalletConnect({ onConnect, compact = false }: WalletConn
 
   // Compact mode: disconnected state renders as a dropdown button for use in the nav header
   if (compact && !publicKey) {
+    // Show install prompt while we know Freighter is absent.
+    // While still checking (null) we render the normal Connect button so there
+    // is no flash of the install prompt on first paint.
+    if (freighterPresent === false) {
+      return (
+        <FreighterInstallPrompt compact />
+      );
+    }
+
     return (
       <div className="relative" ref={dropdownRef}>
         <button
@@ -252,6 +300,11 @@ export default function WalletConnect({ onConnect, compact = false }: WalletConn
         </button>
       </div>
     );
+  }
+
+  // Full (non-compact) disconnected state — show install prompt when Freighter is absent.
+  if (freighterPresent === false) {
+    return <FreighterInstallPrompt />;
   }
 
   return (
