@@ -1,0 +1,282 @@
+"use client";
+/**
+ * /settings/notifications — notification preferences (#218).
+ *
+ * Lets users opt into browser push and email notifications for stream
+ * lifecycle events (completion, upcoming expiry, withdrawal availability),
+ * with a master switch to disable everything at once. Preferences persist
+ * in localStorage; push additionally requests OS-level permission via the
+ * browser Notification API.
+ */
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import {
+  getNotificationPrefs,
+  saveNotificationPrefs,
+  requestPushPermission,
+  isPushSupported,
+  isValidEmail,
+  type NotificationPrefs,
+  type NotificationEventPrefs,
+} from "@/src/lib/notificationPrefs";
+import { useToast } from "@/src/lib/toast";
+
+const EVENT_LABELS: { key: keyof NotificationEventPrefs; label: string; description: string }[] = [
+  {
+    key: "streamCompleted",
+    label: "Stream completed",
+    description: "A stream you created or receive has fully vested.",
+  },
+  {
+    key: "expiringSoon",
+    label: "Expiring soon",
+    description: "A stream is scheduled to expire within 24 hours.",
+  },
+  {
+    key: "withdrawalAvailable",
+    label: "Withdrawal available",
+    description: "New claimable funds are ready to withdraw.",
+  },
+];
+
+function Toggle({
+  checked,
+  onChange,
+  disabled,
+  label,
+}: {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  disabled?: boolean;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={`shrink-0 relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 ${
+        checked ? "bg-green-600" : "bg-gray-600"
+      }`}
+    >
+      <span
+        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+          checked ? "translate-x-6" : "translate-x-1"
+        }`}
+      />
+    </button>
+  );
+}
+
+export default function NotificationSettingsPage() {
+  const { addToast } = useToast();
+  const [prefs, setPrefs] = useState<NotificationPrefs | null>(null);
+  const [emailInput, setEmailInput] = useState("");
+  const [emailError, setEmailError] = useState("");
+  const [pushPending, setPushPending] = useState(false);
+
+  useEffect(() => {
+    const loaded = getNotificationPrefs();
+    setPrefs(loaded);
+    setEmailInput(loaded.email);
+  }, []);
+
+  function persist(next: NotificationPrefs) {
+    setPrefs(next);
+    saveNotificationPrefs(next);
+  }
+
+  async function handleTogglePush(next: boolean) {
+    if (!prefs) return;
+    if (!next) {
+      persist({ ...prefs, pushEnabled: false });
+      return;
+    }
+    if (!isPushSupported()) {
+      addToast("Browser push notifications aren't supported in this browser.", "error");
+      return;
+    }
+    setPushPending(true);
+    try {
+      const permission = await requestPushPermission();
+      if (permission === "granted") {
+        persist({ ...prefs, pushEnabled: true });
+        addToast("Browser push notifications enabled.", "success");
+      } else {
+        addToast("Push permission was denied. Enable it in your browser settings to opt in.", "error");
+      }
+    } finally {
+      setPushPending(false);
+    }
+  }
+
+  function handleSaveEmail() {
+    if (!prefs) return;
+    const trimmed = emailInput.trim();
+    if (!trimmed) {
+      setEmailError("Email address is required to enable email notifications.");
+      return;
+    }
+    if (!isValidEmail(trimmed)) {
+      setEmailError("Enter a valid email address.");
+      return;
+    }
+    setEmailError("");
+    persist({ ...prefs, emailEnabled: true, email: trimmed });
+    addToast("Email notifications enabled.", "success");
+  }
+
+  function handleToggleEmail(next: boolean) {
+    if (!prefs) return;
+    if (!next) {
+      setEmailError("");
+      persist({ ...prefs, emailEnabled: false });
+      return;
+    }
+    handleSaveEmail();
+  }
+
+  function handleToggleMaster(next: boolean) {
+    if (!prefs) return;
+    persist({ ...prefs, enabled: next });
+    addToast(next ? "Notifications enabled." : "All notifications disabled.", "info");
+  }
+
+  function handleToggleEvent(key: keyof NotificationEventPrefs, next: boolean) {
+    if (!prefs) return;
+    persist({ ...prefs, events: { ...prefs.events, [key]: next } });
+  }
+
+  if (!prefs) {
+    return (
+      <main id="main-content" tabIndex={-1} className="min-h-screen bg-gray-900 text-white p-4 sm:p-8">
+        <div className="max-w-lg mx-auto space-y-4">
+          <div className="h-8 w-48 bg-gray-800 rounded animate-pulse" />
+          <div className="h-32 bg-gray-800 rounded-xl animate-pulse" />
+        </div>
+      </main>
+    );
+  }
+
+  const subControlsDisabled = !prefs.enabled;
+
+  return (
+    <main id="main-content" tabIndex={-1} className="min-h-screen bg-gray-900 text-white p-4 sm:p-8">
+      <div className="max-w-lg mx-auto">
+        <div className="mb-4">
+          <Link href="/settings" className="text-sm text-gray-400 hover:text-white transition-colors">
+            ← Settings
+          </Link>
+        </div>
+
+        <h1 className="text-xl sm:text-2xl font-bold mb-6 sm:mb-8">Notification Preferences</h1>
+
+        {/* Master switch */}
+        <div className="bg-gray-800 rounded-xl p-6 mb-6 flex items-center justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold">Notifications</h2>
+            <p className="text-gray-400 text-sm mt-1">
+              Turn off to stop all stream notifications, regardless of the settings below.
+            </p>
+          </div>
+          <Toggle checked={prefs.enabled} onChange={handleToggleMaster} label="Enable all notifications" />
+        </div>
+
+        {/* Push */}
+        <div className="bg-gray-800 rounded-xl p-6 space-y-4 mb-6">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold">Browser Push</h2>
+              <p className="text-gray-400 text-sm mt-1">
+                Get on-device alerts even when the app isn&apos;t open.
+              </p>
+            </div>
+            <Toggle
+              checked={prefs.pushEnabled}
+              onChange={(next) => void handleTogglePush(next)}
+              disabled={subControlsDisabled || pushPending}
+              label="Enable browser push notifications"
+            />
+          </div>
+          {!isPushSupported() && (
+            <p className="text-yellow-400 text-xs">Push notifications aren&apos;t supported in this browser.</p>
+          )}
+        </div>
+
+        {/* Email */}
+        <div className="bg-gray-800 rounded-xl p-6 space-y-4 mb-6">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold">Email</h2>
+              <p className="text-gray-400 text-sm mt-1">Receive alerts at an email address.</p>
+            </div>
+            <Toggle
+              checked={prefs.emailEnabled}
+              onChange={handleToggleEmail}
+              disabled={subControlsDisabled}
+              label="Enable email notifications"
+            />
+          </div>
+          <div>
+            <label htmlFor="notification-email" className="text-gray-200 text-sm font-medium block mb-1">
+              Email address
+            </label>
+            <div className="flex gap-3">
+              <input
+                id="notification-email"
+                type="email"
+                value={emailInput}
+                onChange={(e) => { setEmailInput(e.target.value); setEmailError(""); }}
+                placeholder="you@example.com"
+                disabled={subControlsDisabled}
+                className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
+                aria-invalid={!!emailError}
+                aria-describedby={emailError ? "notification-email-error" : undefined}
+              />
+              <button
+                type="button"
+                onClick={handleSaveEmail}
+                disabled={subControlsDisabled}
+                className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
+              >
+                Save
+              </button>
+            </div>
+            {emailError && (
+              <p id="notification-email-error" role="alert" className="text-red-400 text-xs mt-1">
+                {emailError}
+              </p>
+            )}
+            {prefs.emailEnabled && !emailError && (
+              <p className="text-green-400 text-xs mt-1">Email notifications active for {prefs.email}.</p>
+            )}
+          </div>
+        </div>
+
+        {/* Event types */}
+        <div className="bg-gray-800 rounded-xl p-6 space-y-4 mb-8">
+          <h2 className="text-lg font-semibold">Events</h2>
+          <div className="space-y-4">
+            {EVENT_LABELS.map(({ key, label, description }) => (
+              <div key={key} className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium text-gray-200">{label}</p>
+                  <p className="text-gray-500 text-xs mt-0.5">{description}</p>
+                </div>
+                <Toggle
+                  checked={prefs.events[key]}
+                  onChange={(next) => handleToggleEvent(key, next)}
+                  disabled={subControlsDisabled}
+                  label={label}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </main>
+  );
+}
