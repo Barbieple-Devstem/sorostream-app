@@ -821,6 +821,42 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
                 </div>
               </div>
             )}
+            {stream.metadataUri && (
+              <div className="col-span-2">
+                <p className="text-gray-400 mb-1 flex items-center gap-2">
+                  Metadata URI
+                  <div className="relative group">
+                    <button
+                      type="button"
+                      aria-label="What is metadata URI?"
+                      className="text-gray-500 hover:text-gray-300 text-xs border border-gray-600 rounded-full w-4 h-4 flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
+                    >
+                      ?
+                    </button>
+                    <div
+                      role="tooltip"
+                      className="hidden group-hover:block group-focus-within:block absolute left-0 bottom-6 w-64 bg-gray-700 border border-gray-600 rounded-lg p-3 text-xs text-gray-300 leading-relaxed z-10 shadow-lg"
+                    >
+                      External metadata reference that provides additional context or documentation
+                      about this stream. Can point to JSON, terms of service, or other relevant data.
+                    </div>
+                  </div>
+                </p>
+                <a
+                  href={stream.metadataUri}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-blue-900/40 border border-blue-700/50 text-blue-300 hover:bg-blue-900/60 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                  title={stream.metadataUri}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                  </svg>
+                  {stream.metadataUri.length > 40 ? `${stream.metadataUri.slice(0, 37)}…` : stream.metadataUri}
+                </a>
+              </div>
+            )}
           </div>
 
           {/* Claimable balance — optimistic withdraw support */}
