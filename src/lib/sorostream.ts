@@ -648,6 +648,7 @@ export function calcWithdrawBreakdown(
 } {
   const feePercent = basisPoints / 100; // e.g. 50 bps → 0.5%
   const fee = Math.floor((claimableStroops * basisPoints) / 10_000);
+  const net = claimableStroops - fee;
   return { claimable: claimableStroops, fee, net, feePercent };
 }
 

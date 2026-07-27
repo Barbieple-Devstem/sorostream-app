@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useMemo, useState, useEffect, useCallback } from "react";
 import {
   CartesianGrid,
   Legend,
@@ -12,9 +11,6 @@ import {
   XAxis,
   YAxis,
   ReferenceDot,
-  Tooltip,
-  ResponsiveContainer,
-  CartesianGrid,
 } from "recharts";
 import { useWallet } from "@/src/context/WalletContext";
 import {
@@ -60,7 +56,10 @@ function formatDate(ms: number): string {
   });
 }
 
-function computeSummary(points: ChartPoint[], asset: string): PortfolioSummary | null {
+function computeSummary(
+  points: ChartPoint[],
+  asset: string
+): PortfolioSummary | null {
   if (points.length < 2) return null;
 
   const start = points[0][asset];
@@ -69,7 +68,8 @@ function computeSummary(points: ChartPoint[], asset: string): PortfolioSummary |
   if (typeof start !== "number" || typeof end !== "number") return null;
 
   const absoluteChange = end - start;
-  const percentChange = start !== 0 ? (absoluteChange / Math.abs(start)) * 100 : 0;
+  const percentChange =
+    start !== 0 ? (absoluteChange / Math.abs(start)) * 100 : 0;
 
   return { startValue: start, endValue: end, absoluteChange, percentChange };
 }
@@ -125,19 +125,28 @@ export default function PortfolioChart() {
           network === "public" || network === "mainnet"
             ? "https://horizon.stellar.org"
             : network === "futurenet"
-            ? "https://horizon-futurenet.stellar.org"
-            : "https://horizon-testnet.stellar.org";
+              ? "https://horizon-futurenet.stellar.org"
+              : "https://horizon-testnet.stellar.org";
 
-        const response = await fetch(`${horizonUrl}/accounts/${walletAddress}`);
+        const response = await fetch(
+          `${horizonUrl}/accounts/${walletAddress}`
+        );
         if (!response.ok) return;
 
         const payload = (await response.json()) as {
-          balances?: { asset_type: string; asset_code?: string; balance: string }[];
+          balances?: {
+            asset_type: string;
+            asset_code?: string;
+            balance: string;
+          }[];
         };
 
         const balances: Record<string, number> = {};
         for (const balance of payload.balances ?? []) {
-          const code = balance.asset_type === "native" ? "XLM" : balance.asset_code ?? "UNKNOWN";
+          const code =
+            balance.asset_type === "native"
+              ? "XLM"
+              : balance.asset_code ?? "UNKNOWN";
           balances[code] = parseFloat(balance.balance);
         }
 
@@ -168,9 +177,15 @@ export default function PortfolioChart() {
     const cutoff = Date.now() - rangeMs;
 
     return snapshots
-      .filter((snapshot) => rangeMs === Infinity || new Date(snapshot.timestamp).getTime() >= cutoff)
+      .filter(
+        (snapshot) =>
+          rangeMs === Infinity ||
+          new Date(snapshot.timestamp).getTime() >= cutoff
+      )
       .map((snapshot) => {
-        const point: ChartPoint = { time: new Date(snapshot.timestamp).getTime() };
+        const point: ChartPoint = {
+          time: new Date(snapshot.timestamp).getTime(),
+        };
         for (const [asset, value] of Object.entries(snapshot.balances)) {
           point[asset] = value;
         }
@@ -197,12 +212,6 @@ export default function PortfolioChart() {
     return result;
   }, [assets, filteredPoints]);
 
-  const tooltipFormatter = ((value: unknown, name: unknown) => {
-    const numericValue = Number(value ?? 0);
-    const label = String(name);
-    return [`${formatAmount(numericValue)} ${label}`, label];
-  }) as any;
-
   if (!address) {
     return null;
   }
@@ -210,10 +219,16 @@ export default function PortfolioChart() {
   const ranges: TimeRange[] = ["1D", "7D", "30D", "90D", "ALL"];
 
   return (
-    <section aria-labelledby="portfolio-chart-heading" className="bg-gray-800 rounded-xl p-4 sm:p-6">
+    <section
+      aria-labelledby="portfolio-chart-heading"
+      className="bg-gray-800 rounded-xl p-4 sm:p-6"
+    >
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
         <div>
-          <h2 id="portfolio-chart-heading" className="text-lg font-semibold text-white">
+          <h2
+            id="portfolio-chart-heading"
+            className="text-lg font-semibold text-white"
+          >
             Portfolio Performance
           </h2>
           <p className="text-xs text-gray-400">
@@ -252,9 +267,14 @@ export default function PortfolioChart() {
                 <span className="font-mono font-semibold text-white">
                   {formatAmount(summary.endValue)}
                 </span>
-                <span className={`font-mono text-xs ${positive ? "text-green-400" : "text-red-400"}`}>
+                <span
+                  className={`font-mono text-xs ${
+                    positive ? "text-green-400" : "text-red-400"
+                  }`}
+                >
                   {positive ? "+" : ""}
-                  {formatAmount(summary.absoluteChange)} ({summary.percentChange.toFixed(2)}%)
+                  {formatAmount(summary.absoluteChange)} (
+                  {summary.percentChange.toFixed(2)}%)
                 </span>
               </div>
             );
@@ -277,7 +297,10 @@ export default function PortfolioChart() {
         </div>
       ) : (
         <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={filteredPoints} margin={{ top: 20, right: 10, left: 10, bottom: 10 }}>
+          <LineChart
+            data={filteredPoints}
+            margin={{ top: 20, right: 10, left: 10, bottom: 10 }}
+          >
             <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
             <XAxis
               dataKey="time"
@@ -288,15 +311,6 @@ export default function PortfolioChart() {
             />
             <YAxis
               tickFormatter={formatAmount}
-              tickFormatter={fmtDate}
-              stroke="#9CA3AF"
-              tick={{ fill: "#9CA3AF", fontSize: 12 }}
-              type="number"
-              domain={["dataMin", "dataMax"]}
-              tickLine={false}
-            />
-            <YAxis
-              tickFormatter={fmtAmount}
               stroke="#9CA3AF"
               tick={{ fill: "#9CA3AF", fontSize: 12 }}
               width={60}
@@ -310,28 +324,17 @@ export default function PortfolioChart() {
                 color: "#F9FAFB",
                 fontSize: "13px",
               }}
-              labelFormatter={(label) => new Date(label as number).toLocaleString()}
-              formatter={(value: any, name: any) => [`${fmtAmount(Number(value))} ${name}`, name]}
               labelFormatter={(label) => formatDate(label as number)}
-              formatter={tooltipFormatter}
-            />
-            {assets.length > 1 && <Legend wrapperStyle={{ fontSize: "12px", color: "#9CA3AF" }} />}
-              labelFormatter={(label) => fmtDate(label as number)}
               formatter={(value: unknown, name: unknown) => [
-                `${fmtAmount(Number(value))} ${String(name)}`,
+                `${formatAmount(Number(value))} ${String(name)}`,
                 String(name),
               ]}
             />
             {assets.length > 1 && (
-              <Legend wrapperStyle={{ fontSize: "12px", color: "#9CA3AF" }} />
+              <Legend
+                wrapperStyle={{ fontSize: "12px", color: "#9CA3AF" }}
+              />
             )}
-              formatter={(value: any) => {
-                if (typeof value === "number") {
-                  return [`${fmtAmount(value)}`, "Balance"];
-                }
-                return [];
-              }}
-            />
             {assets.map((asset) => (
               <Line
                 key={asset}
@@ -340,15 +343,21 @@ export default function PortfolioChart() {
                 stroke={ASSET_COLORS[asset] ?? "#A855F7"}
                 strokeWidth={2}
                 dot={false}
-                activeDot={{ r: 4, fill: ASSET_COLORS[asset] ?? "#A855F7" }}
+                activeDot={{
+                  r: 4,
+                  fill: ASSET_COLORS[asset] ?? "#A855F7",
+                }}
                 name={asset}
               />
             ))}
-            {assets[0] && filteredPoints.length > 0 && (
             {filteredPoints.length > 0 && assets.length > 0 && (
               <ReferenceDot
                 x={filteredPoints[filteredPoints.length - 1].time}
-                y={filteredPoints[filteredPoints.length - 1][assets[0]] as number}
+                y={
+                  filteredPoints[filteredPoints.length - 1][
+                    assets[0]
+                  ] as number
+                }
                 r={6}
                 fill={ASSET_COLORS[assets[0]] ?? "#22C55E"}
                 stroke="#F9FAFB"

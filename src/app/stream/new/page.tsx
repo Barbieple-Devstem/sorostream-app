@@ -1,7 +1,6 @@
 "use client";
 import { useState, useEffect, Suspense } from "react";
 import { useState, useEffect, useRef, Suspense } from "react";
-import { useState, Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import DurationPicker from "@/components/DurationPicker";
 import FlowRatePreview from "@/components/FlowRatePreview";
@@ -444,10 +443,9 @@ function NewStreamWizard() {
       setAutoRenewDuration(0);
       setShowAdvanced(false);
       setGasFee(null);
-      setErrors({ recipient: "", amount: "", duration: "", endDate: "", cliffDate: "" });
+      setErrors({ recipient: "", amount: "", duration: "", endDate: "", cliffDate: "", scheduledStart: "" });
       setSchedulingEnabled(false);
       setScheduledStart("");
-      setErrors({ recipient: "", amount: "", duration: "", endDate: "", cliffDate: "", scheduledStart: "" });
       setTouched({ recipient: false, amount: false });
       setDurationPickerKey((k) => k + 1);
       setTxStage(null);
@@ -664,10 +662,18 @@ function NewStreamWizard() {
                 }}
                 onPaste={(e) => {
                   const pasted = e.clipboardData.getData("text");
-                  if (!/^\d*\.?\d*$/.test(pasted.trim())) {
+                  // Strip non-numeric characters, keeping digits and at most one decimal point
+                  let cleaned = pasted.replace(/[^0-9.]/g, "");
+                  const dotIndex = cleaned.indexOf(".");
+                  if (dotIndex !== -1) {
+                    cleaned = cleaned.slice(0, dotIndex + 1) + cleaned.slice(dotIndex + 1).replace(/\./g, "");
+                  }
+                  if (cleaned !== pasted) {
                     e.preventDefault();
-                    setTouched((prev) => ({ ...prev, amount: true }));
-                    setErrors((prev) => ({ ...prev, amount: "Amount must contain only numbers." }));
+                    setAmount(cleaned);
+                    if (touched.amount) {
+                      setErrors((prev) => ({ ...prev, amount: validateAmount(cleaned) }));
+                    }
                   }
                 }}
                 onBlur={handleAmountBlur}

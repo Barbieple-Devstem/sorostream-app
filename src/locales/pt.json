@@ -24,7 +24,11 @@
     "amount_label": "Valor (USDC)",
     "amount_placeholder": "100",
     "duration_label": "Duração",
-    "submit": "Criar Fluxo"
+    "submit": "Criar Fluxo",
+    "cliff_label": "Data de Carência",
+    "cliff_optional": "(opcional)",
+    "end_date_label": "Data de Término",
+    "vesting_preview": "Pré-visualização de Aquisição"
   },
   "stream_detail": {
     "title": "Fluxo #{id}",
