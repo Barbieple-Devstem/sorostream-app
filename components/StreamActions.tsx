@@ -140,7 +140,7 @@ export default function StreamActions({
     }
 
     try {
-      await sorostream.cancelStream();
+      await sorostream.cancelStream(streamId);
       addToast(`Stream #${streamId} cancelled`, "success");
     } catch {
       addToast("Failed to cancel stream. Please try again.", "error");

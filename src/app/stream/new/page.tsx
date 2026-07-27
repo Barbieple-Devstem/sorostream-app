@@ -1,4 +1,5 @@
 "use client";
+import { useState, useEffect, Suspense } from "react";
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useState, Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -14,6 +15,8 @@ import BatchCreateTab from "@/components/BatchCreateTab";
 import { SkeletonForm } from "@/components/Skeleton";
 import { useTranslations } from "@/src/lib/i18n";
 import { trackEvent } from "@/src/lib/analytics";
+import { sorostream, getFeeConfig, calcWithdrawBreakdown } from "@/src/lib/sorostream";
+import { useWallet } from "@/src/context/WalletContext";
 import { sorostream, getCollateralConfig, checkIsNewSender, calcCollateral, getGasFeeEstimate, type GasFeeEstimate } from "@/src/lib/sorostream";
 import { useWallet } from "@/src/context/WalletContext";
 import { sorostream } from "@/src/lib/sorostream";
@@ -211,6 +214,27 @@ function NewStreamWizard() {
   const [txFailedStage, setTxFailedStage] = useState<TxStage | undefined>(undefined);
   const [txError, setTxError] = useState<string | undefined>(undefined);
 
+  // Protocol fee state for review step
+  const [feeBasisPoints, setFeeBasisPoints] = useState<number>(0);
+  const [feeLoading, setFeeLoading] = useState(false);
+
+  // Load protocol fee config whenever we enter the review step
+  useEffect(() => {
+    if (step !== "review") return;
+    let active = true;
+    setFeeLoading(true);
+    getFeeConfig()
+      .then(({ basisPoints }) => {
+        if (active) setFeeBasisPoints(basisPoints);
+      })
+      .catch(() => {
+        if (active) setFeeBasisPoints(0);
+      })
+      .finally(() => {
+        if (active) setFeeLoading(false);
+      });
+    return () => { active = false; };
+  }, [step]);
   // Auto-renewal settings
   const [autoRenew, setAutoRenew] = useState(false);
   const [autoRenewDuration, setAutoRenewDuration] = useState(0); // 0 = same as stream duration
@@ -882,10 +906,23 @@ function NewStreamWizard() {
         {step === "review" && (
           <div className="space-y-6">
             <div className="bg-gray-800 rounded-xl p-5 space-y-4 border border-gray-700">
-              <div className="flex justify-between items-center">
-                <span className="text-gray-400 text-sm">Recipient</span>
-                <span className="text-white font-mono text-sm">{recipient}</span>
+              {/* Sender */}
+              <div className="flex justify-between items-start">
+                <span className="text-gray-400 text-sm">Sender</span>
+                <span className="text-white font-mono text-xs text-right max-w-[60%] break-all">
+                  {address ?? "—"}
+                </span>
               </div>
+
+              {/* Recipient */}
+              <div className="flex justify-between items-start">
+                <span className="text-gray-400 text-sm">Recipient</span>
+                <span className="text-white font-mono text-xs text-right max-w-[60%] break-all">
+                  {recipient}
+                </span>
+              </div>
+
+              {/* Token */}
               <div className="flex justify-between items-center">
                 <span className="text-gray-400 text-sm">Token</span>
                 <span className="text-white font-mono text-sm">
@@ -894,12 +931,16 @@ function NewStreamWizard() {
                     : selectedToken}
                 </span>
               </div>
+
+              {/* Total amount */}
               <div className="flex justify-between items-center">
-                <span className="text-gray-400 text-sm">Amount</span>
+                <span className="text-gray-400 text-sm">Total amount</span>
                 <span className="text-white font-mono text-sm">
                   {amount} {selectedToken === CUSTOM_TOKEN_VALUE ? "tokens" : selectedToken}
                 </span>
               </div>
+
+              {/* Duration */}
               <div className="flex justify-between items-center">
                 <span className="text-gray-400 text-sm">Duration</span>
                 <span className="text-white font-mono text-sm">
@@ -918,6 +959,64 @@ function NewStreamWizard() {
                   })()}
                 </span>
               </div>
+
+              {/* Start / End dates */}
+              {(() => {
+                const startDate = new Date();
+                const endDate = new Date(startDate.getTime() + duration * 1000);
+                return (
+                  <>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-400 text-sm">Start date</span>
+                      <span className="text-white font-mono text-sm">
+                        {startDate.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-400 text-sm">End date</span>
+                      <span className="text-white font-mono text-sm">
+                        {endDate.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                      </span>
+                    </div>
+                  </>
+                );
+              })()}
+
+              {/* Fee breakdown */}
+              <div className="border-t border-gray-700 pt-4 space-y-3">
+                {feeLoading ? (
+                  <p className="text-gray-400 text-xs text-center">Loading fee info…</p>
+                ) : (
+                  (() => {
+                    const amountNum = parseFloat(amount) || 0;
+                    const amountStroops = Math.round(amountNum * 10_000_000);
+                    const { fee, net, feePercent } = calcWithdrawBreakdown(amountStroops, feeBasisPoints);
+                    const feeDisplay = (fee / 10_000_000).toFixed(7).replace(/\.?0+$/, "") || "0";
+                    const netDisplay = (net / 10_000_000).toFixed(7).replace(/\.?0+$/, "");
+                    const tokenLabel = selectedToken === CUSTOM_TOKEN_VALUE ? "tokens" : selectedToken;
+                    return (
+                      <>
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-400 text-sm">
+                            Protocol fee{" "}
+                            <span className="text-gray-500 text-xs">({feePercent}%)</span>
+                          </span>
+                          <span className="text-yellow-400 font-mono text-sm" data-testid="protocol-fee">
+                            {feeDisplay} {tokenLabel}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-400 text-sm">Net to recipient</span>
+                          <span className="text-green-400 font-mono text-sm font-semibold" data-testid="net-amount">
+                            {netDisplay} {tokenLabel}
+                          </span>
+                        </div>
+                      </>
+                    );
+                  })()
+                )}
+              </div>
+
               {schedulingEnabled && scheduledStart && (
                 <div className="flex justify-between items-center">
                   <span className="text-gray-400 text-sm">Scheduled Start</span>
@@ -1049,9 +1148,26 @@ function NewStreamWizard() {
               type="button"
               onClick={handleCreateStream}
               disabled={loading}
-              className="flex-1 bg-green-700 text-white py-3 rounded-lg font-medium hover:bg-green-800 disabled:opacity-50 transition-colors"
+              aria-label="Confirm and sign transaction"
+              className="flex-1 bg-green-700 text-white py-3 rounded-lg font-medium hover:bg-green-800 disabled:opacity-50 transition-colors inline-flex items-center justify-center gap-2"
             >
-              {t("submit")}
+              {loading ? (
+                <>
+                  <svg
+                    className="animate-spin h-4 w-4"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                  </svg>
+                  Waiting for wallet…
+                </>
+              ) : (
+                "Confirm and Sign"
+              )}
             </button>
           )}
         </div>

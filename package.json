@@ -18,6 +18,7 @@
     "generate-icons": "node scripts/generate-icons.mjs"
   },
   "dependencies": {
+    "@rollup/rollup-win32-x64-msvc": "^4.62.2",
     "@sorostream/sdk": "^0.1.0",
     "@stellar/freighter-api": "^3.0.0",
     "@stellar/stellar-sdk": "^13.0.0",
@@ -46,6 +47,7 @@
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.7.0",
     "autoprefixer": "^10.4.19",
+    "caniuse-lite": "^1.0.30001806",
     "cross-env": "10.1.0",
     "eslint": "^8.57.0",
     "eslint-config-next": "14.2.5",

@@ -329,7 +329,10 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
     }
 
     try {
-      const result = await sorostream.cancelStream();
+      const result = await sorostream.cancelStream(params.id);
+      // Refresh stream data so status transitions to Cancelled
+      const updated = await sorostream.getStream(params.id);
+      if (updated) setStream(updated);
       addToast(`Stream cancelled. Tx: ${result.txHash}`, "success");
     } catch {
       addToast("Cancellation failed. Please try again.", "error");
@@ -587,6 +590,20 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
             <span className="text-white">
               <FederationName address={stream.recipient} truncate />
             </span>
+          </span>
+          <span className="hidden sm:inline" aria-hidden="true">|</span>
+          <span
+            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+              stream.status === "Active"
+                ? "bg-green-900 text-green-400"
+                : stream.status === "Cancelled"
+                ? "bg-red-900 text-red-400"
+                : "bg-gray-700 text-gray-400"
+            }`}
+            aria-label={`Status: ${stream.status}`}
+            data-testid="stream-status"
+          >
+            {stream.status}
           </span>
         </div>
 

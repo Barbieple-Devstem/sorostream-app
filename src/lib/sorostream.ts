@@ -262,7 +262,13 @@ export const sorostream = {
     return { streamId: id, txHash: `mock-tx-${id}` };
   },
   withdraw: async () => ({ txHash: "mock-tx-hash", amount: "0" }),
-  cancelStream: async () => ({ txHash: "mock-tx-hash" }),
+  cancelStream: async (id?: string) => {
+    if (id) {
+      const stream = MOCK_STREAMS.find((s) => s.id === id);
+      if (stream) stream.status = "Cancelled";
+    }
+    return { txHash: "mock-tx-hash" };
+  },
   topUp: async () => ({ txHash: "", newEndTime: new Date() }),
   getStream: async (id: string) => getMockStream(id),
   getClaimable: async (streamId: string) => claimableNow(getMockStream(streamId)),
