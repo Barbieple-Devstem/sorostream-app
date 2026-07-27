@@ -18,6 +18,7 @@ import { useBookmarks } from "@/src/context/BookmarksContext";
 import { useWallet } from "@/src/context/WalletContext";
 import ArchiveBanner from "@/components/ArchiveBanner";
 import PortfolioChart from "@/components/PortfolioChart";
+import GiftStreamModal from "@/components/GiftStreamModal";
 
 type DashboardState = "loading" | "filtered-empty" | "empty" | "ready";
 
@@ -74,6 +75,7 @@ function DashboardContent() {
 
   // UI state
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
+  const [showGiftModal, setShowGiftModal] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -290,12 +292,21 @@ function DashboardContent() {
       <div className="max-w-6xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold">Dashboard</h1>
-          <Link
-            href="/stream/new"
-            className="bg-green-700 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
-          >
-            + New Stream
-          </Link>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowGiftModal(true)}
+              className="bg-purple-700 hover:bg-purple-600 text-white px-4 py-2 rounded-lg text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 flex items-center gap-1.5"
+            >
+              <span aria-hidden="true">🎁</span>
+              Gift a Stream
+            </button>
+            <Link
+              href="/stream/new"
+              className="bg-green-700 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+            >
+              + New Stream
+            </Link>
+          </div>
         </div>
 
         <div className="flex flex-col lg:flex-row gap-6">
@@ -558,6 +569,10 @@ function DashboardContent() {
         onClose={() => setShowShortcutsHelp(false)}
         groups={shortcutGroups}
       />
+
+      {showGiftModal && (
+        <GiftStreamModal onClose={() => setShowGiftModal(false)} />
+      )}
     </main>
   );
 }

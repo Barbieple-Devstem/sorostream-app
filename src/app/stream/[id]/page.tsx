@@ -43,6 +43,7 @@ import {
   generateCopyLinkUrl
 } from "@/src/lib/share";
 import StreamShareButtons from "@/components/StreamShareButtons";
+import { getGiftMessage } from "@/components/GiftStreamModal";
 
 /** Grace period in seconds before a cancel is submitted on-chain. */
 const CANCEL_GRACE_SECONDS = 5;
@@ -112,6 +113,13 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
   // ── Stream completion states ───────────────────────────────────────────────
   const [claimFinalLoading, setClaimFinalLoading] = useState(false);
   const [claimFinalDone, setClaimFinalDone] = useState(false);
+
+  // ── Gift message (stored in localStorage by GiftStreamModal) ──────────────
+  const [giftMessage, setGiftMessage] = useState<string | null>(null);
+  useEffect(() => {
+    const msg = getGiftMessage(params.id);
+    if (msg) setGiftMessage(msg);
+  }, [params.id]);
 
   // ── Top-up form state ──────────────────────────────────────────────────────
   const [showTopUp, setShowTopUp] = useState(false);
@@ -764,6 +772,17 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
             claiming={claimFinalLoading}
             claimed={claimFinalDone}
           />
+        )}
+
+        {/* Gift message — shown when this stream was gifted */}
+        {giftMessage && (
+          <div className="mb-4 bg-purple-900/40 border border-purple-700 rounded-xl px-5 py-4 flex gap-4 items-start">
+            <span className="text-3xl shrink-0" aria-hidden="true">🎁</span>
+            <div>
+              <p className="text-purple-200 font-semibold text-sm mb-1">You received a gift stream!</p>
+              <p className="text-purple-100 text-sm whitespace-pre-wrap">{giftMessage}</p>
+            </div>
+          </div>
         )}
 
         <div className="bg-gray-800 rounded-xl p-6 space-y-6">
