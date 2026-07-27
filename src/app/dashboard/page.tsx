@@ -24,16 +24,23 @@ type DashboardState = "loading" | "filtered-empty" | "empty" | "ready";
 type SortField = "created" | "endDate" | "amount" | "status";
 type SortOrder = "asc" | "desc";
 
-const SORT_STORAGE_KEY = "sorostream_sort";
+const VALID_SORT_FIELDS: SortField[] = ["created", "endDate", "amount", "status"];
+const VALID_SORT_ORDERS: SortOrder[] = ["asc", "desc"];
 
-function loadSort(): { field: SortField; order: SortOrder } {
-  if (typeof window === "undefined") return { field: "created", order: "desc" };
-  try {
-    const raw = localStorage.getItem(SORT_STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch {}
-  return { field: "created", order: "desc" };
+function parseSortField(value: string | null): SortField {
+  if (value && (VALID_SORT_FIELDS as string[]).includes(value)) {
+    return value as SortField;
+  }
+  return "created";
 }
+
+function parseSortOrder(value: string | null): SortOrder {
+  if (value && (VALID_SORT_ORDERS as string[]).includes(value)) {
+    return value as SortOrder;
+  }
+  return "desc";
+}
+
 function DashboardContent() {
   const rpcFetch = useRpcFetch();
   const searchParams = useSearchParams();
@@ -50,22 +57,23 @@ function DashboardContent() {
   const [search, setSearch] = useState(searchParams.get("search") || "");
   const [bookmarksOnly, setBookmarksOnly] = useState(false);
 
-  // Sort state — persisted to localStorage via a lazy initializer.
-  // Reads synchronously on mount so the saved preference is applied immediately
-  // without a flash of default-sorted content when navigating back.
-  const [sortField, setSortField] = useState<SortField>(() => loadSort().field);
-  const [sortOrder, setSortOrder] = useState<SortOrder>(() => loadSort().order);
+  // Sort state — read from URL query string (?sort=amount&dir=desc).
+  // Falls back to "created" / "desc" when params are absent or invalid.
+  // Using URL params means browser back/forward navigation restores the sort.
+  const [sortField, setSortField] = useState<SortField>(() =>
+    parseSortField(searchParams.get("sort")),
+  );
+  const [sortOrder, setSortOrder] = useState<SortOrder>(() =>
+    parseSortOrder(searchParams.get("dir")),
+  );
 
   function handleSortFieldChange(field: SortField) {
     setSortField(field);
-    const order = sortOrder;
-    localStorage.setItem(SORT_STORAGE_KEY, JSON.stringify({ field, order }));
   }
 
   function toggleSortOrder() {
     const next: SortOrder = sortOrder === "asc" ? "desc" : "asc";
     setSortOrder(next);
-    localStorage.setItem(SORT_STORAGE_KEY, JSON.stringify({ field: sortField, order: next }));
   }
 
   // Selection and bulk-action state
@@ -172,17 +180,22 @@ function DashboardContent() {
     });
   }, [filtered, bookmarkedIds, sortField, sortOrder]);
 
-  // Update URL params when filters change
+  // Update URL params when filters or sort state change.
+  // Sort is stored in ?sort=<field>&dir=<order> so that browser back/forward
+  // navigation restores the previous sort state without touching localStorage.
   useEffect(() => {
     const params = new URLSearchParams();
     if (statusFilter) params.set("status", statusFilter);
     if (tokenFilter) params.set("token", tokenFilter);
     if (search.trim()) params.set("search", search);
+    // Only write sort params when they differ from defaults to keep URLs clean.
+    if (sortField !== "created") params.set("sort", sortField);
+    if (sortOrder !== "desc") params.set("dir", sortOrder);
 
     const queryString = params.toString();
     const newPath = queryString ? `/dashboard?${queryString}` : "/dashboard";
     router.replace(newPath);
-  }, [statusFilter, tokenFilter, search, router]);
+  }, [statusFilter, tokenFilter, search, sortField, sortOrder, router]);
 
   const clearFilters = () => {
     setStatusFilter("");
