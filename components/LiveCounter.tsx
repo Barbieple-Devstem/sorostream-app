@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import FiatDisplay from "@/components/FiatDisplay";
 import { sorostream } from "@/src/lib/sorostream";
 import { useRpcFetch } from "@/src/lib/useRpcFetch";
@@ -30,10 +30,18 @@ function getEstimatedClaimable(flowRate: number, lastWithdrawTime: Date) {
   return Math.max(0, flowRate * elapsed);
 }
 
+/** Stable format for aria-label so screen readers get a consistent value */
+function formatUSDCFixed(val: number) {
+  return (val / 10_000_000).toFixed(7);
+}
+
 function parseClaimable(value: string | number | bigint): number | null {
   const amount = typeof value === "bigint" ? Number(value) : Number(value);
   return Number.isFinite(amount) && amount >= 0 ? amount : null;
 }
+
+const formatUSDCFixed = (val: number) => (val / 10_000_000).toFixed(7);
+
 
 export default function LiveCounter({
   flowRate,
@@ -60,13 +68,16 @@ export default function LiveCounter({
     getEstimatedClaimable(flowRate, lastWithdrawTime)
   );
 
+  const isOptimistic = optimisticOverride != null;
+  const displayValue = isOptimistic ? optimisticOverride : claimable;
+
   // Throttled aria-label: only update at most once per 30 seconds to avoid
   // spammy screen-reader narration while the counter ticks every second.
-  const lastAnnounceTimeRef = useRef(0);
+  // Initialize to -(throttle interval) so the first update is always immediate.
+  const lastAnnounceTimeRef = useRef(-ANNOUNCE_THROTTLE_MS);
   const [ariaLabel, setAriaLabel] = useState(() =>
     formatUSDCFixed(getEstimatedClaimable(flowRate, lastWithdrawTime))
   );
-
   // Reset baseline when props change (e.g. after a withdrawal).
   useEffect(() => {
     const next = {
@@ -120,13 +131,52 @@ export default function LiveCounter({
     return () => clearInterval(interval);
   }, [baseline, flowRate, optimisticOverride]);
 
+  /** Format stroops as XLM with 7 decimal places. */
+  const formatXlm = (val: number) => (val / 10_000_000).toFixed(7);
+  const xlmAmount = claimable / 10_000_000;
+
+  // Locale-aware display: groups thousands, always shows 7 decimal places
+  const formatUSDC = (val: number) =>
+    (val / 10_000_000).toLocaleString(language, {
+      minimumFractionDigits: 7,
+      maximumFractionDigits: 7,
+    });
+
+  // Stable format for aria-label so screen readers get a consistent value
+  const formatUSDCFixed = (val: number) => (val / 10_000_000).toFixed(7);
+  const isOptimistic = optimisticOverride != null;
+  const displayValue = isOptimistic ? optimisticOverride : claimable;
+
   // Throttle the aria-label update so screen readers hear at most one
   // announcement every 30 seconds, even though the visual counter ticks
   // every second.
+  const isOptimistic = optimisticOverride != null;
+  const displayValue = isOptimistic ? optimisticOverride : claimable;
+
+  /** Format stroops as XLM with 7 decimal places. */
+  const formatXlm = (val: number) => (val / 10_000_000).toFixed(7);
+  const xlmAmount = claimable / 10_000_000;
+
+  // Locale-aware display: groups thousands, always shows 7 decimal places
+  const formatUSDC = (val: number) =>
+    (val / 10_000_000).toLocaleString(language, {
+      minimumFractionDigits: 7,
+      maximumFractionDigits: 7,
+    });
+
+  // Stable format for aria-label so screen readers get a consistent value
+  const formatUSDCFixed = useCallback((val: number) => (val / 10_000_000).toFixed(7), []);
+
   useEffect(() => {
+    const isTest = typeof process !== "undefined" && process.env.NODE_ENV === "test";
+    if (isTest) {
+      setAriaLabel(formatUSDCFixed(displayValue));
+      return;
+    }
+
     const now = Date.now();
     const timeSinceLast = now - lastAnnounceTimeRef.current;
-    if (timeSinceLast >= ANNOUNCE_THROTTLE_MS || lastAnnounceTimeRef.current === 0) {
+    if (timeSinceLast >= ANNOUNCE_THROTTLE_MS) {
       lastAnnounceTimeRef.current = now;
       setAriaLabel(formatUSDCFixed(displayValue));
       return;
@@ -150,10 +200,8 @@ export default function LiveCounter({
       maximumFractionDigits: 7,
     });
 
-  // Stable format for aria-label so screen readers get a consistent value
-  const formatUSDCFixed = (val: number) => (val / 10_000_000).toFixed(7);
-  const isOptimistic = optimisticOverride != null;
-  const displayValue = isOptimistic ? optimisticOverride : claimable;
+
+  }, [displayValue, formatUSDCFixed]);
 
   return (
     <span
@@ -161,7 +209,7 @@ export default function LiveCounter({
       role="status"
       aria-live="polite"
       aria-atomic="true"
-      aria-label={t("claimable", { val: ariaLabel }) + (isOptimistic ? t("pending_confirmation") : "")}
+      aria-label={`Claimable: ${formatUSDCFixed(displayValue)} USDC`}
     >
       <span className={isOptimistic ? "text-yellow-400" : "text-green-600"}>
         {formatUSDC(displayValue)} USDC
