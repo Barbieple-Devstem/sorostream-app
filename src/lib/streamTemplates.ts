@@ -7,6 +7,10 @@ export interface SavedTemplate {
   minutes: number;
   suggestedAmount?: string;
   recipient?: string;
+  /** Token symbol this template was saved with, e.g. "USDC" or "XLM". */
+  token?: string;
+  /** Optional cliff date, stored as a datetime-local ISO string. */
+  cliffDate?: string;
 }
 
 const STORAGE_KEY = "sorostream_templates";
