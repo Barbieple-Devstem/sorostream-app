@@ -18,6 +18,7 @@ import { useBookmarks } from "@/src/context/BookmarksContext";
 import { useWallet } from "@/src/context/WalletContext";
 import ArchiveBanner from "@/components/ArchiveBanner";
 import PortfolioChart from "@/components/PortfolioChart";
+import StreamExpiryAlerts from "@/components/StreamExpiryAlerts";
 
 type DashboardState = "loading" | "filtered-empty" | "empty" | "ready";
 
@@ -302,6 +303,11 @@ function DashboardContent() {
           <div className="flex-1 min-w-0">
             {/* Archive banner — shown when streams have been auto-archived */}
             <ArchiveBanner />
+
+            {/* Expiry alerts — amber/red banners for streams expiring within 24h / 1h */}
+            {address && (
+              <StreamExpiryAlerts streams={streams} currentAddress={address} />
+            )}
 
             {/* Status legend */}
             <StreamErrorBoundary section="Stats Summary">
