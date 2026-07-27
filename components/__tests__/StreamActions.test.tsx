@@ -34,6 +34,7 @@ vi.mock('@/src/context/SettingsContext', () => ({
 
 vi.mock('@/src/context/WalletContext', () => ({
   useWallet: () => ({ refetchBalance: vi.fn() }),
+  useWallet: () => ({ refetchBalance: vi.fn(), address: 'GBKLYONWFBQFBFZK6HMTXQZJNBKQEXZ3PJOVXNKZXVTV4FQXVMKLKHA' }),
 }));
 
 // LiveCounter doesn't matter for these tests

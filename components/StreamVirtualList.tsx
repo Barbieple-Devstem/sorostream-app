@@ -118,7 +118,6 @@ export default function StreamVirtualList({ streams, selectedIds, onToggleSelect
       className="relative overflow-y-auto max-h-[calc(100vh-240px)]"
       role="list"
       aria-label="Stream list"
-      aria-rowcount={streams.length}
       tabIndex={0}
       onKeyDown={handleKeyDown}
     >
@@ -134,7 +133,6 @@ export default function StreamVirtualList({ streams, selectedIds, onToggleSelect
                 key={stream.id}
                 className="block"
                 role="listitem"
-                aria-rowindex={startRow * 2 + idx + 1}
               >
                 <div className="relative">
                   <Link href={`/stream/${stream.id}`} className="block">
@@ -147,6 +145,7 @@ export default function StreamVirtualList({ streams, selectedIds, onToggleSelect
                       status={stream.status}
                       selected={selectedIds?.has(stream.id)}
                       onToggle={onToggleSelect}
+                      scheduledStartTime={stream.scheduledStartTime}
                     />
                   </Link>
                 </div>

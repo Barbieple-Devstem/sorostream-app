@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { getContacts, type AddressBookContact } from "@/src/lib/addressBook";
+import { resolveFederationName } from "@/src/lib/federation";
 
 interface RecipientAutocompleteProps {
   value: string;
@@ -30,10 +31,58 @@ export default function RecipientAutocomplete({
   const [highlightedIdx, setHighlightedIdx] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
+  
+  // Federation lookup state
+  const [federationResolution, setFederationResolution] = useState<{
+    status: "idle" | "resolving" | "resolved" | "failed";
+    address: string | null;
+    error: string | null;
+  }>({ status: "idle", address: null, error: null });
+  const federationTimeoutRef = useRef<NodeJS.Timeout>();
 
   useEffect(() => {
     setContacts(getContacts());
   }, []);
+
+  // Federation lookup effect - triggered when value contains * (federation address)
+  useEffect(() => {
+    if (federationTimeoutRef.current) {
+      clearTimeout(federationTimeoutRef.current);
+    }
+
+    // Reset federation state if input doesn't contain *
+    if (!value.includes("*")) {
+      setFederationResolution({ status: "idle", address: null, error: null });
+      return;
+    }
+
+    // Set resolving state and trigger lookup with debounce
+    setFederationResolution({ status: "resolving", address: null, error: null });
+
+    federationTimeoutRef.current = setTimeout(async () => {
+      try {
+        const resolved = await resolveFederationName(value);
+        if (resolved) {
+          // Federation address resolved to a G-address
+          setFederationResolution({ status: "resolved", address: resolved, error: null });
+          // Auto-update the value to the resolved G-address
+          onChange(resolved);
+        } else {
+          setFederationResolution({ status: "failed", address: null, error: "Federation address not found" });
+        }
+      } catch (err) {
+        setFederationResolution({
+          status: "failed",
+          address: null,
+          error: err instanceof Error ? err.message : "Federation lookup failed",
+        });
+      }
+    }, 500);
+
+    return () => {
+      if (federationTimeoutRef.current) clearTimeout(federationTimeoutRef.current);
+    };
+  }, [value, onChange]);
 
   const filtered = contacts.filter(
     (c) =>
@@ -93,59 +142,93 @@ export default function RecipientAutocomplete({
   }
 
   return (
-    <div className="relative">
-      <input
-        ref={inputRef}
-        id="recipient"
-        type="text"
-        value={value}
-        onChange={(e) => {
-          onChange(e.target.value);
-          setOpen(true);
-        }}
-        onFocus={() => setOpen(true)}
-        onBlur={() => {
-          setTimeout(() => setOpen(false), 200);
-          onBlur();
-        }}
-        onKeyDown={handleKeyDown}
-        placeholder={placeholder}
-        className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-3 text-white font-mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
-        aria-required="true"
-        aria-invalid={!!(touched && error)}
-        aria-describedby={touched && error ? "recipient-error" : undefined}
-        aria-expanded={showDropdown}
-        aria-autocomplete="list"
-        aria-controls="recipient-listbox"
-        role="combobox"
-        autoComplete="off"
-      />
-      {showDropdown && (
-        <ul
-          id="recipient-listbox"
-          ref={listRef}
-          role="listbox"
-          className="absolute z-10 top-full mt-1 w-full bg-gray-800 border border-gray-600 rounded-lg shadow-xl max-h-48 overflow-y-auto"
-        >
-          {filtered.map((contact, idx) => (
-            <li
-              key={contact.id}
-              role="option"
-              aria-selected={highlightedIdx === idx}
-              className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer text-sm transition-colors ${
-                highlightedIdx === idx ? "bg-gray-700 text-white" : "text-gray-300 hover:bg-gray-700/60"
-              }`}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                select(contact);
-              }}
-              onMouseEnter={() => setHighlightedIdx(idx)}
-            >
-              <span className="flex-1 truncate">{contact.name}</span>
-              <span className="text-gray-500 font-mono text-xs shrink-0">{truncateAddress(contact.address)}</span>
-            </li>
-          ))}
-        </ul>
+    <div className="space-y-2">
+      <div className="relative">
+        <input
+          ref={inputRef}
+          id="recipient"
+          type="text"
+          value={value}
+          onChange={(e) => {
+            onChange(e.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => {
+            setTimeout(() => setOpen(false), 200);
+            onBlur();
+          }}
+          onKeyDown={handleKeyDown}
+          placeholder={placeholder}
+          className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-3 text-white font-mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+          aria-required="true"
+          aria-invalid={!!(touched && error)}
+          aria-describedby={
+            touched && error ? "recipient-error" : federationResolution.status !== "idle" ? "federation-status" : undefined
+          }
+          aria-expanded={showDropdown}
+          aria-autocomplete="list"
+          aria-controls="recipient-listbox"
+          role="combobox"
+          autoComplete="off"
+        />
+        {showDropdown && (
+          <ul
+            id="recipient-listbox"
+            ref={listRef}
+            role="listbox"
+            className="absolute z-10 top-full mt-1 w-full bg-gray-800 border border-gray-600 rounded-lg shadow-xl max-h-48 overflow-y-auto"
+          >
+            {filtered.map((contact, idx) => (
+              <li
+                key={contact.id}
+                role="option"
+                aria-selected={highlightedIdx === idx}
+                className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer text-sm transition-colors ${
+                  highlightedIdx === idx ? "bg-gray-700 text-white" : "text-gray-300 hover:bg-gray-700/60"
+                }`}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  select(contact);
+                }}
+                onMouseEnter={() => setHighlightedIdx(idx)}
+              >
+                <span className="flex-1 truncate">{contact.name}</span>
+                <span className="text-gray-500 font-mono text-xs shrink-0">{truncateAddress(contact.address)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {/* Federation lookup status and resolved address display */}
+      {federationResolution.status !== "idle" && (
+        <div id="federation-status" className="flex items-start gap-2 text-sm">
+          {federationResolution.status === "resolving" && (
+            <div className="flex items-center gap-2 text-gray-400">
+              <div className="w-4 h-4 rounded-full border-2 border-gray-600 border-t-green-500 animate-spin" />
+              <span>Resolving federation address…</span>
+            </div>
+          )}
+          {federationResolution.status === "resolved" && federationResolution.address && (
+            <div className="flex items-start gap-2 w-full p-2 bg-green-900/20 border border-green-700/30 rounded text-green-300">
+              <span className="text-lg">✓</span>
+              <div>
+                <p className="font-medium">Federation resolved</p>
+                <p className="text-xs text-green-200/70 break-all font-mono">{federationResolution.address}</p>
+              </div>
+            </div>
+          )}
+          {federationResolution.status === "failed" && (
+            <div className="flex items-start gap-2 w-full p-2 bg-red-900/20 border border-red-700/30 rounded text-red-300">
+              <span className="text-lg">✕</span>
+              <div>
+                <p className="font-medium">Resolution failed</p>
+                <p className="text-xs text-red-200/70">{federationResolution.error}</p>
+              </div>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

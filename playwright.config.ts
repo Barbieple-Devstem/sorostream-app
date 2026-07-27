@@ -8,7 +8,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: 'html',
   use: {
-    baseURL: process.env.BASE_URL || 'http://localhost:3000',
+    baseURL: process.env.BASE_URL || 'http://127.0.0.1:3000',
     trace: 'on-first-retry',
   },
   projects: [
@@ -17,9 +17,12 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
   ],
-  webServer: {
-    command: 'cross-env NEXT_PUBLIC_CONTRACT_ID=TEST_CONTRACT_ID_12345 NEXT_PUBLIC_STELLAR_NETWORK=testnet npm run dev',
-    url: 'http://localhost:3000',
-    reuseExistingServer: !process.env.CI,
-  },
+  webServer: process.env.PLAYWRIGHT_SKIP_WEB_SERVER
+    ? undefined
+    : {
+        command:
+          'cross-env NEXT_PUBLIC_CONTRACT_ID=TEST_CONTRACT_ID_12345 NEXT_PUBLIC_STELLAR_NETWORK=testnet next dev -H 127.0.0.1 -p 3000',
+        url: 'http://127.0.0.1:3000',
+        reuseExistingServer: !process.env.CI,
+      },
 });

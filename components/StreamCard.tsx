@@ -15,6 +15,8 @@ interface StreamCardProps {
   deposit?: number;
   selected?: boolean;
   onToggle?: (id: string) => void;
+  /** Unix timestamp (seconds). When set and > now, a "Scheduled" badge is shown. */
+  scheduledStartTime?: number;
 }
 
 export default function StreamCard({
@@ -26,9 +28,14 @@ export default function StreamCard({
   deposit = 0,
   selected = false,
   onToggle,
+  scheduledStartTime,
 }: StreamCardProps) {
   const { isBookmarked, toggleBookmark } = useBookmarks();
   const bookmarked = isBookmarked(id);
+
+  const isScheduled =
+    typeof scheduledStartTime === "number" &&
+    scheduledStartTime > Math.floor(Date.now() / 1000);
 
   /** Convert stroops → XLM (display value). */
   const toXlm = (val: number) => (val / 10_000_000).toFixed(2);
@@ -70,6 +77,16 @@ export default function StreamCard({
           >
             {bookmarked ? "★" : "☆"}
           </button>
+          {isScheduled && (
+            <span
+              className="text-xs px-2 py-1 rounded-full bg-blue-900/60 text-blue-300 border border-blue-700 flex items-center gap-1"
+              aria-label="Scheduled stream"
+              title={`Starts ${new Date((scheduledStartTime ?? 0) * 1000).toLocaleString()}`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" aria-hidden="true" />
+              Scheduled
+            </span>
+          )}
           <span
             className={`text-xs px-2 py-1 rounded-full ${
               status === "Active"
