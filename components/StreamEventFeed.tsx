@@ -8,6 +8,7 @@ const typeConfig: Record<StreamEvent["type"], { label: string; icon: string; col
   withdrawal: { label: "Withdrawal", icon: "↓", color: "text-green-400" },
   "top-up": { label: "Top-up", icon: "↑", color: "text-blue-400" },
   cancellation: { label: "Cancelled", icon: "✕", color: "text-red-400" },
+  alert: { label: "Alert", icon: "⚠", color: "text-yellow-400" },
 };
 
 function formatRelativeTime(timestamp: string): string {

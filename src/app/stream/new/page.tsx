@@ -1,15 +1,30 @@
 "use client";
-import { useState, Suspense } from "react";
+import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
+import { useState, Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import DurationPicker from "@/components/DurationPicker";
 import FlowRatePreview from "@/components/FlowRatePreview";
 import StreamTemplatePicker from "@/components/StreamTemplatePicker";
 import RecipientAutocomplete from "@/components/RecipientAutocomplete";
+import VestingPreviewChart from "@/components/VestingPreviewChart";
 import TransactionStepper, { TxStage } from "@/components/TransactionStepper";
+import SchedulingToggle from "@/components/SchedulingToggle";
+import FeeEstimationPanel from "@/components/FeeEstimationPanel";
+import BatchCreateTab from "@/components/BatchCreateTab";
 import { SkeletonForm } from "@/components/Skeleton";
 import { useTranslations } from "@/src/lib/i18n";
 import { trackEvent } from "@/src/lib/analytics";
+import { sorostream, getFeeConfig, calcWithdrawBreakdown } from "@/src/lib/sorostream";
+import { useWallet } from "@/src/context/WalletContext";
+import { sorostream, getCollateralConfig, checkIsNewSender, calcCollateral, getGasFeeEstimate, type GasFeeEstimate } from "@/src/lib/sorostream";
+import { useWallet } from "@/src/context/WalletContext";
 import { sorostream } from "@/src/lib/sorostream";
+import { readDraft, useFormPersist } from "@/src/lib/useFormPersist";
+import { usePreferences } from "@/src/context/PreferencesContext";
+
+type PageTab = "single" | "batch";
+import { useSettings } from "@/src/context/SettingsContext";
 
 type Step = "recipient" | "amount" | "review";
 
@@ -71,6 +86,18 @@ function validateCliffDate(cliffValue: string, endValue: string): string {
   return "";
 }
 
+/**
+ * Validates the scheduled start datetime-local string.
+ * Must be provided and strictly in the future (> now).
+ */
+function validateScheduledStart(value: string): string {
+  if (!value) return "Scheduled start date is required when scheduling is enabled.";
+  const ts = new Date(value).getTime();
+  if (isNaN(ts)) return "Invalid date.";
+  if (ts <= Date.now()) return "Start time must be in the future.";
+  return "";
+}
+
 const stepLabels: Record<Step, { title: string; number: number }> = {
   recipient: { title: "Recipient", number: 1 },
   amount: { title: "Amount & Duration", number: 2 },
@@ -82,51 +109,199 @@ const STEPS: Step[] = ["recipient", "amount", "review"];
 function NewStreamWizard() {
   const router = useRouter();
   const t = useTranslations("stream_new");
+  const [activeTab, setActiveTab] = useState<PageTab>("single");
   const [step, setStep] = useState<Step>("recipient");
   const searchParams = useSearchParams();
+  const { address } = useWallet();
+  const { defaultToken, defaultDuration, defaultCliffDuration } = usePreferences();
+  const settings = useSettings();
 
   const recipientParam = searchParams.get("recipient");
   const amountParam = searchParams.get("amount");
   const durationParam = searchParams.get("duration");
 
-  const initialRecipient =
-    recipientParam && /^G[A-Z2-7]{55}$/.test(recipientParam)
-      ? recipientParam
-      : "";
+  // ----- sessionStorage draft -----
+  // Read once before any useState initialisation so we can use draft values
+  // as initial state. URL query params take priority over the draft.
+  const draft = readDraft();
+
+  const initialRecipient = (() => {
+    if (recipientParam && /^G[A-Z2-7]{55}$/.test(recipientParam)) return recipientParam;
+    return draft?.recipient ?? "";
+  })();
   const initialAmount = (() => {
-    if (!amountParam) return "";
-    const num = parseFloat(amountParam);
-    return !isNaN(num) && num > 0 ? amountParam : "";
+    if (amountParam) {
+      const num = parseFloat(amountParam);
+      if (!isNaN(num) && num > 0) return amountParam;
+    }
+    return draft?.amount ?? "";
   })();
   const initialDuration = (() => {
-    if (!durationParam) return 0;
+    if (durationParam) {
+      const num = parseFloat(durationParam);
+      if (!isNaN(num) && num > 0) return Math.round(num);
+    }
+    return draft?.duration ?? 0;
+    if (!durationParam) return settings.defaultDurationSeconds;
     const num = parseFloat(durationParam);
-    return !isNaN(num) && num > 0 ? Math.round(num) : 0;
+    return !isNaN(num) && num > 0 ? Math.round(num) : settings.defaultDurationSeconds;
   })();
 
   const [recipient, setRecipient] = useState(initialRecipient);
   const [amount, setAmount] = useState(initialAmount);
+  // Use URL param first, then saved preference, then 0
+  const [duration, setDuration] = useState(initialDuration || defaultDuration || 0);
+  // Pre-select token from preference when no URL param overrides
+  const [selectedToken, setSelectedToken] = useState<string>(
+    SUPPORTED_TOKENS.find((t) => t.symbol === defaultToken)?.symbol ?? SUPPORTED_TOKENS[0].symbol,
+  );
   const [duration, setDuration] = useState(initialDuration);
-  const [selectedToken, setSelectedToken] = useState<string>(SUPPORTED_TOKENS[0].symbol);
+  const [selectedToken, setSelectedToken] = useState<string>(
+    draft?.selectedToken ?? SUPPORTED_TOKENS[0].symbol,
+  );
+  const [customTokenAddress, setCustomTokenAddress] = useState(draft?.customTokenAddress ?? "");
+  const [selectedToken, setSelectedToken] = useState<string>(settings.defaultToken || SUPPORTED_TOKENS[0].symbol);
   const [customTokenAddress, setCustomTokenAddress] = useState("");
   const [customTokenError, setCustomTokenError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState({ recipient: "", amount: "", duration: "", endDate: "", cliffDate: "" });
+  const [errors, setErrors] = useState({ recipient: "", amount: "", duration: "", endDate: "", cliffDate: "", scheduledStart: "" });
   const [touched, setTouched] = useState({ recipient: false, amount: false });
   const [durationPickerKey, setDurationPickerKey] = useState(0);
 
   // Optional end date & cliff date (ISO datetime-local value)
+  const [endDate, setEndDate] = useState(draft?.endDate ?? "");
+  const [cliffDate, setCliffDate] = useState(draft?.cliffDate ?? "");
+
+  // ----- persistence helpers -----
+  const { saveDraft, clearDraft } = useFormPersist();
+
+  /** Helper: persist the entire current form state after any field change. */
+  function persist(overrides: Partial<{
+    recipient: string;
+    amount: string;
+    duration: number;
+    selectedToken: string;
+    customTokenAddress: string;
+    endDate: string;
+    cliffDate: string;
+  }> = {}) {
+    saveDraft({
+      recipient,
+      amount,
+      duration,
+      selectedToken,
+      customTokenAddress,
+      endDate,
+      cliffDate,
+      ...overrides,
+    });
+  }
   const [endDate, setEndDate] = useState("");
-  const [cliffDate, setCliffDate] = useState("");
+  // Pre-fill cliff from preference (convert seconds offset to a future datetime-local string)
+  const [cliffDate, setCliffDate] = useState(() => {
+    if (!defaultCliffDuration || defaultCliffDuration <= 0) return "";
+    const dt = new Date(Date.now() + defaultCliffDuration * 1000);
+    // datetime-local format: "YYYY-MM-DDTHH:MM"
+    return dt.toISOString().slice(0, 16);
+  });
+
+  // Scheduling
+  const [schedulingEnabled, setSchedulingEnabled] = useState(false);
+  const [scheduledStart, setScheduledStart] = useState("");
 
   // Transaction progress
   const [txStage, setTxStage] = useState<TxStage | null>(null);
   const [txFailedStage, setTxFailedStage] = useState<TxStage | undefined>(undefined);
   const [txError, setTxError] = useState<string | undefined>(undefined);
 
+  // Protocol fee state for review step
+  const [feeBasisPoints, setFeeBasisPoints] = useState<number>(0);
+  const [feeLoading, setFeeLoading] = useState(false);
+
+  // Load protocol fee config whenever we enter the review step
+  useEffect(() => {
+    if (step !== "review") return;
+    let active = true;
+    setFeeLoading(true);
+    getFeeConfig()
+      .then(({ basisPoints }) => {
+        if (active) setFeeBasisPoints(basisPoints);
+      })
+      .catch(() => {
+        if (active) setFeeBasisPoints(0);
+      })
+      .finally(() => {
+        if (active) setFeeLoading(false);
+      });
+    return () => { active = false; };
+  }, [step]);
+  // Auto-renewal settings
+  const [autoRenew, setAutoRenew] = useState(false);
+  const [autoRenewDuration, setAutoRenewDuration] = useState(0); // 0 = same as stream duration
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  // Gas fee estimate
+  const [gasFee, setGasFee] = useState<GasFeeEstimate | null>(null);
+  const [gasFeeLoading, setGasFeeLoading] = useState(false);
+  const [gasFeeStale, setGasFeeStale] = useState(false);
+  const gasFeeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Debounced gas fee re-fetch whenever amount changes on the amount step
+  useEffect(() => {
+    if (step !== "amount") return;
+    const parsed = parseFloat(amount);
+    if (!amount || isNaN(parsed) || parsed <= 0) {
+      setGasFee(null);
+      return;
+    }
+    if (gasFeeDebounceRef.current) clearTimeout(gasFeeDebounceRef.current);
+    gasFeeDebounceRef.current = setTimeout(async () => {
+      setGasFeeLoading(true);
+      setGasFeeStale(false);
+      try {
+        const estimate = await getGasFeeEstimate(Math.round(parsed * 10_000_000));
+        setGasFee(estimate);
+      } catch {
+        setGasFeeStale(true); // keep last known value, mark stale
+      } finally {
+        setGasFeeLoading(false);
+      }
+    }, 500);
+    return () => {
+      if (gasFeeDebounceRef.current) clearTimeout(gasFeeDebounceRef.current);
+    };
+  }, [amount, step]);
+
+  // Collateral requirement
+  const [collateralBps, setCollateralBps] = useState<number | null>(null);
+  const [isNewSender, setIsNewSender] = useState(false);
+
+  // Fetch collateral config and new-sender status once when reaching review step
+  useEffect(() => {
+    if (step !== "review") return;
+    let cancelled = false;
+    async function fetchCollateral() {
+      const [config, newSender] = await Promise.all([
+        getCollateralConfig(),
+        checkIsNewSender(address ?? ""),
+      ]);
+      if (!cancelled) {
+        setCollateralBps(config.basisPoints);
+        setIsNewSender(newSender);
+      }
+    }
+    void fetchCollateral();
+    return () => { cancelled = true; };
+  }, [step, address]);
+
   function handleTemplateSelect(seconds: number, suggestedAmount?: string, recipientOverride?: string) {
     setDuration(seconds);
     setErrors((prev) => ({ ...prev, duration: "" }));
+    const newAmount = suggestedAmount ?? amount;
+    const newRecipient =
+      recipientOverride && /^G[A-Z2-7]{55}$/.test(recipientOverride)
+        ? recipientOverride
+        : recipient;
     if (suggestedAmount) {
       setAmount(suggestedAmount);
       setErrors((prev) => ({ ...prev, amount: "" }));
@@ -135,6 +310,7 @@ function NewStreamWizard() {
       setRecipient(recipientOverride);
       setErrors((prev) => ({ ...prev, recipient: "" }));
     }
+    persist({ duration: seconds, amount: newAmount, recipient: newRecipient });
   }
 
   function handleRecipientBlur() {
@@ -161,8 +337,9 @@ function NewStreamWizard() {
       const dErr = validateDuration(duration);
       const eErr = validateEndDate(endDate);
       const cErr = validateCliffDate(cliffDate, endDate);
-      if (aErr || dErr || eErr || cErr) {
-        setErrors({ ...errors, amount: aErr, duration: dErr, endDate: eErr, cliffDate: cErr });
+      const sErr = schedulingEnabled ? validateScheduledStart(scheduledStart) : "";
+      if (aErr || dErr || eErr || cErr || sErr) {
+        setErrors({ ...errors, amount: aErr, duration: dErr, endDate: eErr, cliffDate: cErr, scheduledStart: sErr });
         return;
       }
       setStep("review");
@@ -190,13 +367,20 @@ function NewStreamWizard() {
     const dErr = validateDuration(duration);
     const eErr = validateEndDate(endDate);
     const cErr = validateCliffDate(cliffDate, endDate);
-    if (rErr || aErr || dErr || eErr || cErr) {
-      setErrors({ recipient: rErr, amount: aErr, duration: dErr, endDate: eErr, cliffDate: cErr });
+    const sErr = schedulingEnabled ? validateScheduledStart(scheduledStart) : "";
+    if (rErr || aErr || dErr || eErr || cErr || sErr) {
+      setErrors({ recipient: rErr, amount: aErr, duration: dErr, endDate: eErr, cliffDate: cErr, scheduledStart: sErr });
       return;
     }
 
     const tokenAddress = resolvedTokenAddress();
     if (!tokenAddress) return;
+
+    // Convert scheduled start datetime-local → Unix timestamp (seconds)
+    const scheduledStartTime =
+      schedulingEnabled && scheduledStart
+        ? Math.floor(new Date(scheduledStart).getTime() / 1000)
+        : undefined;
 
     setLoading(true);
     setTxStage(TxStage.Building);
@@ -223,6 +407,9 @@ function NewStreamWizard() {
         amount,
         durationSeconds: duration,
         token: selectedToken === CUSTOM_TOKEN_VALUE ? tokenAddress : selectedToken,
+        autoRenew,
+        autoRenewDurationSeconds: autoRenew && autoRenewDuration > 0 ? autoRenewDuration : undefined,
+        scheduledStartTime,
       });
 
       setTxStage(TxStage.Done);
@@ -231,12 +418,22 @@ function NewStreamWizard() {
       // Auto-close after 2 seconds, then redirect
       await new Promise((r) => setTimeout(r, 2000));
 
+      // Clear persisted draft on successful creation
+      clearDraft();
+
       setRecipient("");
       setAmount("");
       setDuration(0);
       setEndDate("");
       setCliffDate("");
+      setAutoRenew(false);
+      setAutoRenewDuration(0);
+      setShowAdvanced(false);
+      setGasFee(null);
       setErrors({ recipient: "", amount: "", duration: "", endDate: "", cliffDate: "" });
+      setSchedulingEnabled(false);
+      setScheduledStart("");
+      setErrors({ recipient: "", amount: "", duration: "", endDate: "", cliffDate: "", scheduledStart: "" });
       setTouched({ recipient: false, amount: false });
       setDurationPickerKey((k) => k + 1);
       setTxStage(null);
@@ -268,7 +465,7 @@ function NewStreamWizard() {
               {txFailedStage && (
                 <button
                   type="button"
-                  onClick={() => { setLoading(false); setTxStage(null); setTxFailedStage(undefined); setTxError(undefined); }}
+                  onClick={() => { setLoading(false); setTxStage(null); setTxFailedStage(undefined); setTxError(undefined); clearDraft(); }}
                   className="w-full border border-gray-600 text-gray-300 py-3 rounded-lg font-medium hover:bg-gray-700 transition-colors"
                 >
                   Back to Form
@@ -290,8 +487,48 @@ function NewStreamWizard() {
     : true;
 
   return (
-    <main id="main-content" tabIndex={-1} className="min-h-screen bg-gray-900 text-white p-4 sm:p-8">
+    <main id="main-content" tabIndex={-1} className="min-h-screen bg-gray-900 text-white p-4 sm:p-8 pb-24 md:pb-8">
       <div className="max-w-lg mx-auto">
+        {/* Tab switcher */}
+        <div className="flex rounded-xl bg-gray-800 p-1 mb-8" role="tablist" aria-label="Create stream mode">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "single"}
+            onClick={() => setActiveTab("single")}
+            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 ${
+              activeTab === "single"
+                ? "bg-gray-700 text-white"
+                : "text-gray-400 hover:text-white"
+            }`}
+          >
+            Single Stream
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "batch"}
+            onClick={() => setActiveTab("batch")}
+            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 ${
+              activeTab === "batch"
+                ? "bg-gray-700 text-white"
+                : "text-gray-400 hover:text-white"
+            }`}
+          >
+            Batch Create
+          </button>
+        </div>
+
+        {/* Batch tab */}
+        {activeTab === "batch" && (
+          <div role="tabpanel" aria-label="Batch create">
+            <BatchCreateTab />
+          </div>
+        )}
+
+        {/* Single stream tab */}
+        {activeTab === "single" && (
+        <div role="tabpanel" aria-label="Single stream">
         <div className="mb-8">
           <div className="flex items-center justify-center gap-2 mb-6">
             {STEPS.map((s, i) => (
@@ -331,6 +568,7 @@ function NewStreamWizard() {
                 onChange={(v) => {
                   setRecipient(v);
                   setErrors((prev) => ({ ...prev, recipient: "" }));
+                  persist({ recipient: v });
                 }}
                 onBlur={handleRecipientBlur}
                 placeholder={t("recipient_placeholder")}
@@ -360,6 +598,7 @@ function NewStreamWizard() {
                 onChange={(e) => {
                   setSelectedToken(e.target.value);
                   setCustomTokenError("");
+                  persist({ selectedToken: e.target.value });
                 }}
                 className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-3 text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
               >
@@ -376,7 +615,7 @@ function NewStreamWizard() {
                     id="custom-token-address"
                     type="text"
                     value={customTokenAddress}
-                    onChange={(e) => { setCustomTokenAddress(e.target.value); setCustomTokenError(""); }}
+                    onChange={(e) => { setCustomTokenAddress(e.target.value); setCustomTokenError(""); persist({ customTokenAddress: e.target.value }); }}
                     placeholder="Contract address (e.g. C…)"
                     className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-3 text-white text-sm font-mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
                     aria-label="Custom token contract address"
@@ -407,6 +646,7 @@ function NewStreamWizard() {
                   } else {
                     setErrors((prev) => ({ ...prev, amount: "" }));
                   }
+                  persist({ amount: val });
                 }}
                 onPaste={(e) => {
                   const pasted = e.clipboardData.getData("text");
@@ -447,10 +687,35 @@ function NewStreamWizard() {
                 onChange={(s) => {
                   setDuration(s);
                   if (s > 0) setErrors((prev) => ({ ...prev, duration: "" }));
+                  persist({ duration: s });
                 }}
                 error={errors.duration || undefined}
               />
             </div>
+
+            {/* Scheduling toggle */}
+            <SchedulingToggle
+              enabled={schedulingEnabled}
+              onToggle={(v) => {
+                setSchedulingEnabled(v);
+                if (!v) {
+                  setScheduledStart("");
+                  setErrors((prev) => ({ ...prev, scheduledStart: "" }));
+                }
+              }}
+              value={scheduledStart}
+              onChange={(v) => {
+                setScheduledStart(v);
+                setErrors((prev) => ({ ...prev, scheduledStart: validateScheduledStart(v) }));
+              }}
+              onBlur={() =>
+                setErrors((prev) => ({
+                  ...prev,
+                  scheduledStart: schedulingEnabled ? validateScheduledStart(scheduledStart) : "",
+                }))
+              }
+              error={errors.scheduledStart || undefined}
+            />
 
             {/* Optional end date */}
             <div>
@@ -464,6 +729,7 @@ function NewStreamWizard() {
                 onChange={(e) => {
                   setEndDate(e.target.value);
                   setErrors((prev) => ({ ...prev, endDate: validateEndDate(e.target.value) }));
+                  persist({ endDate: e.target.value });
                 }}
                 onBlur={() => setErrors((prev) => ({ ...prev, endDate: validateEndDate(endDate) }))}
                 className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-3 text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
@@ -489,6 +755,7 @@ function NewStreamWizard() {
                 onChange={(e) => {
                   setCliffDate(e.target.value);
                   setErrors((prev) => ({ ...prev, cliffDate: validateCliffDate(e.target.value, endDate) }));
+                  persist({ cliffDate: e.target.value });
                 }}
                 onBlur={() => setErrors((prev) => ({ ...prev, cliffDate: validateCliffDate(cliffDate, endDate) }))}
                 className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-3 text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
@@ -503,8 +770,135 @@ function NewStreamWizard() {
             </div>
 
             {amount && duration > 0 && (
+              <VestingPreviewChart
+                amount={amount}
+                durationSeconds={duration}
+                cliffSeconds={cliffDate ? Math.max(0, Math.floor((new Date(cliffDate).getTime() - Date.now()) / 1000)) : undefined}
+                token={selectedToken === CUSTOM_TOKEN_VALUE ? "tokens" : selectedToken}
+              />
+            )}
+
+            {amount && duration > 0 && (
               <FlowRatePreview amount={amount} durationSeconds={duration} />
             )}
+
+            {/* Gas fee estimate */}
+            {(gasFee || gasFeeLoading) && (
+              <div
+                className={`flex items-center justify-between text-xs px-3 py-2 rounded-lg border ${
+                  gasFeeStale
+                    ? "bg-yellow-900/20 border-yellow-700/40 text-yellow-300"
+                    : "bg-gray-800 border-gray-700 text-gray-400"
+                }`}
+                aria-live="polite"
+                aria-label="Estimated network fee"
+              >
+                <span>Estimated network fee</span>
+                <span className="flex items-center gap-1.5 font-mono">
+                  {gasFeeLoading ? (
+                    <>
+                      <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                      </svg>
+                      <span className="text-gray-500">Refreshing…</span>
+                    </>
+                  ) : (
+                    <>
+                      {gasFee && <span className={gasFeeStale ? "text-yellow-300" : "text-white"}>{gasFee.feeFormatted} XLM</span>}
+                      {gasFeeStale && <span className="text-yellow-400" title="Could not refresh — showing last known estimate">⚠ stale</span>}
+                    </>
+                  )}
+                </span>
+              </div>
+            )}
+
+            {/* Advanced settings */}
+            <div>
+              <button
+                type="button"
+                onClick={() => setShowAdvanced((v) => !v)}
+                aria-expanded={showAdvanced}
+                className="flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 rounded"
+              >
+                <svg
+                  className={`h-4 w-4 transition-transform ${showAdvanced ? "rotate-90" : ""}`}
+                  xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
+                Advanced settings
+              </button>
+
+              {showAdvanced && (
+                <div className="mt-4 space-y-4 pl-1">
+                  {/* Auto-renewal toggle */}
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <label htmlFor="auto-renew-toggle" className="text-sm text-gray-200 font-medium">
+                          Auto-Renewal
+                        </label>
+                        {/* Tooltip */}
+                        <div className="relative group">
+                          <button
+                            type="button"
+                            aria-label="How does auto-renewal work?"
+                            className="text-gray-500 hover:text-gray-300 text-xs border border-gray-600 rounded-full w-4 h-4 flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
+                          >
+                            ?
+                          </button>
+                          <div
+                            role="tooltip"
+                            className="hidden group-hover:block group-focus-within:block absolute left-0 bottom-6 w-64 bg-gray-700 border border-gray-600 rounded-lg p-3 text-xs text-gray-300 leading-relaxed z-10 shadow-lg"
+                          >
+                            When enabled, the stream automatically restarts at expiry using
+                            the same amount. The renewal re-locks the same deposit from your
+                            balance — ensure you have sufficient funds each cycle.
+                            You can cancel auto-renewal at any time before the next cycle starts.
+                          </div>
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        Automatically restart the stream when it expires
+                      </p>
+                    </div>
+                    <button
+                      id="auto-renew-toggle"
+                      type="button"
+                      role="switch"
+                      aria-checked={autoRenew}
+                      onClick={() => setAutoRenew((v) => !v)}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 flex-shrink-0 ${
+                        autoRenew ? "bg-green-600" : "bg-gray-600"
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                          autoRenew ? "translate-x-6" : "translate-x-1"
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Auto-renew duration (only when toggle is on) */}
+                  {autoRenew && (
+                    <div>
+                      <label className="text-sm text-gray-200 font-medium block mb-2">
+                        Auto-Renew Duration{" "}
+                        <span className="text-gray-400 font-normal">(optional — defaults to stream duration)</span>
+                      </label>
+                      <DurationPicker
+                        initialSeconds={autoRenewDuration > 0 ? autoRenewDuration : undefined}
+                        onChange={setAutoRenewDuration}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -512,10 +906,23 @@ function NewStreamWizard() {
         {step === "review" && (
           <div className="space-y-6">
             <div className="bg-gray-800 rounded-xl p-5 space-y-4 border border-gray-700">
-              <div className="flex justify-between items-center">
-                <span className="text-gray-400 text-sm">Recipient</span>
-                <span className="text-white font-mono text-sm">{recipient}</span>
+              {/* Sender */}
+              <div className="flex justify-between items-start">
+                <span className="text-gray-400 text-sm">Sender</span>
+                <span className="text-white font-mono text-xs text-right max-w-[60%] break-all">
+                  {address ?? "—"}
+                </span>
               </div>
+
+              {/* Recipient */}
+              <div className="flex justify-between items-start">
+                <span className="text-gray-400 text-sm">Recipient</span>
+                <span className="text-white font-mono text-xs text-right max-w-[60%] break-all">
+                  {recipient}
+                </span>
+              </div>
+
+              {/* Token */}
               <div className="flex justify-between items-center">
                 <span className="text-gray-400 text-sm">Token</span>
                 <span className="text-white font-mono text-sm">
@@ -524,12 +931,16 @@ function NewStreamWizard() {
                     : selectedToken}
                 </span>
               </div>
+
+              {/* Total amount */}
               <div className="flex justify-between items-center">
-                <span className="text-gray-400 text-sm">Amount</span>
+                <span className="text-gray-400 text-sm">Total amount</span>
                 <span className="text-white font-mono text-sm">
                   {amount} {selectedToken === CUSTOM_TOKEN_VALUE ? "tokens" : selectedToken}
                 </span>
               </div>
+
+              {/* Duration */}
               <div className="flex justify-between items-center">
                 <span className="text-gray-400 text-sm">Duration</span>
                 <span className="text-white font-mono text-sm">
@@ -548,10 +959,166 @@ function NewStreamWizard() {
                   })()}
                 </span>
               </div>
+
+              {/* Start / End dates */}
+              {(() => {
+                const startDate = new Date();
+                const endDate = new Date(startDate.getTime() + duration * 1000);
+                return (
+                  <>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-400 text-sm">Start date</span>
+                      <span className="text-white font-mono text-sm">
+                        {startDate.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-400 text-sm">End date</span>
+                      <span className="text-white font-mono text-sm">
+                        {endDate.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                      </span>
+                    </div>
+                  </>
+                );
+              })()}
+
+              {/* Fee breakdown */}
+              <div className="border-t border-gray-700 pt-4 space-y-3">
+                {feeLoading ? (
+                  <p className="text-gray-400 text-xs text-center">Loading fee info…</p>
+                ) : (
+                  (() => {
+                    const amountNum = parseFloat(amount) || 0;
+                    const amountStroops = Math.round(amountNum * 10_000_000);
+                    const { fee, net, feePercent } = calcWithdrawBreakdown(amountStroops, feeBasisPoints);
+                    const feeDisplay = (fee / 10_000_000).toFixed(7).replace(/\.?0+$/, "") || "0";
+                    const netDisplay = (net / 10_000_000).toFixed(7).replace(/\.?0+$/, "");
+                    const tokenLabel = selectedToken === CUSTOM_TOKEN_VALUE ? "tokens" : selectedToken;
+                    return (
+                      <>
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-400 text-sm">
+                            Protocol fee{" "}
+                            <span className="text-gray-500 text-xs">({feePercent}%)</span>
+                          </span>
+                          <span className="text-yellow-400 font-mono text-sm" data-testid="protocol-fee">
+                            {feeDisplay} {tokenLabel}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-400 text-sm">Net to recipient</span>
+                          <span className="text-green-400 font-mono text-sm font-semibold" data-testid="net-amount">
+                            {netDisplay} {tokenLabel}
+                          </span>
+                        </div>
+                      </>
+                    );
+                  })()
+                )}
+              </div>
+
+              {schedulingEnabled && scheduledStart && (
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-400 text-sm">Scheduled Start</span>
+                  <span className="text-blue-300 font-mono text-sm">
+                    {new Date(scheduledStart).toLocaleString()}
+                  </span>
+                </div>
+              )}
+              {!schedulingEnabled && (
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-400 text-sm">Start</span>
+                  <span className="text-white font-mono text-sm">Immediately</span>
+                </div>
+              )}
               <div className="border-t border-gray-700 pt-4">
                 <FlowRatePreview amount={amount} durationSeconds={duration} />
               </div>
+              {autoRenew && (
+                <div className="flex justify-between items-center border-t border-gray-700 pt-3">
+                  <span className="text-gray-400 text-sm">Auto-Renewal</span>
+                  <span className="text-green-400 text-sm font-medium">
+                    ✓ Enabled
+                    {autoRenewDuration > 0 && (
+                      <span className="text-gray-400 font-normal ml-1">
+                        ({(() => {
+                          const s = autoRenewDuration;
+                          if (s >= 86400) return `${Math.floor(s / 86400)}d`;
+                          if (s >= 3600) return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
+                          return `${Math.floor(s / 60)}m`;
+                        })()})
+                      </span>
+                    )}
+                  </span>
+                </div>
+              )}
+              {gasFee && (
+                <div className="flex justify-between items-center border-t border-gray-700 pt-3">
+                  <span className="text-gray-400 text-sm">Est. network fee</span>
+                  <span className="text-gray-300 font-mono text-sm">{gasFee.feeFormatted} XLM</span>
+                </div>
+              )}
             </div>
+
+            {/* Collateral Required section — shown when sender is subject to the requirement */}
+            {isNewSender && collateralBps !== null && collateralBps > 0 && (() => {
+              const depositStroops = Math.round(parseFloat(amount || "0") * 10_000_000);
+              const collateralStroops = calcCollateral(depositStroops, collateralBps);
+              const totalStroops = depositStroops + collateralStroops;
+              const collateralAmt = (collateralStroops / 10_000_000).toLocaleString(undefined, { minimumFractionDigits: 7 });
+              const totalAmt = (totalStroops / 10_000_000).toLocaleString(undefined, { minimumFractionDigits: 7 });
+              const token = selectedToken === CUSTOM_TOKEN_VALUE ? "tokens" : selectedToken;
+              const pct = (collateralBps / 100).toFixed(2);
+              return (
+                <div
+                  role="note"
+                  aria-label="Collateral requirement"
+                  className="bg-yellow-900/20 border border-yellow-700/50 rounded-xl p-4 space-y-3"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-yellow-400 text-base" aria-hidden="true">⚠</span>
+                    <p className="text-yellow-300 text-sm font-semibold">Collateral Required</p>
+                    <div className="relative group ml-auto">
+                      <button
+                        type="button"
+                        aria-label="When is collateral returned?"
+                        className="text-gray-400 hover:text-gray-200 text-xs border border-gray-600 rounded-full w-5 h-5 flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
+                      >
+                        ?
+                      </button>
+                      <div
+                        role="tooltip"
+                        className="hidden group-hover:block group-focus-within:block absolute right-0 bottom-7 w-64 bg-gray-700 border border-gray-600 rounded-lg p-3 text-xs text-gray-300 leading-relaxed z-10 shadow-lg"
+                      >
+                        The protocol holds collateral from first-time senders to ensure
+                        the stream can be fulfilled. Your collateral is automatically
+                        returned to your wallet when the stream ends or is cancelled,
+                        provided no dispute is raised.
+                      </div>
+                    </div>
+                  </div>
+                  <p className="text-gray-400 text-xs">
+                    As a new sender, the protocol requires {pct}% collateral to be locked for the duration of the stream.
+                  </p>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Stream amount</span>
+                      <span className="text-white font-mono">{amount} {token}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Collateral ({pct}%)</span>
+                      <span className="text-yellow-300 font-mono">{collateralAmt} {token}</span>
+                    </div>
+                    <div className="flex justify-between border-t border-gray-700 pt-2">
+                      <span className="text-gray-300 font-medium">Total required</span>
+                      <span className="text-white font-mono font-semibold">{totalAmt} {token}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+            {/* Fee estimation — simulated pre-sign */}
+            <FeeEstimationPanel active={step === "review"} />
           </div>
         )}
 
@@ -581,12 +1148,31 @@ function NewStreamWizard() {
               type="button"
               onClick={handleCreateStream}
               disabled={loading}
-              className="flex-1 bg-green-700 text-white py-3 rounded-lg font-medium hover:bg-green-800 disabled:opacity-50 transition-colors"
+              aria-label="Confirm and sign transaction"
+              className="flex-1 bg-green-700 text-white py-3 rounded-lg font-medium hover:bg-green-800 disabled:opacity-50 transition-colors inline-flex items-center justify-center gap-2"
             >
-              {t("submit")}
+              {loading ? (
+                <>
+                  <svg
+                    className="animate-spin h-4 w-4"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                  </svg>
+                  Waiting for wallet…
+                </>
+              ) : (
+                "Confirm and Sign"
+              )}
             </button>
           )}
         </div>
+        </div>
+        )}
       </div>
     </main>
   );
