@@ -43,6 +43,7 @@ import {
   generateCopyLinkUrl
 } from "@/src/lib/share";
 import StreamShareButtons from "@/components/StreamShareButtons";
+import StreamCloneModal from "@/components/StreamCloneModal";
 
 /** Grace period in seconds before a cancel is submitted on-chain. */
 const CANCEL_GRACE_SECONDS = 5;
@@ -117,6 +118,9 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
   const [showTopUp, setShowTopUp] = useState(false);
   const [topUpAmount, setTopUpAmount] = useState("");
   const [topUpLoading, setTopUpLoading] = useState(false);
+
+  // ── Clone modal ────────────────────────────────────────────────────────────
+  const [showCloneModal, setShowCloneModal] = useState(false);
 
   // ── Success banner (stream just created) ──────────────────────────────────
   const [successPhase, setSuccessPhase] = useState<"in" | "out" | null>(null);
@@ -654,24 +658,13 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
           )}
 
           <button
-            onClick={() => {
-              const duration = Math.round(
-                (new Date(stream.endTime).getTime() - new Date(stream.startTime).getTime()) / 1000,
-              );
-              const qp = new URLSearchParams({
-                recipient: stream.recipient,
-                amount: (stream.deposit / 10_000_000).toString(),
-                token: "USDC",
-                duration: String(duration),
-                cliff: "0",
-              });
-              router.push(`/stream/new?${qp.toString()}`);
-            }}
+            onClick={() => setShowCloneModal(true)}
             aria-label="Clone this stream"
             className="inline-flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-white py-2 px-4 rounded-lg text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M4 4v16h16" /><path d="m8 16 4-4 4 4" /><path d="M12 12v9" />
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
             </svg>
             Clone
           </button>
@@ -1062,6 +1055,13 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
         <EmbedWidgetModal
           streamId={stream.id}
           onClose={() => setShowEmbedModal(false)}
+        />
+      )}
+
+      {showCloneModal && (
+        <StreamCloneModal
+          stream={stream}
+          onClose={() => setShowCloneModal(false)}
         />
       )}
     </main>
