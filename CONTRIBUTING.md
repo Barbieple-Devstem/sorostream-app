@@ -29,6 +29,7 @@ npm run lint   # ESLint check
 | `NEXT_PUBLIC_STELLAR_NETWORK` | `testnet` or `mainnet` |
 | `NEXT_PUBLIC_CONTRACT_ID` | Deployed StreamContract address |
 | `NEXT_PUBLIC_RPC_URL` | Soroban RPC endpoint |
+| `NEXT_PUBLIC_ADMIN_ADDRESS` | Comma-separated list of admin wallet public keys for `/admin` |
 
 ## Project Structure
 
@@ -136,6 +137,7 @@ describe("Utility Function", () => {
 - **Framework**: Playwright
 - **Location**: `e2e/`
 - **Run**: `npm run test:e2e` or `npm run test:e2e:ui`
+- **Visual baselines**: update the create-stream dark-mode snapshot with `npx playwright test e2e/visual-regression.spec.ts --update-snapshots`
 
 ```bash
 # Run E2E tests
@@ -150,16 +152,90 @@ npm run test:e2e:ui
 - **Utility functions**: 100% coverage for core logic
 - **Components**: Test critical paths and user interactions
 - **New features**: At least one E2E test for the main user flow
+- **Visual regression**: create-stream form changes should include the dark-mode screenshot baseline update when the styling change is intentional
 
 ## Contributing Translations (i18n)
 
 We support multi-language (i18n) localization to make SoroStream accessible to communities around the world.
 
-To contribute new translations or fix existing ones:
-1. **Locale Files Location:** All translations are stored as JSON files under `src/locales/`.
-2. **Adding a Language:** Create a new JSON file named after the language's ISO 639-1 code (e.g., `fr.json` for French, `zh.json` for Chinese). Use `src/locales/en.json` as the base template.
-3. **Registering the Language:** Add your language option to the `<select>` dropdown inside `src/app/settings/page.tsx`.
-4. **Validation:** Run `npm run lint` to verify that all translation keys are fully aligned. The translation validation script will automatically check and fail if any keys are missing compared to `en.json`.
+### 1. Translation File Location & Key Format
+
+All translation keys are stored as JSON files under [src/locales/](file:///Users/marvellous/Desktop/sorostream-app-1/src/locales/).
+
+Keys follow a nested JSON structure that maps to a **`namespace.element`** pattern:
+- **Namespaces**: The top-level keys in the JSON objects represent namespaces corresponding to pages or feature areas (e.g. `dashboard`, `settings`, `stream_new`, `stream_detail`, `wallet`).
+- **Elements**: Under each namespace, the leaf nodes represent specific text string keys, named using `snake_case` (e.g., `hero_title`, `no_streams`).
+- **Placeholders**: Dynamic variables in translation strings are enclosed in curly braces (e.g., `{wallet}`, `{count}`).
+
+### 2. How to Add a New Locale (Worked Example)
+
+Here is a step-by-step worked example of adding support for French (`fr`):
+
+#### Step A: Create the JSON Translation File
+Create a new file at `src/locales/fr.json` using `src/locales/en.json` as a base reference. Make sure all namespaces and keys match exactly:
+```json
+{
+  "dashboard": {
+    "title": "Tableau de bord",
+    "no_streams": "Aucun flux disponible."
+  },
+  "wallet": {
+    "connect": "Connecter {wallet}"
+  }
+}
+```
+
+#### Step B: Register the Translation File in the App Code
+Update [src/lib/i18n.ts](file:///Users/marvellous/Desktop/sorostream-app-1/src/lib/i18n.ts) to import the new JSON locale file and add it to the `translations` registry mapping:
+```ts
+import en from "../locales/en.json";
+import pt from "../locales/pt.json";
+import es from "../locales/es.json";
+import fr from "../locales/fr.json"; // 1. Import new locale file
+
+const translations: Record<string, typeof en> = {
+  en,
+  pt,
+  es,
+  fr, // 2. Register new mapping
+};
+```
+
+#### Step C: Expose the Locale in User Settings
+Open [src/app/settings/page.tsx](file:///Users/marvellous/Desktop/sorostream-app-1/src/app/settings/page.tsx) and add the new language option inside the selector component:
+```tsx
+<select
+  value={language}
+  onChange={(e) => setLanguage(e.target.value)}
+  className="..."
+>
+  <option value="en">English</option>
+  <option value="es">Español</option>
+  <option value="pt">Português</option>
+  <option value="fr">Français</option> {/* Register option */}
+</select>
+```
+
+### 3. How to Test and Preview in Development
+
+1. **Verify key alignment**: Run the translation validation command:
+   ```bash
+   npm run lint
+   ```
+   Or run the standalone validation script:
+   ```bash
+   node scripts/check-i18n.mjs
+   ```
+   This script compares all locale files against `en.json` to ensure there are no missing or extra keys. If a key is missing, it will output validation errors.
+2. **Visual testing**: Launch the app locally (`npm run dev`), go to the **Settings** page, select the new language from the dropdown, save settings, and navigate around to preview the translated pages in the browser.
+
+### 4. Review Process for Translation PRs
+
+All submitted translation contributions go through the following review process:
+1. **Automated Key Validation Check**: Continuous Integration (CI) runs `npm run lint` automatically. Any missing or extraneous keys will fail the build.
+2. **Review & Proofreading**: Maintainers or native speakers in the community will review translations for style, correctness, and natural phrasing.
+3. **No Placeholders Altered**: Reviewers will ensure that placeholders (e.g. `{wallet}`) are kept intact and are not translated or deleted.
+
 
 ## PR Checklist
 
@@ -172,10 +248,10 @@ Before submitting your PR, ensure:
 - [ ] Components are mobile-responsive
 - [ ] Accessibility requirements are met (ARIA labels, keyboard navigation)
 - [ ] Translation keys are added/updated if UI text changed
+- [ ] If the create-stream form changed, the dark-mode visual baseline was reviewed and updated intentionally
 
 ## Getting Help
 
 - Check existing issues for similar problems
 - Review the codebase for examples of similar implementations
 - Ask questions in the PR description if something is unclear
-

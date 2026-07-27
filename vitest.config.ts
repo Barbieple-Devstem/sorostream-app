@@ -19,6 +19,10 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, '.'),
+      // Stub Next.js modules that aren't available in the Vitest/jsdom environment
+      'next/link': path.resolve(__dirname, 'src/test/mocks/next-link.tsx'),
+      'next/navigation': path.resolve(__dirname, 'src/test/mocks/next-navigation.ts'),
+      'next/image': path.resolve(__dirname, 'src/test/mocks/next-image.tsx'),
     },
   },
 });
