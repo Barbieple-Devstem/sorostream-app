@@ -80,9 +80,11 @@ function DashboardContent() {
   useEffect(() => {
     let cancelled = false;
 
-    // Flush cached data immediately; if no wallet is connected, stop here so
-    // streams from a previous session are never shown to the next connection.
+    // Flush cached data and reset search query immediately on disconnect/address change
+    // so streams from a previous wallet session are never returned or mixed in.
     setStreams([]);
+    setSearch("");
+    setSelectedIds(new Set());
     if (!address) {
       setLoading(false);
       return;
