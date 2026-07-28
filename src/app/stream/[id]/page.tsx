@@ -26,14 +26,17 @@ import {
   claimableNow,
   getMockStream,
   toStroops,
+  getStreamsForWallet,
 } from "@/src/lib/sorostream";
 import { useToast } from "@/src/lib/toast";
 import StreamQrModal from "@/components/StreamQrModal";
 import WithdrawConfirmModal from "@/components/WithdrawConfirmModal";
 import StartCountdownTimer from "@/components/StartCountdownTimer";
 import EmbedWidgetModal from "@/components/EmbedWidgetModal";
+import StreamComparisonModal from "@/components/StreamComparisonModal";
 import { useSettings } from "@/src/context/SettingsContext";
 import { formatStellarAmount } from "@/src/lib/sorostream";
+import { useTranslations } from "@/src/lib/i18n";
 import { useKeyboardShortcuts, type ShortcutGroup } from "@/src/lib/useKeyboardShortcuts";
 import { useBookmarks } from "@/src/context/BookmarksContext";
 import { useWallet } from "@/src/context/WalletContext";
@@ -50,6 +53,18 @@ const CANCEL_GRACE_SECONDS = 5;
 
 /** Timeout in milliseconds for the stream data fetch. */
 const STREAM_FETCH_TIMEOUT_MS = 10_000;
+
+/**
+ * A valid stream ID is a non-empty string of up to 32 word characters
+ * (letters, digits, underscores, hyphens).  Anything outside this set
+ * (e.g. path traversal characters, SQL injection fragments) is rejected
+ * immediately without making a network call.
+ */
+const STREAM_ID_REGEX = /^[\w-]{1,32}$/;
+
+function isValidStreamId(id: string): boolean {
+  return STREAM_ID_REGEX.test(id);
+}
 
 /** Spinner used inside transaction buttons */
 function Spinner() {
@@ -87,6 +102,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
   const { withdrawThreshold } = useSettings();
   const { address, refetchBalance } = useWallet();
   const { isBookmarked, toggleBookmark } = useBookmarks();
+  const t = useTranslations("stream_detail");
   const [withdrawConfirmAmount, setWithdrawConfirmAmount] = useState<string | null>(null);
 
   // ── Stream data ────────────────────────────────────────────────────────────
@@ -141,6 +157,10 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  // ── Stream comparison modal state ──────────────────────────────────────────
+  const [showComparisonModal, setShowComparisonModal] = useState(false);
+  const [allStreams, setAllStreams] = useState<StreamData[]>([]);
 
   // ── Optimistic UI state ────────────────────────────────────────────────────
   /**
@@ -219,6 +239,17 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
       setPageLoading(true);
       setError(null);
       setIsNetworkError(false);
+
+      // Validate ID format client-side before making any network call.
+      // This prevents an infinite loading spinner for clearly invalid IDs
+      // (e.g. path traversal characters, excessively long strings).
+      if (!isValidStreamId(params.id)) {
+        setError(`"${params.id}" is not a valid stream ID.`);
+        setIsNetworkError(false);
+        setPageLoading(false);
+        return;
+      }
+
       try {
         const timeoutPromise = new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error("Network timeout: stream data could not be loaded within 10 seconds.")), STREAM_FETCH_TIMEOUT_MS),
@@ -254,6 +285,26 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
       cancelled = true;
     };
   }, [params.id, fetchKey]);
+
+  // ── Load all streams for comparison modal ──────────────────────────────────
+  useEffect(() => {
+    if (!address) {
+      setAllStreams([]);
+      return;
+    }
+
+    async function loadAllStreams() {
+      try {
+        const streams = await getStreamsForWallet(address);
+        setAllStreams(streams);
+      } catch (err) {
+        console.error("Failed to load streams for comparison", err);
+        // Silently fail — comparison feature is optional
+      }
+    }
+
+    void loadAllStreams();
+  }, [address]);
 
   const handleRetry = useCallback(() => {
     setRouteError(null);
@@ -774,19 +825,14 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
           />
         )}
 
-        {/* Gift message — shown when this stream was gifted */}
-        {giftMessage && (
-          <div className="mb-4 bg-purple-900/40 border border-purple-700 rounded-xl px-5 py-4 flex gap-4 items-start">
-            <span className="text-3xl shrink-0" aria-hidden="true">🎁</span>
-            <div>
-              <p className="text-purple-200 font-semibold text-sm mb-1">You received a gift stream!</p>
-              <p className="text-purple-100 text-sm whitespace-pre-wrap">{giftMessage}</p>
-            </div>
-          </div>
-        )}
-
-        <div className="bg-gray-800 rounded-xl p-6 space-y-6">
-          <StreamTimeline startTime={stream.startTime} endTime={stream.endTime} />
+          <StreamTimeline
+            startTime={stream.startTime}
+            endTime={stream.endTime}
+            sender={stream.sender}
+            recipient={stream.recipient}
+            status={stream.status}
+            flowRate={stream.flowRate}
+          />
 
           {/* Scheduled start countdown — shown only when stream hasn't started yet */}
           {stream.scheduledStartTime &&
@@ -838,6 +884,42 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
                     </span>
                   )}
                 </div>
+              </div>
+            )}
+            {stream.metadataUri && (
+              <div className="col-span-2">
+                <p className="text-gray-400 mb-1 flex items-center gap-2">
+                  Metadata URI
+                  <div className="relative group">
+                    <button
+                      type="button"
+                      aria-label="What is metadata URI?"
+                      className="text-gray-500 hover:text-gray-300 text-xs border border-gray-600 rounded-full w-4 h-4 flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
+                    >
+                      ?
+                    </button>
+                    <div
+                      role="tooltip"
+                      className="hidden group-hover:block group-focus-within:block absolute left-0 bottom-6 w-64 bg-gray-700 border border-gray-600 rounded-lg p-3 text-xs text-gray-300 leading-relaxed z-10 shadow-lg"
+                    >
+                      External metadata reference that provides additional context or documentation
+                      about this stream. Can point to JSON, terms of service, or other relevant data.
+                    </div>
+                  </div>
+                </p>
+                <a
+                  href={stream.metadataUri}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-blue-900/40 border border-blue-700/50 text-blue-300 hover:bg-blue-900/60 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                  title={stream.metadataUri}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                  </svg>
+                  {stream.metadataUri.length > 40 ? `${stream.metadataUri.slice(0, 37)}…` : stream.metadataUri}
+                </a>
               </div>
             )}
           </div>
@@ -951,6 +1033,37 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
               <polyline points="8 6 2 12 8 18" />
             </svg>
             Embed Widget
+          </button>
+
+          {/* Compare streams */}
+          <button
+            onClick={() => setShowComparisonModal(true)}
+            disabled={allStreams.length <= 1}
+            className="w-full border border-gray-600 text-gray-300 py-2 rounded-lg text-sm hover:bg-gray-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            title={allStreams.length <= 1 ? t("compare_button_tooltip") : ""}
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="9" cy="5" r="1" />
+              <circle cx="9" cy="19" r="1" />
+              <circle cx="20" cy="5" r="1" />
+              <circle cx="20" cy="19" r="1" />
+              <path d="M9 6v6" />
+              <path d="M20 6v6" />
+              <path d="M9 18v-6" />
+              <path d="M20 18v-6" />
+            </svg>
+            {t("compare")}
           </button>
 
           {/* Top-up form */}
@@ -1081,6 +1194,15 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
         <EmbedWidgetModal
           streamId={stream.id}
           onClose={() => setShowEmbedModal(false)}
+        />
+      )}
+
+      {stream && (
+        <StreamComparisonModal
+          open={showComparisonModal}
+          onClose={() => setShowComparisonModal(false)}
+          currentStream={stream}
+          availableStreams={allStreams}
         />
       )}
     </main>

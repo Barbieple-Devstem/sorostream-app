@@ -17,6 +17,8 @@ export interface StreamData {
   autoRenewDurationSeconds?: number;
   /** Unix timestamp (seconds). When set and > now, stream is scheduled. */
   scheduledStartTime?: number;
+  /** Optional metadata URI (ipfs://, https://, or ar://) pointing to stream metadata. */
+  metadataUri?: string;
 }
 
 // ── Protocol stats ───────────────────────────────────────────────────────────
@@ -192,6 +194,29 @@ const MOCK_STREAMS: StreamData[] = [
 
 let nextId = 6;
 
+/**
+ * Validates an optional metadata URI.
+ * Accepts ipfs://, https://, and ar:// schemes.
+ * Returns an error string if invalid, or empty string if valid.
+ */
+export function validateMetadataUri(value: string): string {
+  if (!value) return ""; // Empty is allowed (optional field)
+  
+  try {
+    const url = new URL(value);
+    const scheme = url.protocol.replace(":", "");
+    
+    const allowedSchemes = ["ipfs", "https", "ar"];
+    if (!allowedSchemes.includes(scheme)) {
+      return `Must use one of: ipfs://, https://, or ar://`;
+    }
+    
+    return "";
+  } catch {
+    return "Invalid URI format.";
+  }
+}
+
 export interface CreateStreamParams {
   recipient?: string;
   amount?: string;
@@ -203,6 +228,8 @@ export interface CreateStreamParams {
   autoRenewDurationSeconds?: number;
   /** Unix timestamp (seconds) for a scheduled start. Omit or set to 0 for immediate start. */
   scheduledStartTime?: number;
+  /** Optional metadata URI (ipfs://, https://, or ar://) pointing to stream metadata. */
+  metadataUri?: string;
 }
 
 export function watchClaimable(streams: StreamData[]): StreamData[] {
@@ -261,6 +288,7 @@ export const sorostream = {
         ? (params.autoRenewDurationSeconds ?? durationSeconds)
         : undefined,
       scheduledStartTime,
+      metadataUri: params?.metadataUri,
     };
     MOCK_STREAMS.push(stream);
     return { streamId: id, txHash: `mock-tx-${id}` };
