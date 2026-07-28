@@ -96,7 +96,7 @@ export default function VestingPreviewChart({
   return (
     <section
       aria-labelledby="vesting-preview-heading"
-      className="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 border border-gray-200 dark:border-gray-700"
+      className="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 border border-gray-200 dark:border-gray-700 w-full max-w-full overflow-hidden"
     >
       <h2
         id="vesting-preview-heading"
@@ -105,8 +105,9 @@ export default function VestingPreviewChart({
         Vesting Preview
       </h2>
 
-      <ResponsiveContainer width="100%" height={250}>
-        <LineChart data={chartData} margin={{ top: 20, right: 10, left: 10, bottom: 10 }}>
+      <div className="w-full max-w-full overflow-hidden">
+        <ResponsiveContainer width="100%" height={250}>
+          <LineChart data={chartData} margin={{ top: 20, right: 10, left: 0, bottom: 10 }}>
           <CartesianGrid
             strokeDasharray="3 3"
             stroke={isDark ? "#374151" : "#e5e7eb"}
@@ -182,6 +183,7 @@ export default function VestingPreviewChart({
           />
         </LineChart>
       </ResponsiveContainer>
+      </div>
 
       {/* Legend and info */}
       <div className="mt-4 space-y-2 text-sm text-gray-600 dark:text-gray-400">

@@ -36,6 +36,16 @@ interface WalletContextValue {
    */
   balanceRefreshTrigger: number;
   refetchBalance: () => void;
+  /** Timestamp when session will expire, or null if not set. */
+  sessionExpiresAt: number | null;
+  /** Time until session expires in milliseconds, or null if not set. */
+  sessionTimeRemaining: number | null;
+  /** Show 5-minute warning toast. */
+  showSessionWarning5Min: boolean;
+  /** Show 1-minute blocking modal. */
+  showSessionWarning1Min: boolean;
+  /** Extend the current session (refresh). */
+  extendSession: () => Promise<void>;
 }
 
 const WalletContext = createContext<WalletContextValue | undefined>(undefined);
@@ -46,16 +56,33 @@ const WATCH_INTERVAL = 2000;
 /** Timeout for watch wallet changes operations. */
 const WATCH_WALLET_CHANGES_TIMEOUT = 30000;
 
+/** Session timeout in milliseconds (15 minutes default from Freighter). */
+const SESSION_TIMEOUT_MS = 15 * 60 * 1000;
+
+/** Warning at 5 minutes before session expiry. */
+const SESSION_WARNING_5MIN_MS = 5 * 60 * 1000;
+
+/** Blocking modal at 1 minute before session expiry. */
+const SESSION_WARNING_1MIN_MS = 1 * 60 * 1000;
+
+/** Interval for checking session expiry. */
+const SESSION_CHECK_INTERVAL_MS = 10 * 1000;
+
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [address, setAddress] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [networkMismatch, setNetworkMismatch] = useState(false);
   const [balanceRefreshTrigger, setBalanceRefreshTrigger] = useState(0);
+  const [sessionExpiresAt, setSessionExpiresAt] = useState<number | null>(null);
+  const [showSessionWarning5Min, setShowSessionWarning5Min] = useState(false);
+  const [showSessionWarning1Min, setShowSessionWarning1Min] = useState(false);
   const watcherRef = useRef<ReturnType<typeof createWatchWalletChanges> | null>(
     null,
   );
-
+  const sessionCheckIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const warning5MinTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const warning1MinTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Check the wallet network and update mismatch state. */
   const verifyNetwork = useCallback(async () => {
     const matches = await checkNetworkMatch();
@@ -72,9 +99,73 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setAddress(null);
     setError(null);
     setNetworkMismatch(false);
+    setSessionExpiresAt(null);
+    clearSessionWarnings();
     // Don't stop the watcher on disconnect — keep polling so we notice when
     // the user switches back or reconnects from within Freighter.
+  }, [clearSessionWarnings]);
+
+  const refetchBalance = useCallback(() => {
+    setBalanceRefreshTrigger((n) => n + 1);
   }, []);
+
+  /** Clear all session warning timeouts and stop checking. */
+  const clearSessionWarnings = useCallback(() => {
+    if (warning5MinTimeoutRef.current) {
+      clearTimeout(warning5MinTimeoutRef.current);
+      warning5MinTimeoutRef.current = null;
+    }
+    if (warning1MinTimeoutRef.current) {
+      clearTimeout(warning1MinTimeoutRef.current);
+      warning1MinTimeoutRef.current = null;
+    }
+    if (sessionCheckIntervalRef.current) {
+      clearInterval(sessionCheckIntervalRef.current);
+      sessionCheckIntervalRef.current = null;
+    }
+    setShowSessionWarning5Min(false);
+    setShowSessionWarning1Min(false);
+  }, []);
+
+  /** Start session timeout tracking. Called when wallet connects. */
+  const startSessionTracking = useCallback(() => {
+    clearSessionWarnings();
+    const expiryTime = Date.now() + SESSION_TIMEOUT_MS;
+    setSessionExpiresAt(expiryTime);
+
+    // Schedule 5-minute warning
+    const timeUntil5Min = expiryTime - Date.now() - SESSION_WARNING_5MIN_MS;
+    if (timeUntil5Min > 0) {
+      warning5MinTimeoutRef.current = setTimeout(() => {
+        setShowSessionWarning5Min(true);
+      }, timeUntil5Min);
+    }
+
+    // Schedule 1-minute warning
+    const timeUntil1Min = expiryTime - Date.now() - SESSION_WARNING_1MIN_MS;
+    if (timeUntil1Min > 0) {
+      warning1MinTimeoutRef.current = setTimeout(() => {
+        setShowSessionWarning1Min(true);
+      }, timeUntil1Min);
+    }
+  }, [clearSessionWarnings]);
+
+  /** Extend the current session by refreshing the timeout. */
+  const extendSession = useCallback(async () => {
+    try {
+      // Refresh connection to extend session
+      const adapter = await getFreighterAdapter();
+      const connected = await adapter.isConnected();
+      if (connected) {
+        // Reset session tracking
+        startSessionTracking();
+        setShowSessionWarning5Min(false);
+        setShowSessionWarning1Min(false);
+      }
+    } catch (err) {
+      console.error("Failed to extend session:", err);
+    }
+  }, [startSessionTracking]);
 
   const refetchBalance = useCallback(() => {
     setBalanceRefreshTrigger((n) => n + 1);
@@ -142,6 +233,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const publicKey = await getActiveAddress();
       setAddress(publicKey || null);
 
+      // Start session timeout tracking
+      if (publicKey) {
+        startSessionTracking();
+      }
+
       // Check network immediately after connecting; watcher keeps it live
       await verifyNetwork();
       // Watcher is already running from the mount effect; startWatcher() is
@@ -163,6 +259,18 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [verifyNetwork, startWatcher]);
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      clearSessionWarnings();
+    };
+  }, [clearSessionWarnings]);
+
+  // Compute sessionTimeRemaining
+  const sessionTimeRemaining = sessionExpiresAt
+    ? Math.max(0, sessionExpiresAt - Date.now())
+    : null;
+
   const value = useMemo(
     () => ({
       address,
@@ -175,8 +283,27 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       disconnect,
       balanceRefreshTrigger,
       refetchBalance,
+      sessionExpiresAt,
+      sessionTimeRemaining,
+      showSessionWarning5Min,
+      showSessionWarning1Min,
+      extendSession,
     }),
-    [address, connect, disconnect, error, isConnecting, networkMismatch, balanceRefreshTrigger, refetchBalance],
+    [
+      address,
+      connect,
+      disconnect,
+      error,
+      isConnecting,
+      networkMismatch,
+      balanceRefreshTrigger,
+      refetchBalance,
+      sessionExpiresAt,
+      sessionTimeRemaining,
+      showSessionWarning5Min,
+      showSessionWarning1Min,
+      extendSession,
+    ],
   );
 
   return (
