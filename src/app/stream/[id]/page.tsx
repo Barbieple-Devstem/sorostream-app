@@ -53,6 +53,18 @@ const CANCEL_GRACE_SECONDS = 5;
 /** Timeout in milliseconds for the stream data fetch. */
 const STREAM_FETCH_TIMEOUT_MS = 10_000;
 
+/**
+ * A valid stream ID is a non-empty string of up to 32 word characters
+ * (letters, digits, underscores, hyphens).  Anything outside this set
+ * (e.g. path traversal characters, SQL injection fragments) is rejected
+ * immediately without making a network call.
+ */
+const STREAM_ID_REGEX = /^[\w-]{1,32}$/;
+
+function isValidStreamId(id: string): boolean {
+  return STREAM_ID_REGEX.test(id);
+}
+
 /** Spinner used inside transaction buttons */
 function Spinner() {
   return (
@@ -219,6 +231,17 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
       setPageLoading(true);
       setError(null);
       setIsNetworkError(false);
+
+      // Validate ID format client-side before making any network call.
+      // This prevents an infinite loading spinner for clearly invalid IDs
+      // (e.g. path traversal characters, excessively long strings).
+      if (!isValidStreamId(params.id)) {
+        setError(`"${params.id}" is not a valid stream ID.`);
+        setIsNetworkError(false);
+        setPageLoading(false);
+        return;
+      }
+
       try {
         const timeoutPromise = new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error("Network timeout: stream data could not be loaded within 10 seconds.")), STREAM_FETCH_TIMEOUT_MS),
