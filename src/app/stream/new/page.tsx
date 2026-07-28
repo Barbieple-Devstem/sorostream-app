@@ -11,9 +11,14 @@ import TransactionStepper, { TxStage } from "@/components/TransactionStepper";
 import SchedulingToggle from "@/components/SchedulingToggle";
 import FeeEstimationPanel from "@/components/FeeEstimationPanel";
 import BatchCreateTab from "@/components/BatchCreateTab";
+import NetReceivedDisplay from "@/components/NetReceivedDisplay";
+import AddressVerificationBadge from "@/components/AddressVerificationBadge";
+import AddressVerificationWarning from "@/components/AddressVerificationWarning";
 import { SkeletonForm } from "@/components/Skeleton";
 import { useTranslations } from "@/src/lib/i18n";
 import { trackEvent } from "@/src/lib/analytics";
+import { verifyAddress, canCreateStream, type AddressVerification } from "@/src/lib/addressVerification";
+import { sorostream, getFeeConfig, calcWithdrawBreakdown } from "@/src/lib/sorostream";
 import { sorostream, getFeeConfig, calcWithdrawBreakdown, validateMetadataUri } from "@/src/lib/sorostream";
 import { useWallet } from "@/src/context/WalletContext";
 import { sorostream, getCollateralConfig, checkIsNewSender, calcCollateral, getGasFeeEstimate, type GasFeeEstimate } from "@/src/lib/sorostream";
@@ -244,6 +249,45 @@ function NewStreamWizard() {
       });
     return () => { active = false; };
   }, [step]);
+
+  // Address verification state
+  const [addressVerification, setAddressVerification] = useState<AddressVerification | null>(null);
+  const [verificationAcknowledged, setVerificationAcknowledged] = useState(false);
+  const [verificationLoading, setVerificationLoading] = useState(false);
+  const verificationDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Trigger address verification when recipient changes
+  useEffect(() => {
+    if (!recipient) {
+      setAddressVerification(null);
+      setVerificationAcknowledged(false);
+      return;
+    }
+
+    if (verificationDebounceRef.current) {
+      clearTimeout(verificationDebounceRef.current);
+    }
+
+    setVerificationLoading(true);
+    verificationDebounceRef.current = setTimeout(async () => {
+      try {
+        const result = await verifyAddress(recipient);
+        setAddressVerification(result);
+      } catch {
+        // Silently fail verification (don't block form)
+        setAddressVerification(null);
+      } finally {
+        setVerificationLoading(false);
+      }
+    }, 800); // Debounce federation resolution
+
+    return () => {
+      if (verificationDebounceRef.current) {
+        clearTimeout(verificationDebounceRef.current);
+      }
+    };
+  }, [recipient]);
+
   // Auto-renewal settings
   const [autoRenew, setAutoRenew] = useState(false);
   const [autoRenewDuration, setAutoRenewDuration] = useState(0); // 0 = same as stream duration
@@ -530,7 +574,7 @@ function NewStreamWizard() {
   }
 
   const canGoNext = step === "recipient"
-    ? recipient.length > 0
+    ? recipient.length > 0 && canCreateStream(addressVerification) && verificationAcknowledged === (addressVerification?.status === "unverified")
     : step === "amount"
     ? amount.length > 0 && duration > 0
     : true;
@@ -629,6 +673,27 @@ function NewStreamWizard() {
                   {errors.recipient}
                 </p>
               )}
+
+              {recipient && !errors.recipient && (
+                <div className="mt-3 flex items-center gap-2">
+                  {verificationLoading ? (
+                    <AddressVerificationBadge status="pending" />
+                  ) : addressVerification ? (
+                    <AddressVerificationBadge
+                      status={addressVerification.status}
+                      federationName={addressVerification.federationName}
+                    />
+                  ) : null}
+                </div>
+              )}
+
+              {addressVerification && (
+                <AddressVerificationWarning
+                  verification={addressVerification}
+                  onAcknowledge={() => setVerificationAcknowledged(true)}
+                  acknowledged={verificationAcknowledged}
+                />
+              )}
             </div>
           </div>
         )}
@@ -726,6 +791,16 @@ function NewStreamWizard() {
                 <p id="amount-error" className="text-red-400 text-sm mt-1">
                   {errors.amount}
                 </p>
+              )}
+
+              {!errors.amount && amount && (
+                <NetReceivedDisplay
+                  amount={amount}
+                  tokenSymbol={
+                    selectedToken === CUSTOM_TOKEN_VALUE ? "Custom" : selectedToken
+                  }
+                  isCustomToken={selectedToken === CUSTOM_TOKEN_VALUE}
+                />
               )}
             </div>
 
