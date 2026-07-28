@@ -817,8 +817,14 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
           />
         )}
 
-        <div className="bg-gray-800 rounded-xl p-6 space-y-6">
-          <StreamTimeline startTime={stream.startTime} endTime={stream.endTime} />
+          <StreamTimeline
+            startTime={stream.startTime}
+            endTime={stream.endTime}
+            sender={stream.sender}
+            recipient={stream.recipient}
+            status={stream.status}
+            flowRate={stream.flowRate}
+          />
 
           {/* Scheduled start countdown — shown only when stream hasn't started yet */}
           {stream.scheduledStartTime &&
