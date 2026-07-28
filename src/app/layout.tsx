@@ -11,6 +11,8 @@ import NavHeader from "@/components/NavHeader";
 import BottomNav from "@/components/BottomNav";
 import AppFooter from "@/components/AppFooter";
 import OnboardingWizard from "@/components/OnboardingWizard";
+import { SessionWarningToast } from "@/src/components/SessionWarningToast";
+import { SessionTimeoutModal } from "@/src/components/SessionTimeoutModal";
 import { ThemeProvider } from "@/src/lib/theme";
 import PwaInit from "@/src/components/PwaInit";
 import InstallPrompt from "@/src/components/InstallPrompt";
@@ -97,6 +99,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                           <AppFooter />
                           <BottomNav />
                           <OnboardingWizard />
+                          <SessionWarningToast />
+                          <SessionTimeoutModal />
                         </ContractVersionProvider>
                       </GlobalShortcutsProvider>
                     </NotificationProvider>

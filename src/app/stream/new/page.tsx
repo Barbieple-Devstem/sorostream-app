@@ -19,6 +19,7 @@ import { useTranslations } from "@/src/lib/i18n";
 import { trackEvent } from "@/src/lib/analytics";
 import { verifyAddress, canCreateStream, type AddressVerification } from "@/src/lib/addressVerification";
 import { sorostream, getFeeConfig, calcWithdrawBreakdown } from "@/src/lib/sorostream";
+import { sorostream, getFeeConfig, calcWithdrawBreakdown, validateMetadataUri } from "@/src/lib/sorostream";
 import { useWallet } from "@/src/context/WalletContext";
 import { sorostream, getCollateralConfig, checkIsNewSender, calcCollateral, getGasFeeEstimate, type GasFeeEstimate } from "@/src/lib/sorostream";
 import { useWallet } from "@/src/context/WalletContext";
@@ -29,7 +30,7 @@ import { usePreferences } from "@/src/context/PreferencesContext";
 type PageTab = "single" | "batch";
 import { useSettings } from "@/src/context/SettingsContext";
 
-type Step = "recipient" | "amount" | "review";
+type Step = "recipient" | "amount" | "preview" | "review";
 
 const SUPPORTED_TOKENS = [
   { symbol: "USDC", name: "USD Coin",        address: "CAQCFVLOBK5GIULPNZRGATJJMIZL5BSP7X5YJVMGCPTUEPFM4AVSRCJU" },
@@ -104,10 +105,11 @@ function validateScheduledStart(value: string): string {
 const stepLabels: Record<Step, { title: string; number: number }> = {
   recipient: { title: "Recipient", number: 1 },
   amount: { title: "Amount & Duration", number: 2 },
-  review: { title: "Review & Confirm", number: 3 },
+  preview: { title: "Preview", number: 3 },
+  review: { title: "Review & Confirm", number: 4 },
 };
 
-const STEPS: Step[] = ["recipient", "amount", "review"];
+const STEPS: Step[] = ["recipient", "amount", "preview", "review"];
 
 function NewStreamWizard() {
   const router = useRouter();
@@ -187,6 +189,7 @@ function NewStreamWizard() {
     customTokenAddress: string;
     endDate: string;
     cliffDate: string;
+    metadataUri: string;
   }> = {}) {
     saveDraft({
       recipient,
@@ -196,6 +199,7 @@ function NewStreamWizard() {
       customTokenAddress,
       endDate,
       cliffDate,
+      metadataUri,
       ...overrides,
     });
   }
@@ -288,6 +292,13 @@ function NewStreamWizard() {
   const [autoRenew, setAutoRenew] = useState(false);
   const [autoRenewDuration, setAutoRenewDuration] = useState(0); // 0 = same as stream duration
   const [showAdvanced, setShowAdvanced] = useState(false);
+
+  // Metadata URI setting
+  const [metadataUri, setMetadataUri] = useState("");
+  const [metadataUriError, setMetadataUriError] = useState("");
+
+  // Preview state
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   // Gas fee estimate
   const [gasFee, setGasFee] = useState<GasFeeEstimate | null>(null);
@@ -398,13 +409,33 @@ function NewStreamWizard() {
         setErrors({ ...errors, amount: aErr, duration: dErr, endDate: eErr, cliffDate: cErr, scheduledStart: sErr });
         return;
       }
-      setStep("review");
+      setStep("preview");
     }
   }
 
   function goBack() {
     const idx = STEPS.indexOf(step);
     if (idx > 0) setStep(STEPS[idx - 1]);
+  }
+
+  function goConfirmPreview() {
+    // From preview step, go to review step
+    setStep("review");
+  }
+
+  // ---- Preview calculation helpers ----
+  function calculateFlowRatePerDay(durationSeconds: number, amountUSDC: number): number {
+    if (!durationSeconds || durationSeconds <= 0) return 0;
+    const secondsPerDay = 86400;
+    return (amountUSDC * secondsPerDay) / durationSeconds;
+  }
+
+  function calculateEndDate(durationSeconds: number): Date {
+    return new Date(Date.now() + durationSeconds * 1000);
+  }
+
+  function formatFlowRate(flowRatePerDay: number): string {
+    return flowRatePerDay.toFixed(7).replace(/\.?0+$/, "") || "0";
   }
 
   function resolvedTokenAddress(): string | null {
@@ -424,8 +455,10 @@ function NewStreamWizard() {
     const eErr = validateEndDate(endDate);
     const cErr = validateCliffDate(cliffDate, endDate);
     const sErr = schedulingEnabled ? validateScheduledStart(scheduledStart) : "";
-    if (rErr || aErr || dErr || eErr || cErr || sErr) {
+    const mErr = validateMetadataUri(metadataUri);
+    if (rErr || aErr || dErr || eErr || cErr || sErr || mErr) {
       setErrors({ recipient: rErr, amount: aErr, duration: dErr, endDate: eErr, cliffDate: cErr, scheduledStart: sErr });
+      setMetadataUriError(mErr);
       return;
     }
 
@@ -466,6 +499,9 @@ function NewStreamWizard() {
         autoRenew,
         autoRenewDurationSeconds: autoRenew && autoRenewDuration > 0 ? autoRenewDuration : undefined,
         scheduledStartTime,
+        metadataUri: metadataUri || undefined,
+      });
+        scheduledStartTime,
       });
 
       setTxStage(TxStage.Done);
@@ -485,6 +521,8 @@ function NewStreamWizard() {
       setAutoRenew(false);
       setAutoRenewDuration(0);
       setShowAdvanced(false);
+      setMetadataUri("");
+      setMetadataUriError("");
       setGasFee(null);
       setErrors({ recipient: "", amount: "", duration: "", endDate: "", cliffDate: "", scheduledStart: "" });
       setSchedulingEnabled(false);
@@ -992,8 +1030,128 @@ function NewStreamWizard() {
                       />
                     </div>
                   )}
+
+                  {/* Metadata URI field */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <label htmlFor="metadata-uri" className="text-sm text-gray-200 font-medium">
+                        Metadata URI <span className="text-gray-400 font-normal">(optional)</span>
+                      </label>
+                      {/* Tooltip */}
+                      <div className="relative group">
+                        <button
+                          type="button"
+                          aria-label="What is a metadata URI?"
+                          className="text-gray-500 hover:text-gray-300 text-xs border border-gray-600 rounded-full w-4 h-4 flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
+                        >
+                          ?
+                        </button>
+                        <div
+                          role="tooltip"
+                          className="hidden group-hover:block group-focus-within:block absolute left-0 bottom-6 w-64 bg-gray-700 border border-gray-600 rounded-lg p-3 text-xs text-gray-300 leading-relaxed z-10 shadow-lg"
+                        >
+                          A URI pointing to metadata about this stream (JSON, terms, documentation, etc.).
+                          Supports ipfs://, https://, and ar:// schemes.
+                        </div>
+                      </div>
+                    </div>
+                    <input
+                      id="metadata-uri"
+                      type="text"
+                      value={metadataUri}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setMetadataUri(val);
+                        setMetadataUriError(validateMetadataUri(val));
+                        persist({ metadataUri: val });
+                      }}
+                      onBlur={() => {
+                        setMetadataUriError(validateMetadataUri(metadataUri));
+                      }}
+                      placeholder="e.g. ipfs://Qm... or https://example.com/metadata.json"
+                      className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-3 text-white text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+                      aria-invalid={!!metadataUriError}
+                      aria-describedby={metadataUriError ? "metadata-uri-error" : undefined}
+                    />
+                    {metadataUriError && (
+                      <p id="metadata-uri-error" className="text-red-400 text-sm mt-1">
+                        {metadataUriError}
+                      </p>
+                    )}
+                  </div>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Step: Preview */}
+        {step === "preview" && (
+          <div className="space-y-6">
+            <div className="bg-gray-800 rounded-xl p-6 space-y-4 border border-gray-700">
+              <p className="text-gray-400 text-sm mb-4">Here's what your stream will look like on-chain:</p>
+
+              {/* Flow rate per day */}
+              <div>
+                <span className="text-gray-400 text-sm">Flow rate per day</span>
+                <div className="text-2xl font-bold text-green-400 mt-1 font-mono">
+                  {formatFlowRate(calculateFlowRatePerDay(duration, parseFloat(amount) || 0))} {selectedToken === CUSTOM_TOKEN_VALUE ? "tokens" : selectedToken}/day
+                </div>
+              </div>
+
+              {/* Total amount */}
+              <div className="border-t border-gray-700 pt-4">
+                <span className="text-gray-400 text-sm">Total amount</span>
+                <div className="text-lg font-semibold text-white mt-1">
+                  {amount} {selectedToken === CUSTOM_TOKEN_VALUE ? "tokens" : selectedToken}
+                </div>
+              </div>
+
+              {/* Stream end date */}
+              <div className="border-t border-gray-700 pt-4">
+                <span className="text-gray-400 text-sm">Stream ends</span>
+                <div className="text-lg font-semibold text-white mt-1">
+                  {calculateEndDate(duration).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                </div>
+              </div>
+
+              {/* Protocol fee estimate */}
+              <div className="border-t border-gray-700 pt-4">
+                <span className="text-gray-400 text-sm">Estimated protocol fee</span>
+                <div className="text-lg font-semibold text-yellow-400 mt-1">
+                  {feeLoading ? (
+                    <span className="text-gray-400 text-sm">Loading...</span>
+                  ) : (
+                    (() => {
+                      const amountNum = parseFloat(amount) || 0;
+                      const amountStroops = Math.round(amountNum * 10_000_000);
+                      const { fee } = calcWithdrawBreakdown(amountStroops, feeBasisPoints);
+                      const feeDisplay = (fee / 10_000_000).toFixed(7).replace(/\.?0+$/, "") || "0";
+                      const tokenLabel = selectedToken === CUSTOM_TOKEN_VALUE ? "tokens" : selectedToken;
+                      return `${feeDisplay} ${tokenLabel}`;
+                    })()
+                  )}
+                </div>
+              </div>
+
+              {/* Recipient and sender summary */}
+              <div className="border-t border-gray-700 pt-4 space-y-3">
+                <div className="flex justify-between items-start text-sm">
+                  <span className="text-gray-400">To</span>
+                  <span className="text-white font-mono text-xs text-right max-w-[60%] break-all">{recipient}</span>
+                </div>
+                <div className="flex justify-between items-start text-sm">
+                  <span className="text-gray-400">From</span>
+                  <span className="text-white font-mono text-xs text-right max-w-[60%] break-all">{address ?? "—"}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Info box */}
+            <div className="bg-blue-900/20 border border-blue-700/50 rounded-lg p-4">
+              <p className="text-blue-300 text-sm">
+                Review the details above. Click "Confirm" to proceed to sign this transaction with your wallet, or "Back" to edit the stream parameters.
+              </p>
             </div>
           </div>
         )}
@@ -1230,7 +1388,16 @@ function NewStreamWizard() {
               Back
             </button>
           )}
-          {step !== "review" ? (
+          {step === "preview" ? (
+            <button
+              type="button"
+              onClick={goConfirmPreview}
+              disabled={loading}
+              className="flex-1 bg-green-700 text-white py-3 rounded-lg font-medium hover:bg-green-800 disabled:opacity-50 transition-colors"
+            >
+              Confirm
+            </button>
+          ) : step !== "review" ? (
             <button
               type="button"
               onClick={goNext}
