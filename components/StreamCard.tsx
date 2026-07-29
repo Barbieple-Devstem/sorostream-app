@@ -5,6 +5,11 @@ import FiatDisplay from "@/components/FiatDisplay";
 import { truncateAddress, formatStellarAmount } from "@/src/lib/sorostream";
 import FederationName from "@/components/FederationName";
 import { useBookmarks } from "@/src/context/BookmarksContext";
+import StreamHealthBadge, {
+  calculateHealthScore,
+  getHealthTier,
+} from "@/components/StreamHealthBadge";
+import { getMockStreamHistory } from "@/src/lib/sorostream";
 
 interface StreamCardProps {
   id?: string;
@@ -17,6 +22,10 @@ interface StreamCardProps {
   onToggle?: (id: string) => void;
   /** Unix timestamp (seconds). When set and > now, a "Scheduled" badge is shown. */
   scheduledStartTime?: number;
+  /** Stream start time ISO string. */
+  startTime?: string;
+  /** Stream end time ISO string. */
+  endTime?: string;
 }
 
 export default function StreamCard({
@@ -29,6 +38,8 @@ export default function StreamCard({
   selected = false,
   onToggle,
   scheduledStartTime,
+  startTime,
+  endTime,
 }: StreamCardProps) {
   const { isBookmarked, toggleBookmark } = useBookmarks();
   const bookmarked = isBookmarked(id);
@@ -36,6 +47,31 @@ export default function StreamCard({
   const isScheduled =
     typeof scheduledStartTime === "number" &&
     scheduledStartTime > Math.floor(Date.now() / 1000);
+
+  // ── Health score calculation ──────────────────────────────────────────
+  const healthScore = (() => {
+    if (!startTime || !endTime || status === "Cancelled") return null;
+    const now = Date.now();
+    const totalDuration = new Date(endTime).getTime() - new Date(startTime).getTime();
+    const elapsed = now - new Date(startTime).getTime();
+    const timeRemainingRatio = totalDuration > 0
+      ? Math.max(0, Math.min(1, 1 - elapsed / totalDuration))
+      : 0;
+    // Estimate deposit remaining based on flow rate (simplified)
+    const estimatedStreamed = flowRate * Math.max(0, (now - new Date(startTime).getTime()) / 1000);
+    const depositRemainingRatio = deposit > 0
+      ? Math.max(0, Math.min(1, 1 - estimatedStreamed / deposit))
+      : 0;
+    // Approximate top-up count from mock history
+    const history = getMockStreamHistory(id);
+    const topUpCount = history.filter((e) => e.type === "top-up").length;
+    return calculateHealthScore({
+      depositRemainingRatio,
+      timeRemainingRatio,
+      topUpCount,
+    });
+  })();
+  const healthTier = healthScore !== null ? getHealthTier(healthScore) : null;
 
   /** Convert stroops → XLM (display value). */
   const toXlm = (val: number) => (val / 10_000_000).toFixed(2);
@@ -97,6 +133,26 @@ export default function StreamCard({
           >
             {status}
           </span>
+          {healthScore !== null && healthTier !== null && (() => {
+            const now = Date.now();
+            const totalDuration = endTime && startTime ? new Date(endTime).getTime() - new Date(startTime).getTime() : 0;
+            const elapsed = startTime ? now - new Date(startTime).getTime() : 0;
+            const timeRemainingRatio = totalDuration > 0 ? Math.max(0, Math.min(1, 1 - elapsed / totalDuration)) : 0;
+            const estimatedStreamed = flowRate * Math.max(0, elapsed / 1000);
+            const depositRemainingRatio = deposit > 0 ? Math.max(0, Math.min(1, 1 - estimatedStreamed / deposit)) : 0;
+            const history = getMockStreamHistory(id);
+            const topUpCount = history.filter((e) => e.type === "top-up").length;
+            return (
+              <StreamHealthBadge
+                score={healthScore}
+                tier={healthTier}
+                depositRemainingRatio={depositRemainingRatio}
+                timeRemainingRatio={timeRemainingRatio}
+                topUpCount={topUpCount}
+                compact
+              />
+            );
+          })()}
         </div>
       </div>
 

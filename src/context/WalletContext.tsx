@@ -46,6 +46,10 @@ interface WalletContextValue {
   showSessionWarning1Min: boolean;
   /** Extend the current session (refresh). */
   extendSession: () => Promise<void>;
+  /** True when the Freighter session has expired and wallet was auto-disconnected. */
+  sessionExpired: boolean;
+  /** Clear the session expired flag (called after user acknowledges the toast). */
+  clearSessionExpired: () => void;
 }
 
 const WalletContext = createContext<WalletContextValue | undefined>(undefined);
@@ -65,8 +69,11 @@ const SESSION_WARNING_5MIN_MS = 5 * 60 * 1000;
 /** Blocking modal at 1 minute before session expiry. */
 const SESSION_WARNING_1MIN_MS = 1 * 60 * 1000;
 
-/** Interval for checking session expiry. */
+/** Interval for checking session expiry (in background). */
 const SESSION_CHECK_INTERVAL_MS = 10 * 1000;
+
+/** Proactive session validity poll interval (when app is focused). */
+const SESSION_VALIDITY_POLL_MS = 60 * 1000;
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [address, setAddress] = useState<string | null>(null);
@@ -77,6 +84,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [sessionExpiresAt, setSessionExpiresAt] = useState<number | null>(null);
   const [showSessionWarning5Min, setShowSessionWarning5Min] = useState(false);
   const [showSessionWarning1Min, setShowSessionWarning1Min] = useState(false);
+  const [sessionExpired, setSessionExpired] = useState(false);
+  const sessionValidityPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const watcherRef = useRef<ReturnType<typeof createWatchWalletChanges> | null>(
     null,
   );
@@ -166,10 +175,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       console.error("Failed to extend session:", err);
     }
   }, [startSessionTracking]);
-
-  const refetchBalance = useCallback(() => {
-    setBalanceRefreshTrigger((n) => n + 1);
-  }, []);
 
   const handleConnectionTimeout = useCallback(() => {
     setError("Connection timed out. Please check that Freighter is unlocked and try again.");
@@ -266,6 +271,80 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     };
   }, [clearSessionWarnings]);
 
+  const clearSessionExpired = useCallback(() => {
+    setSessionExpired(false);
+  }, []);
+
+  /** Proactive session validity check. Called every 60s when app is focused. */
+  const checkSessionValidity = useCallback(async () => {
+    if (!address || !sessionExpiresAt) return;
+    // If the session has passed its expiry time, auto-disconnect
+    if (Date.now() >= sessionExpiresAt) {
+      setSessionExpired(true);
+      disconnect();
+      return;
+    }
+    // Also check if Freighter is still available
+    try {
+      const adapter = await getFreighterAdapter();
+      const connected = await adapter.isConnected();
+      if (!connected && address) {
+        setSessionExpired(true);
+        disconnect();
+      }
+    } catch {
+      // Silently fail — the time-based check above is the primary guard
+    }
+  }, [address, sessionExpiresAt, disconnect]);
+
+  /** Start/stop the 60-second session validity poll based on page visibility. */
+  useEffect(() => {
+    if (!address) {
+      if (sessionValidityPollRef.current) {
+        clearInterval(sessionValidityPollRef.current);
+        sessionValidityPollRef.current = null;
+      }
+      return;
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        // App gained focus — run an immediate check
+        void checkSessionValidity();
+        // Start periodic polling
+        if (!sessionValidityPollRef.current) {
+          sessionValidityPollRef.current = setInterval(() => {
+            void checkSessionValidity();
+          }, SESSION_VALIDITY_POLL_MS);
+        }
+      } else {
+        // App lost focus — stop polling to save resources
+        if (sessionValidityPollRef.current) {
+          clearInterval(sessionValidityPollRef.current);
+          sessionValidityPollRef.current = null;
+        }
+      }
+    };
+
+    // Start polling if visible on mount
+    if (document.visibilityState === "visible") {
+      if (!sessionValidityPollRef.current) {
+        sessionValidityPollRef.current = setInterval(() => {
+          void checkSessionValidity();
+        }, SESSION_VALIDITY_POLL_MS);
+      }
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      if (sessionValidityPollRef.current) {
+        clearInterval(sessionValidityPollRef.current);
+        sessionValidityPollRef.current = null;
+      }
+    };
+  }, [address, checkSessionValidity]);
+
   // Compute sessionTimeRemaining
   const sessionTimeRemaining = sessionExpiresAt
     ? Math.max(0, sessionExpiresAt - Date.now())
@@ -288,6 +367,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       showSessionWarning5Min,
       showSessionWarning1Min,
       extendSession,
+      sessionExpired,
+      clearSessionExpired,
     }),
     [
       address,
@@ -303,6 +384,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       showSessionWarning5Min,
       showSessionWarning1Min,
       extendSession,
+      sessionExpired,
+      clearSessionExpired,
     ],
   );
 

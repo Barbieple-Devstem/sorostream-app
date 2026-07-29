@@ -216,6 +216,21 @@ function NewStreamWizard() {
   const [schedulingEnabled, setSchedulingEnabled] = useState(false);
   const [scheduledStart, setScheduledStart] = useState("");
 
+  // Re-validate scheduled start time when the form regains focus
+  // (user may have left the tab open and the selected time became past)
+  useEffect(() => {
+    const handleFocus = () => {
+      if (schedulingEnabled && scheduledStart) {
+        setErrors((prev) => ({
+          ...prev,
+          scheduledStart: validateScheduledStart(scheduledStart),
+        }));
+      }
+    };
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, [schedulingEnabled, scheduledStart]);
+
   // Transaction progress
   const [txStage, setTxStage] = useState<TxStage | null>(null);
   const [txFailedStage, setTxFailedStage] = useState<TxStage | undefined>(undefined);
