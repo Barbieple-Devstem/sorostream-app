@@ -99,7 +99,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
   const router = useRouter();
   const { addToast, upsertPersistentToast, removeToast } = useToast();
   const { withdrawThreshold } = useSettings();
-  const { address, refetchBalance } = useWallet();
+  const { address, refetchBalance, triggerStreamRefresh } = useWallet();
   const { isBookmarked, toggleBookmark } = useBookmarks();
   const t = useTranslations("stream_detail");
   const [withdrawConfirmAmount, setWithdrawConfirmAmount] = useState<string | null>(null);
@@ -384,13 +384,15 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
       // Refresh stream data so status transitions to Cancelled
       const updated = await sorostream.getStream(params.id);
       if (updated) setStream(updated);
+      // Notify dashboard and other consumers to re-fetch stream data
+      triggerStreamRefresh();
       addToast(`Stream cancelled. Tx: ${result.txHash}`, "success");
     } catch {
       addToast("Cancellation failed. Please try again.", "error");
     } finally {
       setCancelLoading(false);
     }
-  }, [addToast, removeToast]);
+  }, [addToast, removeToast, triggerStreamRefresh]);
 
   // ── Cancel: undo during grace period ──────────────────────────────────────
   const handleCancelUndo = useCallback(() => {
@@ -712,7 +714,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
               const qp = new URLSearchParams({
                 recipient: stream.recipient,
                 amount: (stream.deposit / 10_000_000).toString(),
-                token: "USDC",
+                token: stream.token,
                 duration: String(duration),
                 cliff: "0",
               });
@@ -807,10 +809,10 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
         </div>
 
         {/* Stream completed banner — shown when currentTime >= endTime */}
-        {isCompleted && (
-          <StreamCompletedBanner
+        {isCompleted && (              <StreamCompletedBanner
             streamId={stream.id}
             finalAmount={formatUSDC(stream.deposit)}
+            token={stream.token}
             onClaim={handleClaimFinal}
             claiming={claimFinalLoading}
             claimed={claimFinalDone}
@@ -841,14 +843,14 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
             <div>
               <p className="text-gray-400 mb-1">Total deposit</p>
               <p className="text-white font-mono">
-                {toXlm(stream.deposit)} XLM
+                {toXlm(stream.deposit)} {stream.token}
                 <FiatDisplay xlmAmount={depositXlm} />
               </p>
             </div>
             <div>
               <p className="text-gray-400 mb-1">Flow rate</p>
               <p className="text-green-400 font-mono">
-                {toXlm(stream.flowRate)} XLM/sec
+                {toXlm(stream.flowRate)} {stream.token}/sec
                 <FiatDisplay xlmAmount={flowXlm} />
               </p>
             </div>
@@ -939,7 +941,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
                 isDepositOptimistic ? "text-yellow-400" : "text-white"
               }`}
             >
-              {formatUSDC(displayDeposit)} USDC
+              {formatUSDC(displayDeposit)} {stream.token}
               {isDepositOptimistic && (
                 <span className="ml-2 text-xs font-normal text-yellow-400/80 italic">
                   (pending…)
@@ -1062,14 +1064,14 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
           {showTopUp && (
             <div className="space-y-2">
               <label htmlFor="topup-amount" className="text-gray-200 text-sm font-medium block">
-                Top-up Amount (USDC)
+                Top-up Amount ({stream.token})
               </label>
               <input
                 id="topup-amount"
                 type="number"
                 value={topUpAmount}
                 onChange={(e) => setTopUpAmount(e.target.value)}
-                placeholder="Amount (USDC)"
+                placeholder={`Amount (${stream.token})`}
                 min="0"
                 step="0.01"
                 className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
@@ -1128,7 +1130,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
         onClose={() => setShowQrModal(false)}
         recipient={stream.recipient}
         amount={(stream.deposit / 10_000_000).toString()}
-        token="USDC"
+        token={stream.token}
         duration={Math.round((new Date(stream.endTime).getTime() - new Date(stream.startTime).getTime()) / 1000)}
       />
 
