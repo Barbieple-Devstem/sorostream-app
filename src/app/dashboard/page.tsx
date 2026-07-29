@@ -19,6 +19,8 @@ import { useWallet } from "@/src/context/WalletContext";
 import ArchiveBanner from "@/components/ArchiveBanner";
 import PortfolioChart from "@/components/PortfolioChart";
 import StreamExpiryAlerts from "@/components/StreamExpiryAlerts";
+import PortfolioSummaryCard from "@/components/PortfolioSummaryCard";
+import WatchlistTab from "@/components/WatchlistTab";
 
 type DashboardState = "loading" | "filtered-empty" | "empty" | "ready";
 
@@ -82,6 +84,9 @@ function DashboardContent() {
   const [bulkLoading, setBulkLoading] = useState(false);
   const [multiSelectMode, setMultiSelectMode] = useState(false);
   const [showBulkCancelConfirm, setShowBulkCancelConfirm] = useState(false);
+
+  // Tab state
+  const [activeTab, setActiveTab] = useState<"streams" | "watchlist">("streams");
 
   // UI state
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
@@ -338,6 +343,44 @@ function DashboardContent() {
 
         <div className="flex flex-col lg:flex-row gap-6">
           <div className="flex-1 min-w-0">
+            {/* Portfolio summary */}
+            {address && (
+              <PortfolioSummaryCard streams={streams} walletAddress={address} />
+            )}
+
+            {/* Tab switcher */}
+            <div className="flex rounded-xl bg-gray-800 p-1 mb-6" role="tablist" aria-label="Dashboard view">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === "streams"}
+                onClick={() => setActiveTab("streams")}
+                className={`flex-1 py-2 text-sm font-medium rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 ${
+                  activeTab === "streams" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-white"
+                }`}
+              >
+                My Streams
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === "watchlist"}
+                onClick={() => setActiveTab("watchlist")}
+                className={`flex-1 py-2 text-sm font-medium rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 ${
+                  activeTab === "watchlist" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-white"
+                }`}
+              >
+                Watchlist
+              </button>
+            </div>
+
+            {activeTab === "watchlist" ? (
+              <div role="tabpanel" aria-label="Watchlist">
+                <WatchlistTab />
+              </div>
+            ) : (
+            <div role="tabpanel" aria-label="My Streams">
+
             {/* Archive banner — shown when streams have been auto-archived */}
             <ArchiveBanner />
 
@@ -586,6 +629,8 @@ function DashboardContent() {
               </div>
             )}
             </StreamErrorBoundary>
+            </div>{/* end My Streams tabpanel */}
+            )}{/* end activeTab conditional */}
           </div>
 
           <div className="w-full lg:w-80 shrink-0">
