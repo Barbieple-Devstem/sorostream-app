@@ -46,6 +46,12 @@ interface WalletContextValue {
   showSessionWarning1Min: boolean;
   /** Extend the current session (refresh). */
   extendSession: () => Promise<void>;
+  /**
+   * Bumps a counter that signals consumers (e.g. dashboard stream list)
+   * to immediately re-fetch stream data instead of showing stale cached state.
+   */
+  streamRefreshTrigger: number;
+  triggerStreamRefresh: () => void;
 }
 
 const WalletContext = createContext<WalletContextValue | undefined>(undefined);
@@ -74,6 +80,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [networkMismatch, setNetworkMismatch] = useState(false);
   const [balanceRefreshTrigger, setBalanceRefreshTrigger] = useState(0);
+  const [streamRefreshTrigger, setStreamRefreshTrigger] = useState(0);
   const [sessionExpiresAt, setSessionExpiresAt] = useState<number | null>(null);
   const [showSessionWarning5Min, setShowSessionWarning5Min] = useState(false);
   const [showSessionWarning1Min, setShowSessionWarning1Min] = useState(false);
@@ -167,8 +174,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [startSessionTracking]);
 
-  const refetchBalance = useCallback(() => {
-    setBalanceRefreshTrigger((n) => n + 1);
+  const triggerStreamRefresh = useCallback(() => {
+    setStreamRefreshTrigger((n) => n + 1);
   }, []);
 
   const handleConnectionTimeout = useCallback(() => {
@@ -288,6 +295,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       showSessionWarning5Min,
       showSessionWarning1Min,
       extendSession,
+      streamRefreshTrigger,
+      triggerStreamRefresh,
     }),
     [
       address,
@@ -303,6 +312,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       showSessionWarning5Min,
       showSessionWarning1Min,
       extendSession,
+      streamRefreshTrigger,
+      triggerStreamRefresh,
     ],
   );
 

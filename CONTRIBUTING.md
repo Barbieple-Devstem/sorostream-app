@@ -250,6 +250,85 @@ Before submitting your PR, ensure:
 - [ ] Translation keys are added/updated if UI text changed
 - [ ] If the create-stream form changed, the dark-mode visual baseline was reviewed and updated intentionally
 
+## How to Add a New SAC Token to the Token Selector Dropdown
+
+When you need to support a new Stellar Asset Contract (SAC) token in the app's
+create-stream form, you must update the token registry and several surrounding
+files.  This section lists every touchpoint so nothing gets missed.
+
+### Files That Must Be Updated
+
+| # | File | What to change |
+|---|------|----------------|
+| 1 | `src/app/stream/new/page.tsx` | Add the token to the `SUPPORTED_TOKENS` array |
+| 2 | `src/app/settings/page.tsx` | Add a `<option>` for the default-token dropdown |
+| 3 | `src/lib/sorostream.ts` (optional) | Add the token to `MOCK_CONTRACT_STATE.whitelistedTokens` for admin-area testing |
+| 4 | `src/lib/streamTemplates.ts` (optional) | Add stream templates that use the new token |
+| 5 | `src/locales/en.json` (optional) | If the token name appears in user-facing text, add a translation key |
+
+### Worked Example — Adding `EURC`
+
+#### Step 1 – Register the token
+
+Open `src/app/stream/new/page.tsx` and locate the `SUPPORTED_TOKENS` array
+(around line 35).  Append a new entry:
+
+```ts
+const SUPPORTED_TOKENS = [
+  { symbol: "USDC", name: "USD Coin",        address: "CAQCFVLOBK5GIULPNZRGATJJMIZL5BSP7X5YJVMGCPTUEPFM4AVSRCJU" },
+  { symbol: "XLM",  name: "Stellar Lumens",  address: "native" },
+  { symbol: "AQUA", name: "Aquarius",        address: "GBNZILSTVQZ4R7IKQDGHYGY2QXL5QOFJYQMXPKWRRM5PAV7Y4M67AQUA" },
+  { symbol: "yXLM", name: "Yield XLM",       address: "GARDNV3Q7YGT4AKSDF25LT32YSCCW4EV22Y2TV3I2PU2MMXJTEDL5T55" },
+  // 👇 Add the new token here
+  { symbol: "EURC", name: "Euro Coin",       address: "CCW67SZVBUIC7FNJPZXNBGRAV3HMPF4Y7XYE44CUMVHWKRSOGF4RDOIV" },
+] as const;
+```
+
+Each entry requires:
+- **`symbol`** — ticker shown in the dropdown and throughout the UI (e.g. `EURC`)
+- **`name`** — human-readable token name (e.g. `Euro Coin`)
+- **`address`** — Stellar contract address of the SAC token (use `"native"` for XLM)
+
+#### Step 2 – Expose in Settings
+
+Open `src/app/settings/page.tsx`, find the `<select>` for the default token
+(around line 275), and add a new `<option>`:
+
+```tsx
+<option value="EURC">EURC (Euro Coin)</option>
+```
+
+This lets users set the new token as their default for the create-stream form.
+
+#### Step 3 – Add to token whitelist (Admin area)
+
+If the token should appear in the admin panel's whitelist for testing, open
+`src/lib/sorostream.ts`, find `MOCK_CONTRACT_STATE.whitelistedTokens`, and add
+the symbol:
+
+```ts
+whitelistedTokens: ["USDC", "XLM", "AQUA", "EURC"],
+```
+
+#### Step 4 – Verify
+
+1. Run `npm run build` — the build must pass.
+2. Run `npm run lint` — no new lint violations.
+3. Start the dev server (`npm run dev`), open `/stream/new`, and confirm the
+   new token appears in the dropdown.
+4. Create a stream with the new token and verify the stream detail page shows
+   the correct token symbol.
+
+### Important Notes
+
+- **No icon asset needed** — the dropdown uses text-only option labels; icons
+  are not rendered for individual tokens.
+- **The token address should be the Stellar Asset Contract address**, not the
+  classic asset issuer.
+- On testnet, make sure the token has been deployed before adding it.
+- After adding a token here, run the Playwright E2E tests to verify the
+  create-stream flow still works: `npm run test:e2e`.
+
 ## Getting Help
 
 - Check existing issues for similar problems
