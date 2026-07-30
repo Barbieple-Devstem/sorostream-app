@@ -18,12 +18,9 @@ import { SkeletonForm } from "@/components/Skeleton";
 import { useTranslations } from "@/src/lib/i18n";
 import { trackEvent } from "@/src/lib/analytics";
 import { verifyAddress, canCreateStream, type AddressVerification } from "@/src/lib/addressVerification";
-import { sorostream, getFeeConfig, calcWithdrawBreakdown } from "@/src/lib/sorostream";
-import { sorostream, getFeeConfig, calcWithdrawBreakdown, validateMetadataUri } from "@/src/lib/sorostream";
+import { sorostream, getFeeConfig, calcWithdrawBreakdown, validateMetadataUri, getCollateralConfig, checkIsNewSender, calcCollateral, getGasFeeEstimate, type GasFeeEstimate } from "@/src/lib/sorostream";
 import { useWallet } from "@/src/context/WalletContext";
-import { sorostream, getCollateralConfig, checkIsNewSender, calcCollateral, getGasFeeEstimate, type GasFeeEstimate } from "@/src/lib/sorostream";
-import { useWallet } from "@/src/context/WalletContext";
-import { sorostream } from "@/src/lib/sorostream";
+import { getOptionalEnvVar } from "@/src/lib/env";
 import { readDraft, useFormPersist } from "@/src/lib/useFormPersist";
 import { usePreferences } from "@/src/context/PreferencesContext";
 
@@ -293,6 +290,10 @@ function NewStreamWizard() {
   const [autoRenewDuration, setAutoRenewDuration] = useState(0); // 0 = same as stream duration
   const [showAdvanced, setShowAdvanced] = useState(false);
 
+  // Fee-bump (fee sponsorship) toggle
+  const feeSponsorAddress = getOptionalEnvVar("NEXT_PUBLIC_FEE_SPONSOR_ADDRESS");
+  const [feeBumpEnabled, setFeeBumpEnabled] = useState(false);
+
   // Metadata URI setting
   const [metadataUri, setMetadataUri] = useState("");
   const [metadataUriError, setMetadataUriError] = useState("");
@@ -542,8 +543,8 @@ function NewStreamWizard() {
         autoRenewDurationSeconds: autoRenew && autoRenewDuration > 0 ? autoRenewDuration : undefined,
         scheduledStartTime,
         metadataUri: metadataUri || undefined,
-      });
-        scheduledStartTime,
+        feeBump: feeBumpEnabled && !!feeSponsorAddress,
+        feeSponsorAddress: feeBumpEnabled && feeSponsorAddress ? feeSponsorAddress : undefined,
       });
 
       setTxStage(TxStage.Done);
@@ -566,6 +567,7 @@ function NewStreamWizard() {
       setMetadataUri("");
       setMetadataUriError("");
       setGasFee(null);
+      setFeeBumpEnabled(false);
       setErrors({ recipient: "", amount: "", duration: "", endDate: "", cliffDate: "", scheduledStart: "" });
       setSchedulingEnabled(false);
       setScheduledStart("");
@@ -1121,6 +1123,56 @@ function NewStreamWizard() {
                       </p>
                     )}
                   </div>
+
+                  {/* Fee Sponsorship toggle */}
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <label htmlFor="fee-bump-toggle" className="text-sm text-gray-200 font-medium">
+                          Fee Sponsorship
+                        </label>
+                        <div className="relative group">
+                          <button
+                            type="button"
+                            aria-label="What is fee sponsorship?"
+                            className="text-gray-500 hover:text-gray-300 text-xs border border-gray-600 rounded-full w-4 h-4 flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
+                          >
+                            ?
+                          </button>
+                          <div
+                            role="tooltip"
+                            className="hidden group-hover:block group-focus-within:block absolute left-0 bottom-6 w-64 bg-gray-700 border border-gray-600 rounded-lg p-3 text-xs text-gray-300 leading-relaxed z-10 shadow-lg"
+                          >
+                            When enabled, a third-party fee sponsor pays the transaction fee
+                            instead of your wallet. Requires configuring NEXT_PUBLIC_FEE_SPONSOR_ADDRESS.
+                            Falls back to user-paid fees if the sponsor is unavailable.
+                          </div>
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {feeSponsorAddress
+                          ? "Gas fee will be paid by the sponsor account"
+                          : "No fee sponsor configured — set NEXT_PUBLIC_FEE_SPONSOR_ADDRESS to enable"}
+                      </p>
+                    </div>
+                    <button
+                      id="fee-bump-toggle"
+                      type="button"
+                      role="switch"
+                      aria-checked={feeBumpEnabled && !!feeSponsorAddress}
+                      disabled={!feeSponsorAddress}
+                      onClick={() => setFeeBumpEnabled((v) => !v)}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed ${
+                        feeBumpEnabled && feeSponsorAddress ? "bg-blue-600" : "bg-gray-600"
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                          feeBumpEnabled && feeSponsorAddress ? "translate-x-6" : "translate-x-1"
+                        }`}
+                      />
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -1384,6 +1436,17 @@ function NewStreamWizard() {
                 <div className="flex justify-between items-center border-t border-gray-700 pt-3">
                   <span className="text-gray-400 text-sm">Est. network fee</span>
                   <span className="text-gray-300 font-mono text-sm">{gasFee.feeFormatted} XLM</span>
+                </div>
+              )}
+              {feeBumpEnabled && feeSponsorAddress && (
+                <div className="flex justify-between items-center border-t border-gray-700 pt-3">
+                  <span className="text-gray-400 text-sm">Fee sponsorship</span>
+                  <span className="flex items-center gap-1.5 text-blue-400 text-sm font-medium">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                    </svg>
+                    Sponsored
+                  </span>
                 </div>
               )}
             </div>
