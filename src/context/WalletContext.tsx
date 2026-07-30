@@ -102,20 +102,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     watcherRef.current = null;
   }, []);
 
-  const disconnect = useCallback(() => {
-    setAddress(null);
-    setError(null);
-    setNetworkMismatch(false);
-    setSessionExpiresAt(null);
-    clearSessionWarnings();
-    // Don't stop the watcher on disconnect — keep polling so we notice when
-    // the user switches back or reconnects from within Freighter.
-  }, [clearSessionWarnings]);
-
-  const refetchBalance = useCallback(() => {
-    setBalanceRefreshTrigger((n) => n + 1);
-  }, []);
-
   /** Clear all session warning timeouts and stop checking. */
   const clearSessionWarnings = useCallback(() => {
     if (warning5MinTimeoutRef.current) {
@@ -133,6 +119,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setShowSessionWarning5Min(false);
     setShowSessionWarning1Min(false);
   }, []);
+
+  const disconnect = useCallback(() => {
+    setAddress(null);
+    setError(null);
+    setNetworkMismatch(false);
+    setSessionExpiresAt(null);
+    clearSessionWarnings();
+    // Don't stop the watcher on disconnect — keep polling so we notice when
+    // the user switches back or reconnects from within Freighter.
+  }, [clearSessionWarnings]);
 
   /** Start session timeout tracking. Called when wallet connects. */
   const startSessionTracking = useCallback(() => {
@@ -176,6 +172,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const triggerStreamRefresh = useCallback(() => {
     setStreamRefreshTrigger((n) => n + 1);
+  }, []);
+
+  const refetchBalance = useCallback(() => {
+    setBalanceRefreshTrigger((n) => n + 1);
   }, []);
 
   const handleConnectionTimeout = useCallback(() => {

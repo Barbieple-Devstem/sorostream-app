@@ -23,8 +23,10 @@ jobs:
               - 'src/app/layout.tsx'
               - 'src/app/globals.css'
               - 'src/app/stream/new/**'
+              - 'src/app/stream/[id]/**'
               - 'src/lib/theme.tsx'
               - 'e2e/visual-regression.spec.ts'
+              - 'e2e/analytics-visual-regression.spec.ts'
 
   lint:
     runs-on: ubuntu-latest
@@ -82,7 +84,7 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
       - name: Visual regression test
-        run: npx playwright test e2e/visual-regression.spec.ts --project=chromium
+        run: npx playwright test e2e/visual-regression.spec.ts e2e/analytics-visual-regression.spec.ts --project=chromium
         env:
           NEXT_PUBLIC_STELLAR_NETWORK: testnet
           NEXT_PUBLIC_CONTRACT_ID: CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM
