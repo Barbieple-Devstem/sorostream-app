@@ -7,6 +7,8 @@ interface StreamCompletedBannerProps {
   streamId: string;
   /** Final claimable amount formatted as a display string (e.g. "12.3456700"). */
   finalAmount: string;
+  /** Token symbol (e.g. "USDC", "XLM") for display in amount fields. */
+  token?: string;
   /** Called when the user clicks "Claim Final Amount". */
   onClaim: () => void;
   /** True while the claim transaction is in flight. */
@@ -27,6 +29,7 @@ interface StreamCompletedBannerProps {
 export default function StreamCompletedBanner({
   streamId,
   finalAmount,
+  token = "USDC",
   onClaim,
   claiming = false,
   claimed = false,
@@ -55,7 +58,7 @@ export default function StreamCompletedBanner({
     ) {
       try {
         new Notification("Stream completed 🎉", {
-          body: `Stream #${streamId} has finished. You have ${finalAmount} USDC available to claim.`,
+          body: `Stream #${streamId} has finished. You have ${finalAmount} ${token} available to claim.`,
           tag: `sorostream-completed-${streamId}`,
         });
       } catch {
@@ -122,7 +125,7 @@ export default function StreamCompletedBanner({
       <div className="bg-gray-900/50 rounded-lg px-4 py-3 flex justify-between items-center">
         <span className="text-gray-400 text-sm">Final claimable amount</span>
         <span className="text-white font-mono font-semibold">
-          {finalAmount} USDC
+          {finalAmount} {token}
         </span>
       </div>
 

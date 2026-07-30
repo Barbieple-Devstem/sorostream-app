@@ -14,6 +14,7 @@ import { useToast } from "@/src/lib/toast";
 import { useSettings } from "@/src/context/SettingsContext";
 import { useTranslations } from "@/src/lib/i18n";
 import TwoFactorSetup from "@/components/TwoFactorSetup";
+import DelegatesSection from "@/components/DelegatesSection";
 import { useWallet } from "@/src/context/WalletContext";
 
 function truncateAddress(address: string): string {
@@ -441,6 +442,9 @@ export default function SettingsPage() {
             </>
           )}
         </div>
+
+        {/* Delegation Management */}
+        <DelegatesSection />
 
         <div className="bg-gray-800 rounded-xl p-6 space-y-4 mb-8">
           <h2 className="text-lg font-semibold">{form.id ? t("edit_title") : t("add_title")}</h2>

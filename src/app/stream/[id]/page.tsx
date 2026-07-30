@@ -46,7 +46,7 @@ import {
   generateCopyLinkUrl
 } from "@/src/lib/share";
 import StreamShareButtons from "@/components/StreamShareButtons";
-import { getGiftMessage } from "@/components/GiftStreamModal";
+import StreamCloneModal from "@/components/StreamCloneModal";
 
 /** Grace period in seconds before a cancel is submitted on-chain. */
 const CANCEL_GRACE_SECONDS = 5;
@@ -100,7 +100,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
   const router = useRouter();
   const { addToast, upsertPersistentToast, removeToast } = useToast();
   const { withdrawThreshold } = useSettings();
-  const { address, refetchBalance } = useWallet();
+  const { address, refetchBalance, triggerStreamRefresh } = useWallet();
   const { isBookmarked, toggleBookmark } = useBookmarks();
   const t = useTranslations("stream_detail");
   const [withdrawConfirmAmount, setWithdrawConfirmAmount] = useState<string | null>(null);
@@ -126,6 +126,24 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
   const [showEmbedModal, setShowEmbedModal] = useState(false);
 
+  // ── Pause / Resume states ──────────────────────────────────────────────────
+  const [pauseLoading, setPauseLoading] = useState(false);
+  const [resumeLoading, setResumeLoading] = useState(false);
+  const [showPauseModal, setShowPauseModal] = useState(false);
+  const pauseModalRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(pauseModalRef, showPauseModal);
+  const [showResumeModal, setShowResumeModal] = useState(false);
+  const resumeModalRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(resumeModalRef, showResumeModal);
+
+  // ── Transfer recipient states ──────────────────────────────────────────────
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const transferModalRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(transferModalRef, showTransferModal);
+  const [transferRecipientAddress, setTransferRecipientAddress] = useState("");
+  const [transferLoading, setTransferLoading] = useState(false);
+  const [transferError, setTransferError] = useState("");
+
   // ── Stream completion states ───────────────────────────────────────────────
   const [claimFinalLoading, setClaimFinalLoading] = useState(false);
   const [claimFinalDone, setClaimFinalDone] = useState(false);
@@ -141,6 +159,9 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
   const [showTopUp, setShowTopUp] = useState(false);
   const [topUpAmount, setTopUpAmount] = useState("");
   const [topUpLoading, setTopUpLoading] = useState(false);
+
+  // ── Clone modal ────────────────────────────────────────────────────────────
+  const [showCloneModal, setShowCloneModal] = useState(false);
 
   // ── Success banner (stream just created) ──────────────────────────────────
   const [successPhase, setSuccessPhase] = useState<"in" | "out" | null>(null);
@@ -392,13 +413,15 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
       // Refresh stream data so status transitions to Cancelled
       const updated = await sorostream.getStream(params.id);
       if (updated) setStream(updated);
+      // Notify dashboard and other consumers to re-fetch stream data
+      triggerStreamRefresh();
       addToast(`Stream cancelled. Tx: ${result.txHash}`, "success");
     } catch {
       addToast("Cancellation failed. Please try again.", "error");
     } finally {
       setCancelLoading(false);
     }
-  }, [addToast, removeToast]);
+  }, [addToast, removeToast, triggerStreamRefresh]);
 
   // ── Cancel: undo during grace period ──────────────────────────────────────
   const handleCancelUndo = useCallback(() => {
@@ -461,7 +484,62 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
     }, CANCEL_GRACE_SECONDS * 1000);
   }, [cancelPending, cancelLoading, params.id, upsertPersistentToast, handleCancelUndo, submitCancel]);
 
-  const isBusy = withdrawLoading || cancelLoading || cancelPending || topUpLoading;
+  const isBusy = withdrawLoading || cancelLoading || cancelPending || topUpLoading || pauseLoading || resumeLoading || transferLoading;
+
+  // ── Pause stream ──────────────────────────────────────────────────────
+  const handlePauseConfirmed = useCallback(async () => {
+    setShowPauseModal(false);
+    setPauseLoading(true);
+    try {
+      const result = await sorostream.pauseStream(params.id);
+      const updated = await sorostream.getStream(params.id);
+      if (updated) setStream(updated);
+      addToast(`Stream paused. Tx: ${result.txHash}`, "success");
+    } catch {
+      addToast("Failed to pause stream. Please try again.", "error");
+    } finally {
+      setPauseLoading(false);
+    }
+  }, [params.id, addToast]);
+
+  // ── Resume stream ────────────────────────────────────────────────────
+  const handleResumeConfirmed = useCallback(async () => {
+    setShowResumeModal(false);
+    setResumeLoading(true);
+    try {
+      const result = await sorostream.resumeStream(params.id);
+      const updated = await sorostream.getStream(params.id);
+      if (updated) setStream(updated);
+      addToast(`Stream resumed. Tx: ${result.txHash}`, "success");
+    } catch {
+      addToast("Failed to resume stream. Please try again.", "error");
+    } finally {
+      setResumeLoading(false);
+    }
+  }, [params.id, addToast]);
+
+  // ── Transfer recipient ───────────────────────────────────────────────
+  const handleTransferConfirmed = useCallback(async () => {
+    const trimmed = transferRecipientAddress.trim();
+    if (!trimmed || !/^G[A-Z2-7]{55}$/.test(trimmed)) {
+      setTransferError("Please enter a valid Stellar public key (starts with G, 56 chars).");
+      return;
+    }
+    setTransferError("");
+    setTransferLoading(true);
+    try {
+      const result = await sorostream.transferRecipient(params.id, trimmed);
+      const updated = await sorostream.getStream(params.id);
+      if (updated) setStream(updated);
+      setShowTransferModal(false);
+      setTransferRecipientAddress("");
+      addToast(`Recipient transferred. Tx: ${result.txHash}`, "success");
+    } catch {
+      addToast("Failed to transfer recipient. Please try again.", "error");
+    } finally {
+      setTransferLoading(false);
+    }
+  }, [params.id, transferRecipientAddress, addToast]);
 
   // ── Stream completion ─────────────────────────────────────────────────────
   /** True when the current wall-clock time has passed the stream's end time. */
@@ -489,12 +567,17 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
       shortcuts: [
         { key: "w", description: "Withdraw", action: () => { if (!isBusy) handleWithdraw(); } },
         { key: "c", description: "Cancel", action: () => { if (!cancelLoading && !withdrawLoading && !topUpLoading) setShowCancelModal(true); } },
+        { key: "p", description: stream?.status === "Paused" ? "Resume" : "Pause", action: () => {
+          if (pauseLoading || resumeLoading || cancelLoading || withdrawLoading || topUpLoading) return;
+          if (stream?.status === "Paused") setShowResumeModal(true);
+          else if (stream?.status === "Active") setShowPauseModal(true);
+        }},
         { key: "t", description: "Toggle top-up", action: () => setShowTopUp((v) => !v) },
-        { key: "Escape", description: "Close modals", action: () => { setShowCancelModal(false); setShowQrModal(false); setShowTopUp(false); } },
+        { key: "Escape", description: "Close modals", action: () => { setShowCancelModal(false); setShowQrModal(false); setShowTopUp(false); setShowPauseModal(false); setShowResumeModal(false); setShowTransferModal(false); } },
         { key: "?", shift: true, description: "Toggle keyboard shortcuts help", action: () => setShowShortcutsHelp((v) => !v) },
       ],
     },
-  ], [handleWithdraw, isBusy, cancelLoading, withdrawLoading, topUpLoading]);
+  ], [handleWithdraw, isBusy, cancelLoading, withdrawLoading, topUpLoading, stream?.status, pauseLoading, resumeLoading]);
 
   useKeyboardShortcuts(shortcutGroups);
 
@@ -655,6 +738,8 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
             className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
               stream.status === "Active"
                 ? "bg-green-900 text-green-400"
+                : stream.status === "Paused"
+                ? "bg-yellow-900 text-yellow-400"
                 : stream.status === "Cancelled"
                 ? "bg-red-900 text-red-400"
                 : "bg-gray-700 text-gray-400"
@@ -720,7 +805,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
               const qp = new URLSearchParams({
                 recipient: stream.recipient,
                 amount: (stream.deposit / 10_000_000).toString(),
-                token: "USDC",
+                token: stream.token,
                 duration: String(duration),
                 cliff: "0",
               });
@@ -730,7 +815,8 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
             className="inline-flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-white py-2 px-4 rounded-lg text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M4 4v16h16" /><path d="m8 16 4-4 4 4" /><path d="M12 12v9" />
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
             </svg>
             Clone
           </button>
@@ -815,10 +901,10 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
         </div>
 
         {/* Stream completed banner — shown when currentTime >= endTime */}
-        {isCompleted && (
-          <StreamCompletedBanner
+        {isCompleted && (              <StreamCompletedBanner
             streamId={stream.id}
             finalAmount={formatUSDC(stream.deposit)}
+            token={stream.token}
             onClaim={handleClaimFinal}
             claiming={claimFinalLoading}
             claimed={claimFinalDone}
@@ -849,14 +935,14 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
             <div>
               <p className="text-gray-400 mb-1">Total deposit</p>
               <p className="text-white font-mono">
-                {toXlm(stream.deposit)} XLM
+                {toXlm(stream.deposit)} {stream.token}
                 <FiatDisplay xlmAmount={depositXlm} />
               </p>
             </div>
             <div>
               <p className="text-gray-400 mb-1">Flow rate</p>
               <p className="text-green-400 font-mono">
-                {toXlm(stream.flowRate)} XLM/sec
+                {toXlm(stream.flowRate)} {stream.token}/sec
                 <FiatDisplay xlmAmount={flowXlm} />
               </p>
             </div>
@@ -947,7 +1033,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
                 isDepositOptimistic ? "text-yellow-400" : "text-white"
               }`}
             >
-              {formatUSDC(displayDeposit)} USDC
+              {formatUSDC(displayDeposit)} {stream.token}
               {isDepositOptimistic && (
                 <span className="ml-2 text-xs font-normal text-yellow-400/80 italic">
                   (pending…)
@@ -984,7 +1070,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
 
             <button
               onClick={cancelPending ? handleCancelUndo : () => setShowCancelModal(true)}
-              disabled={cancelLoading || withdrawLoading || topUpLoading}
+              disabled={cancelLoading || withdrawLoading || topUpLoading || pauseLoading || resumeLoading}
               aria-live="polite"
               className={`flex-1 py-3 rounded-lg font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed ${
                 cancelPending
@@ -1004,6 +1090,66 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
               )}
             </button>
           </div>
+
+          {/* Pause / Resume (visible to sender only, based on status) */}
+          {address && stream.sender.includes(address.slice(0, 5)) && stream.status === "Active" && (
+            <button
+              onClick={() => setShowPauseModal(true)}
+              disabled={isBusy}
+              className="w-full border border-yellow-600 text-yellow-400 py-3 rounded-lg font-medium hover:bg-yellow-900 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {pauseLoading ? (
+                <>
+                  <Spinner />
+                  Pausing…
+                </>
+              ) : (
+                <>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <rect x="6" y="4" width="4" height="16" />
+                    <rect x="14" y="4" width="4" height="16" />
+                  </svg>
+                  Pause Stream
+                </>
+              )}
+            </button>
+          )}
+
+          {address && stream.sender.includes(address.slice(0, 5)) && stream.status === "Paused" && (
+            <button
+              onClick={() => setShowResumeModal(true)}
+              disabled={isBusy}
+              className="w-full border border-green-600 text-green-400 py-3 rounded-lg font-medium hover:bg-green-900 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {resumeLoading ? (
+                <>
+                  <Spinner />
+                  Resuming…
+                </>
+              ) : (
+                <>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <polygon points="5 3 19 12 5 21 5 3" />
+                  </svg>
+                  Resume Stream
+                </>
+              )}
+            </button>
+          )}
+
+          {/* Transfer Recipient (visible to sender only) */}
+          {address && stream.sender.includes(address.slice(0, 5)) && (
+            <button
+              onClick={() => { setShowTransferModal(true); setTransferRecipientAddress(""); setTransferError(""); }}
+              disabled={isBusy}
+              className="w-full border border-blue-600 text-blue-400 py-2 rounded-lg text-sm hover:bg-blue-900 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M5 12h14M12 5l7 7-7 7" />
+              </svg>
+              Transfer Recipient
+            </button>
+          )}
 
           <button
             onClick={() => setShowQrModal(true)}
@@ -1070,14 +1216,14 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
           {showTopUp && (
             <div className="space-y-2">
               <label htmlFor="topup-amount" className="text-gray-200 text-sm font-medium block">
-                Top-up Amount (USDC)
+                Top-up Amount ({stream.token})
               </label>
               <input
                 id="topup-amount"
                 type="number"
                 value={topUpAmount}
                 onChange={(e) => setTopUpAmount(e.target.value)}
-                placeholder="Amount (USDC)"
+                placeholder={`Amount (${stream.token})`}
                 min="0"
                 step="0.01"
                 className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
@@ -1136,7 +1282,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
         onClose={() => setShowQrModal(false)}
         recipient={stream.recipient}
         amount={(stream.deposit / 10_000_000).toString()}
-        token="USDC"
+        token={stream.token}
         duration={Math.round((new Date(stream.endTime).getTime() - new Date(stream.startTime).getTime()) / 1000)}
       />
 
@@ -1176,6 +1322,150 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
                 className="flex-1 bg-red-600 text-white py-2 rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
               >
                 {cancelLoading ? "Cancelling…" : "Yes, Cancel"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pause confirmation modal */}
+      {showPauseModal && (
+        <div
+          ref={pauseModalRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="pause-modal-title"
+          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
+        >
+          <div className="bg-gray-800 rounded-xl p-6 max-w-sm w-full mx-4 space-y-4">
+            <h2 id="pause-modal-title" className="text-lg font-semibold text-white">
+              Pause Stream?
+            </h2>
+            <p className="text-gray-400 text-sm">
+              This will temporarily halt the stream. The recipient will not
+              receive any funds while the stream is paused. You can resume
+              the stream at any time.
+            </p>
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => setShowPauseModal(false)}
+                className="flex-1 border border-gray-600 text-gray-300 py-2 rounded-lg hover:bg-gray-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+              >
+                Go Back
+              </button>
+              <button
+                onClick={handlePauseConfirmed}
+                disabled={pauseLoading}
+                className="flex-1 bg-yellow-600 text-white py-2 rounded-lg hover:bg-yellow-700 disabled:opacity-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+              >
+                {pauseLoading ? "Pausing…" : "Yes, Pause"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Resume confirmation modal */}
+      {showResumeModal && (
+        <div
+          ref={resumeModalRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="resume-modal-title"
+          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
+        >
+          <div className="bg-gray-800 rounded-xl p-6 max-w-sm w-full mx-4 space-y-4">
+            <h2 id="resume-modal-title" className="text-lg font-semibold text-white">
+              Resume Stream?
+            </h2>
+            <p className="text-gray-400 text-sm">
+              This will resume the paused stream. Funds will start flowing
+              to the recipient again from this point forward.
+            </p>
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => setShowResumeModal(false)}
+                className="flex-1 border border-gray-600 text-gray-300 py-2 rounded-lg hover:bg-gray-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+              >
+                Go Back
+              </button>
+              <button
+                onClick={handleResumeConfirmed}
+                disabled={resumeLoading}
+                className="flex-1 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+              >
+                {resumeLoading ? "Resuming…" : "Yes, Resume"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Transfer recipient modal */}
+      {showTransferModal && (
+        <div
+          ref={transferModalRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="transfer-modal-title"
+          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
+        >
+          <div className="bg-gray-800 rounded-xl p-6 max-w-sm w-full mx-4 space-y-4">
+            <h2 id="transfer-modal-title" className="text-lg font-semibold text-white">
+              Transfer Recipient
+            </h2>
+            <p className="text-gray-400 text-sm">
+              Reassign this stream to a new recipient address. The current
+              recipient will stop receiving funds, and the new recipient
+              will begin receiving from this point forward.
+            </p>
+            <div>
+              <label htmlFor="transfer-recipient" className="text-gray-200 text-sm font-medium block mb-1">
+                New Recipient Address
+              </label>
+              <input
+                id="transfer-recipient"
+                type="text"
+                value={transferRecipientAddress}
+                onChange={(e) => {
+                  setTransferRecipientAddress(e.target.value);
+                  setTransferError("");
+                }}
+                placeholder="GABCDEF…"
+                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2.5 text-white text-sm font-mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+                aria-invalid={!!transferError}
+                aria-describedby={transferError ? "transfer-error" : undefined}
+              />
+              {transferError && (
+                <p id="transfer-error" className="text-red-400 text-xs mt-1">
+                  {transferError}
+                </p>
+              )}
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => {
+                  setShowTransferModal(false);
+                  setTransferRecipientAddress("");
+                  setTransferError("");
+                }}
+                className="flex-1 border border-gray-600 text-gray-300 py-2 rounded-lg hover:bg-gray-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleTransferConfirmed}
+                disabled={transferLoading || !transferRecipientAddress.trim()}
+                className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+              >
+                {transferLoading ? (
+                  <>
+                    <Spinner />
+                    Transferring…
+                  </>
+                ) : (
+                  "Submit"
+                )}
               </button>
             </div>
           </div>

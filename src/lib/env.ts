@@ -9,6 +9,15 @@ const requiredEnvVars = {
   NEXT_PUBLIC_STELLAR_NETWORK: 'Network (testnet or mainnet)',
 } as const;
 
+/**
+ * Optional environment variables.
+ * These are not validated as missing but are documented here for reference.
+ */
+export const optionalEnvVars = {
+  /** Stellar public key of the fee sponsor account for fee-bump transactions. */
+  NEXT_PUBLIC_FEE_SPONSOR_ADDRESS: 'Fee sponsor Stellar public key (e.g. GXXX...)',
+} as const;
+
 type RequiredEnvVar = keyof typeof requiredEnvVars;
 
 let validated = false;
@@ -37,4 +46,16 @@ export function validateEnv() {
   }
   
   validated = true;
+}
+
+/**
+ * Reads an optional environment variable, returning null if not set.
+ * Use this for env vars like NEXT_PUBLIC_FEE_SPONSOR_ADDRESS that are not required.
+ */
+export function getOptionalEnvVar(key: string): string | null {
+  if (typeof window !== "undefined") {
+    // Client-side: NEXT_PUBLIC_ vars are inlined at build time
+    return (process.env as Record<string, string | undefined>)[key]?.trim() || null;
+  }
+  return process.env[key]?.trim() || null;
 }
