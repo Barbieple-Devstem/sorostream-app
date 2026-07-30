@@ -82,7 +82,9 @@ export default function StreamActions({
       const result = await sorostream.withdraw();
       setOptimisticClaimable(null);
       refetchBalance();
-      addToast(`Withdrawn ${result.amount} USDC from stream #${streamId}`, "success");
+      const stream = getMockStream(streamId);
+      const token = stream?.token ?? "USDC";
+      addToast(`Withdrawn ${result.amount} ${token} from stream #${streamId}`, "success");
     } catch {
       setOptimisticClaimable(null);
       void previousClaimable;
@@ -244,7 +246,7 @@ export default function StreamActions({
       {confirmAmount !== null && (
         <WithdrawFeeBreakdownModal
           claimableStroops={confirmAmount}
-          token="USDC"
+          token={getMockStream(streamId)?.token ?? "USDC"}
           onConfirm={handleConfirmed}
           onCancel={() => setConfirmAmount(null)}
         />

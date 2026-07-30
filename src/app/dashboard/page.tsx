@@ -48,7 +48,7 @@ function DashboardContent() {
   const router = useRouter();
   const { addToast } = useToast();
   const { bookmarkedIds } = useBookmarks();
-  const { address } = useWallet();
+  const { address, streamRefreshTrigger } = useWallet();
   const [loading, setLoading] = useState(true);
   const [streams, setStreams] = useState<StreamData[]>([]);
 
@@ -134,7 +134,7 @@ function DashboardContent() {
       if (pollRef.current) clearInterval(pollRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [address]);
+  }, [address, streamRefreshTrigger]);
 
   // Get unique tokens from streams for dropdown
   const uniqueTokens = useMemo(() => {
