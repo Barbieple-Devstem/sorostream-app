@@ -1246,6 +1246,9 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
             {showTopUp ? "Cancel Top-up" : "Top Up Stream"}
           </button>
 
+          {/* Tags */}
+          <StreamTagEditor streamId={stream.id} />
+
           {/* Transaction history */}
           <StreamErrorBoundary section="Transaction History" resetKey={stream.id}>
             <section aria-labelledby="history-heading">

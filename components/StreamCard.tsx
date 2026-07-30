@@ -5,6 +5,7 @@ import FiatDisplay from "@/components/FiatDisplay";
 import { truncateAddress, formatStellarAmount } from "@/src/lib/sorostream";
 import FederationName from "@/components/FederationName";
 import { useBookmarks } from "@/src/context/BookmarksContext";
+import StreamTagChips from "@/components/StreamTagChips";
 
 interface StreamCardProps {
   id?: string;
@@ -132,6 +133,9 @@ export default function StreamCard({
           </span>
         </p>
       </div>
+
+      {/* Tag chips */}
+      <StreamTagChips streamId={id} />
     </div>
   );
 }
