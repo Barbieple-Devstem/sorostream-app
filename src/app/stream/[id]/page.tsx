@@ -148,6 +148,13 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
   const [claimFinalLoading, setClaimFinalLoading] = useState(false);
   const [claimFinalDone, setClaimFinalDone] = useState(false);
 
+  // ── Gift message (stored in localStorage by GiftStreamModal) ──────────────
+  const [giftMessage, setGiftMessage] = useState<string | null>(null);
+  useEffect(() => {
+    const msg = getGiftMessage(params.id);
+    if (msg) setGiftMessage(msg);
+  }, [params.id]);
+
   // ── Top-up form state ──────────────────────────────────────────────────────
   const [showTopUp, setShowTopUp] = useState(false);
   const [topUpAmount, setTopUpAmount] = useState("");

@@ -93,6 +93,7 @@ function DashboardContent() {
 
   // UI state
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
+  const [showGiftModal, setShowGiftModal] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
