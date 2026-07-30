@@ -332,6 +332,48 @@ function NewStreamWizard() {
     };
   }, [amount, step]);
 
+  // Balance top-up state (issue #357)
+  const [mockBalance, setMockBalance] = useState<number>(500); // 500 tokens simulated balance
+  const [showTopUpBanner, setShowTopUpBanner] = useState(false);
+  const [shortfall, setShortfall] = useState(0);
+  const balancePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Check balance when entering review step and whenever amount changes
+  useEffect(() => {
+    if (step !== "review") {
+      setShowTopUpBanner(false);
+      if (balancePollRef.current) clearInterval(balancePollRef.current);
+      return;
+    }
+    const amountNum = parseFloat(amount) || 0;
+    const diff = amountNum - mockBalance;
+    if (diff > 0) {
+      setShortfall(diff);
+      setShowTopUpBanner(true);
+      // Poll every 5s to check if balance became sufficient
+      balancePollRef.current = setInterval(() => {
+        // In production this would re-fetch on-chain balance
+        // Here we just re-check mockBalance (user would top-up externally)
+        setMockBalance((prev) => {
+          const updated = prev; // No auto-update in mock
+          const stillShort = amountNum - updated;
+          if (stillShort <= 0) {
+            setShowTopUpBanner(false);
+            setShortfall(0);
+            if (balancePollRef.current) clearInterval(balancePollRef.current);
+          }
+          return updated;
+        });
+      }, 5000);
+    } else {
+      setShowTopUpBanner(false);
+      setShortfall(0);
+    }
+    return () => {
+      if (balancePollRef.current) clearInterval(balancePollRef.current);
+    };
+  }, [step, amount, mockBalance]);
+
   // Collateral requirement
   const [collateralBps, setCollateralBps] = useState<number | null>(null);
   const [isNewSender, setIsNewSender] = useState(false);
@@ -1159,6 +1201,38 @@ function NewStreamWizard() {
         {/* Step: Review & Confirm */}
         {step === "review" && (
           <div className="space-y-6">
+            {/* Balance top-up banner (#357) */}
+            {showTopUpBanner && (
+              <div
+                role="alert"
+                className="bg-orange-900/30 border border-orange-700/60 rounded-xl p-4 space-y-2"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-orange-400 text-base" aria-hidden="true">⚠</span>
+                  <p className="text-orange-300 text-sm font-semibold">Insufficient Balance</p>
+                </div>
+                <p className="text-gray-300 text-sm">
+                  Your wallet balance is too low for this stream. You need{" "}
+                  <span className="font-mono font-semibold text-orange-300">
+                    {shortfall.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 7 })}{" "}
+                    {selectedToken === CUSTOM_TOKEN_VALUE ? "tokens" : selectedToken}
+                  </span>{" "}
+                  more to proceed.
+                </p>
+                <a
+                  href="https://stellarx.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-sm text-orange-400 hover:text-orange-300 underline underline-offset-2 transition-colors"
+                >
+                  Fund via Stellar DEX
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                </a>
+                <p className="text-gray-500 text-xs">This banner will auto-dismiss when your balance is sufficient.</p>
+              </div>
+            )}
             <div className="bg-gray-800 rounded-xl p-5 space-y-4 border border-gray-700">
               {/* Sender */}
               <div className="flex justify-between items-start">
