@@ -19,6 +19,8 @@ import { useWallet } from "@/src/context/WalletContext";
 import ArchiveBanner from "@/components/ArchiveBanner";
 import PortfolioChart from "@/components/PortfolioChart";
 import StreamExpiryAlerts from "@/components/StreamExpiryAlerts";
+import PortfolioSummaryCard from "@/components/PortfolioSummaryCard";
+import WatchlistTab from "@/components/WatchlistTab";
 
 type DashboardState = "loading" | "filtered-empty" | "empty" | "ready";
 
@@ -48,7 +50,7 @@ function DashboardContent() {
   const router = useRouter();
   const { addToast } = useToast();
   const { bookmarkedIds } = useBookmarks();
-  const { address } = useWallet();
+  const { address, streamRefreshTrigger } = useWallet();
   const [loading, setLoading] = useState(true);
   const [streams, setStreams] = useState<StreamData[]>([]);
 
@@ -57,6 +59,9 @@ function DashboardContent() {
   const [tokenFilter, setTokenFilter] = useState(searchParams.get("token") || "");
   const [search, setSearch] = useState(searchParams.get("search") || "");
   const [bookmarksOnly, setBookmarksOnly] = useState(false);
+  // Tag filter — multiselect, client-side only
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [allTags, setAllTags] = useState<string[]>([]);
 
   // Sort state — read from URL query string (?sort=amount&dir=desc).
   // Falls back to "created" / "desc" when params are absent or invalid.
@@ -83,8 +88,12 @@ function DashboardContent() {
   const [multiSelectMode, setMultiSelectMode] = useState(false);
   const [showBulkCancelConfirm, setShowBulkCancelConfirm] = useState(false);
 
+  // Tab state
+  const [activeTab, setActiveTab] = useState<"streams" | "watchlist">("streams");
+
   // UI state
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
+  const [showGiftModal, setShowGiftModal] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -134,7 +143,7 @@ function DashboardContent() {
       if (pollRef.current) clearInterval(pollRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [address]);
+  }, [address, streamRefreshTrigger]);
 
   // Get unique tokens from streams for dropdown
   const uniqueTokens = useMemo(() => {
@@ -142,7 +151,13 @@ function DashboardContent() {
     return Array.from(tokens).sort();
   }, [streams]);
 
+  // Refresh all tags from localStorage whenever streams change
+  useEffect(() => {
+    setAllTags(getAllTags());
+  }, [streams]);
+
   const filtered = useMemo(() => {
+    const tagMap = selectedTags.length > 0 ? getTagMap() : null;
     return streams.filter((s) => {
       if (bookmarksOnly && !bookmarkedIds.has(s.id)) return false;
       if (statusFilter && s.status !== statusFilter) return false;
@@ -155,9 +170,14 @@ function DashboardContent() {
           s.id.toLowerCase().includes(q);
         if (!matchesSearch) return false;
       }
+      if (tagMap && selectedTags.length > 0) {
+        const streamTags = tagMap[s.id] ?? [];
+        const hasAllTags = selectedTags.every((t) => streamTags.includes(t));
+        if (!hasAllTags) return false;
+      }
       return true;
     });
-  }, [streams, statusFilter, tokenFilter, search, bookmarksOnly, bookmarkedIds]);
+  }, [streams, statusFilter, tokenFilter, search, bookmarksOnly, bookmarkedIds, selectedTags]);
 
   // Sort filtered streams, pinning bookmarks first, then by the chosen sort field.
   const sortedFiltered = useMemo(() => {
@@ -207,9 +227,10 @@ function DashboardContent() {
     setTokenFilter("");
     setSearch("");
     setBookmarksOnly(false);
+    setSelectedTags([]);
   };
 
-  const hasActiveFilters = statusFilter || tokenFilter || search.trim() || bookmarksOnly;
+  const hasActiveFilters = statusFilter || tokenFilter || search.trim() || bookmarksOnly || selectedTags.length > 0;
 
   const state: DashboardState = loading
     ? "loading"
@@ -281,9 +302,13 @@ function DashboardContent() {
   const handleBulkExport = useCallback(() => {
     const ids = Array.from(selectedIds);
     if (ids.length === 0) return;
-    const allEntries = ids.flatMap((id) => getMockStreamHistory(id));
+    // Strip synthesised entries — only export real on-chain history. Mock
+    // entries carry fabricated txHashes and must never appear in CSV exports.
+    const allEntries = ids
+      .flatMap((id) => getMockStreamHistory(id))
+      .filter((e) => !e.isMock);
     if (allEntries.length === 0) {
-      addToast("No history entries for selected streams.", "info");
+      addToast("No verified transaction history is available for the selected streams yet.", "info");
       return;
     }
     downloadCSV(allEntries, `bulk-${ids.length}-streams`);
@@ -338,6 +363,44 @@ function DashboardContent() {
 
         <div className="flex flex-col lg:flex-row gap-6">
           <div className="flex-1 min-w-0">
+            {/* Portfolio summary */}
+            {address && (
+              <PortfolioSummaryCard streams={streams} walletAddress={address} />
+            )}
+
+            {/* Tab switcher */}
+            <div className="flex rounded-xl bg-gray-800 p-1 mb-6" role="tablist" aria-label="Dashboard view">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === "streams"}
+                onClick={() => setActiveTab("streams")}
+                className={`flex-1 py-2 text-sm font-medium rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 ${
+                  activeTab === "streams" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-white"
+                }`}
+              >
+                My Streams
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === "watchlist"}
+                onClick={() => setActiveTab("watchlist")}
+                className={`flex-1 py-2 text-sm font-medium rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 ${
+                  activeTab === "watchlist" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-white"
+                }`}
+              >
+                Watchlist
+              </button>
+            </div>
+
+            {activeTab === "watchlist" ? (
+              <div role="tabpanel" aria-label="Watchlist">
+                <WatchlistTab />
+              </div>
+            ) : (
+            <div role="tabpanel" aria-label="My Streams">
+
             {/* Archive banner — shown when streams have been auto-archived */}
             <ArchiveBanner />
 
@@ -397,6 +460,33 @@ function DashboardContent() {
                   Bookmarks
                 </button>
 
+                {/* Tag filter — shown only when tags exist */}
+                {allTags.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 items-center">
+                    <span className="text-xs text-gray-400">Tags:</span>
+                    {allTags.map((tag) => (
+                      <button
+                        key={tag}
+                        onClick={() =>
+                          setSelectedTags((prev) =>
+                            prev.includes(tag)
+                              ? prev.filter((t) => t !== tag)
+                              : [...prev, tag],
+                          )
+                        }
+                        aria-pressed={selectedTags.includes(tag)}
+                        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 ${
+                          selectedTags.includes(tag)
+                            ? "bg-green-900/60 border-green-600 text-green-300"
+                            : "bg-gray-800 border-gray-700 text-gray-400 hover:border-green-700 hover:text-green-300"
+                        }`}
+                      >
+                        {tag}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 {/* Search Input */}
                 <input
                   ref={searchRef}
@@ -440,6 +530,11 @@ function DashboardContent() {
                   {bookmarksOnly && (
                     <span className="bg-yellow-900/30 text-yellow-400 px-2 py-1 rounded">
                       ★ Bookmarks only
+                    </span>
+                  )}
+                  {selectedTags.length > 0 && (
+                    <span className="bg-green-900/30 text-green-400 px-2 py-1 rounded">
+                      Tags: {selectedTags.join(", ")}
                     </span>
                   )}
                 </div>
@@ -586,6 +681,8 @@ function DashboardContent() {
               </div>
             )}
             </StreamErrorBoundary>
+            </div>{/* end My Streams tabpanel */}
+            )}{/* end activeTab conditional */}
           </div>
 
           <div className="w-full lg:w-80 shrink-0">

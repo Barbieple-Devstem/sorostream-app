@@ -10,7 +10,7 @@ export interface StreamData {
   startTime: string;
   endTime: string;
   lastWithdrawTime: string;
-  status: "Active" | "Cancelled" | "Ended";
+  status: "Active" | "Cancelled" | "Ended" | "Paused";
   /** Whether the stream auto-renews on expiry. */
   autoRenew?: boolean;
   /** Duration in seconds for each auto-renewal cycle (defaults to original duration). */
@@ -230,6 +230,10 @@ export interface CreateStreamParams {
   scheduledStartTime?: number;
   /** Optional metadata URI (ipfs://, https://, or ar://) pointing to stream metadata. */
   metadataUri?: string;
+  /** When true, construct a fee-bump envelope using the configured fee sponsor account. */
+  feeBump?: boolean;
+  /** The fee sponsor's Stellar public key. Required when feeBump is true. */
+  feeSponsorAddress?: string;
 }
 
 export function watchClaimable(streams: StreamData[]): StreamData[] {
@@ -300,6 +304,27 @@ export const sorostream = {
       if (stream) stream.status = "Cancelled";
     }
     return { txHash: "mock-tx-hash" };
+  },
+  pauseStream: async (id?: string) => {
+    if (id) {
+      const stream = MOCK_STREAMS.find((s) => s.id === id);
+      if (stream && stream.status === "Active") stream.status = "Paused";
+    }
+    return { txHash: "mock-pause-tx-hash" };
+  },
+  resumeStream: async (id?: string) => {
+    if (id) {
+      const stream = MOCK_STREAMS.find((s) => s.id === id);
+      if (stream && stream.status === "Paused") stream.status = "Active";
+    }
+    return { txHash: "mock-resume-tx-hash" };
+  },
+  transferRecipient: async (id?: string, newRecipient?: string) => {
+    if (id && newRecipient) {
+      const stream = MOCK_STREAMS.find((s) => s.id === id);
+      if (stream) stream.recipient = newRecipient;
+    }
+    return { txHash: "mock-transfer-tx-hash" };
   },
   topUp: async () => ({ txHash: "", newEndTime: new Date() }),
   getStream: async (id: string) => getMockStream(id),
@@ -394,14 +419,20 @@ export function getStreamsForWallet(address: string | null): StreamData[] {
   return relevant.length > 0 ? relevant : MOCK_STREAMS;
 }
 
+/**
+ * Returns synthesised (non-on-chain) history entries for development and
+ * demo purposes. Every entry is tagged `isMock: true` so callers can
+ * suppress display or export of fabricated data. Do not present these
+ * entries to users as real transaction records.
+ */
 export function getMockStreamHistory(id: string): StreamHistoryEntry[] {
   const base: StreamHistoryEntry[] = [
-    { timestamp: new Date(Date.now() - 86400000 * 4).toISOString(), type: "creation", amount: "10000000000", txHash: "0xabc123creation" },
+    { timestamp: new Date(Date.now() - 86400000 * 4).toISOString(), type: "creation", amount: "10000000000", txHash: "0xabc123creation", isMock: true },
   ];
   if (id === "1" || id === "2" || id === "3") {
     base.push(
-      { timestamp: new Date(Date.now() - 86400000 * 3).toISOString(), type: "withdrawal", amount: "2500000000", txHash: "0xdef456withdraw" },
-      { timestamp: new Date(Date.now() - 86400000).toISOString(), type: "top-up", amount: "5000000000", txHash: "0xghi789topup" }
+      { timestamp: new Date(Date.now() - 86400000 * 3).toISOString(), type: "withdrawal", amount: "2500000000", txHash: "0xdef456withdraw", isMock: true },
+      { timestamp: new Date(Date.now() - 86400000).toISOString(), type: "top-up", amount: "5000000000", txHash: "0xghi789topup", isMock: true },
     );
   }
   return base;

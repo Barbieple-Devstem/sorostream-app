@@ -10,6 +10,7 @@ import StreamHealthBadge, {
   getHealthTier,
 } from "@/components/StreamHealthBadge";
 import { getMockStreamHistory } from "@/src/lib/sorostream";
+import StreamTagChips from "@/components/StreamTagChips";
 
 interface StreamCardProps {
   id?: string;
@@ -188,6 +189,9 @@ export default function StreamCard({
           </span>
         </p>
       </div>
+
+      {/* Tag chips */}
+      <StreamTagChips streamId={id} />
     </div>
   );
 }
