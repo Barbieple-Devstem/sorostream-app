@@ -146,6 +146,8 @@ export default function StreamVirtualList({ streams, selectedIds, onToggleSelect
                       selected={selectedIds?.has(stream.id)}
                       onToggle={onToggleSelect}
                       scheduledStartTime={stream.scheduledStartTime}
+                      startTime={stream.startTime}
+                      endTime={stream.endTime}
                     />
                   </Link>
                 </div>

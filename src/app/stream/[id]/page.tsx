@@ -18,6 +18,11 @@ import { SkeletonDetail } from "@/components/Skeleton";
 import WalletConnect from "@/components/WalletConnect";
 import KeyboardShortcutsHelp from "@/components/KeyboardShortcutsHelp";
 import TransactionExportButton from "@/components/TransactionExportButton";
+import StreamHealthBadge, {
+  calculateHealthScore,
+  getHealthTier,
+} from "@/components/StreamHealthBadge";
+import CollateralUnlockBadge from "@/components/CollateralUnlockBadge";
 import { type StreamHistoryEntry } from "@/src/lib/export";
 import {
   sorostream,
@@ -758,6 +763,30 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
           </span>
         </div>
 
+        {/* Stream Health Score */}
+        {stream.status === "Active" && (() => {
+          const now = Date.now();
+          const totalDuration = new Date(stream.endTime).getTime() - new Date(stream.startTime).getTime();
+          const elapsed = now - new Date(stream.startTime).getTime();
+          const timeRemainingRatio = totalDuration > 0 ? Math.max(0, Math.min(1, 1 - elapsed / totalDuration)) : 0;
+          const estimatedStreamed = stream.flowRate * Math.max(0, elapsed / 1000);
+          const depositRemainingRatio = stream.deposit > 0 ? Math.max(0, Math.min(1, 1 - estimatedStreamed / stream.deposit)) : 0;
+          const topUpCount = historyEntries.filter((e) => e.type === "top-up").length;
+          const score = calculateHealthScore({ depositRemainingRatio, timeRemainingRatio, topUpCount });
+          const tier = getHealthTier(score);
+          return (
+            <div className="mt-2">
+              <StreamHealthBadge
+                score={score}
+                tier={tier}
+                depositRemainingRatio={depositRemainingRatio}
+                timeRemainingRatio={timeRemainingRatio}
+                topUpCount={topUpCount}
+              />
+            </div>
+          );
+        })()}
+
         <div className="flex justify-end gap-2 mb-4 print-hidden">
           {/* Bookmark toggle */}
           <button
@@ -936,6 +965,24 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
           <CountdownTimer endTime={stream.endTime} />
 
           <StreamProgressBar stream={stream} />
+
+          {/* Collateral unlock badge — shown when sender has collateral */}
+          {stream.status !== "Cancelled" && (
+            <CollateralUnlockBadge
+              endTime={stream.endTime}
+              gracePeriodSeconds={86400}
+              isSender={address !== null && address.includes(stream.sender.slice(0, 5))}
+              hasCollateral={stream.sender.includes("GBAM") || stream.sender.includes("GDEF")}
+              onClaim={async () => {
+                try {
+                  await sorostream.withdraw();
+                  addToast("Collateral claimed successfully!", "success");
+                } catch {
+                  addToast("Claim failed. Please try again.", "error");
+                }
+              }}
+            />
+          )}
 
           {/* Deposit & flow rate */}
           <div className="grid grid-cols-2 gap-4 text-sm">
