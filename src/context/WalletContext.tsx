@@ -274,7 +274,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsConnecting(false);
     }
-  }, [verifyNetwork, startWatcher]);
+  }, [verifyNetwork, startWatcher, startSessionTracking]);
 
   // Cleanup on unmount
   useEffect(() => {

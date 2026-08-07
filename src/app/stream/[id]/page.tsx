@@ -435,7 +435,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
     } finally {
       setCancelLoading(false);
     }
-  }, [addToast, removeToast, triggerStreamRefresh]);
+  }, [addToast, removeToast, triggerStreamRefresh, params.id]);
 
   // ── Cancel: undo during grace period ──────────────────────────────────────
   const handleCancelUndo = useCallback(() => {
