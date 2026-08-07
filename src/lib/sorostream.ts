@@ -326,7 +326,7 @@ export const sorostream = {
     }
     return { txHash: "mock-transfer-tx-hash" };
   },
-  topUp: async () => ({ txHash: "", newEndTime: new Date() }),
+  topUp: async (_streamId?: string) => ({ txHash: "", newEndTime: new Date() }),
   getStream: async (id: string) => getMockStream(id),
   getClaimable: async (streamId: string) => claimableNow(getMockStream(streamId)),
   getStreamsBySender: async () => MOCK_STREAMS,

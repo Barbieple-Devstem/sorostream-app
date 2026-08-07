@@ -40,8 +40,6 @@ function parseClaimable(value: string | number | bigint): number | null {
   return Number.isFinite(amount) && amount >= 0 ? amount : null;
 }
 
-const formatUSDCFixed = (val: number) => (val / 10_000_000).toFixed(7);
-
 
 export default function LiveCounter({
   flowRate,
@@ -169,6 +167,7 @@ export default function LiveCounter({
       setAriaLabel(safeFormatUSDCFixed(displayValue));
     }, remaining);
     return () => clearTimeout(timer);
+    }
   }, [displayValue, safeFormatUSDCFixed]);
 
   return (
@@ -181,7 +180,6 @@ export default function LiveCounter({
         t("claimable", { val: ariaLabel }) +
         (isOptimistic ? t("pending_confirmation") : "")
       }
-      aria-label={`Claimable: ${formatUSDCFixed(displayValue)} USDC`}
     >
       <span className={isOptimistic ? "text-yellow-400" : "text-green-600"}>
         {formatUSDC(displayValue)} USDC

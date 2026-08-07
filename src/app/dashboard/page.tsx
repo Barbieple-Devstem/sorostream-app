@@ -17,6 +17,7 @@ import { useKeyboardShortcuts, type ShortcutGroup } from "@/src/lib/useKeyboardS
 import { useBookmarks } from "@/src/context/BookmarksContext";
 import { useWallet } from "@/src/context/WalletContext";
 import ArchiveBanner from "@/components/ArchiveBanner";
+import { getAllTags, getTagMap } from "@/src/lib/streamTags";
 import PortfolioChart from "@/components/PortfolioChart";
 import StreamExpiryAlerts from "@/components/StreamExpiryAlerts";
 import PortfolioSummaryCard from "@/components/PortfolioSummaryCard";
@@ -196,7 +197,7 @@ function DashboardContent() {
         case "amount":
           return dir * (a.deposit - b.deposit);
         case "status": {
-          const order = { Active: 0, Ended: 1, Cancelled: 2 };
+          const order: Record<string, number> = { Active: 0, Ended: 1, Cancelled: 2, Paused: 3 };
           return dir * ((order[a.status] ?? 3) - (order[b.status] ?? 3));
         }
         default:
@@ -681,7 +682,7 @@ function DashboardContent() {
               </div>
             )}
             </StreamErrorBoundary>
-            </div>{/* end My Streams tabpanel */}
+            </div>
             )}{/* end activeTab conditional */}
           </div>
 

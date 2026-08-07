@@ -1,5 +1,4 @@
 "use client";
-import { useState, useEffect, Suspense } from "react";
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import DurationPicker from "@/components/DurationPicker";
@@ -144,9 +143,6 @@ function NewStreamWizard() {
       if (!isNaN(num) && num > 0) return Math.round(num);
     }
     return draft?.duration ?? 0;
-    if (!durationParam) return settings.defaultDurationSeconds;
-    const num = parseFloat(durationParam);
-    return !isNaN(num) && num > 0 ? Math.round(num) : settings.defaultDurationSeconds;
   })();
 
   const [recipient, setRecipient] = useState(initialRecipient);
@@ -157,13 +153,7 @@ function NewStreamWizard() {
   const [selectedToken, setSelectedToken] = useState<string>(
     SUPPORTED_TOKENS.find((t) => t.symbol === defaultToken)?.symbol ?? SUPPORTED_TOKENS[0].symbol,
   );
-  const [duration, setDuration] = useState(initialDuration);
-  const [selectedToken, setSelectedToken] = useState<string>(
-    draft?.selectedToken ?? SUPPORTED_TOKENS[0].symbol,
-  );
   const [customTokenAddress, setCustomTokenAddress] = useState(draft?.customTokenAddress ?? "");
-  const [selectedToken, setSelectedToken] = useState<string>(settings.defaultToken || SUPPORTED_TOKENS[0].symbol);
-  const [customTokenAddress, setCustomTokenAddress] = useState("");
   const [customTokenError, setCustomTokenError] = useState("");
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({ recipient: "", amount: "", duration: "", endDate: "", cliffDate: "", scheduledStart: "" });
@@ -200,14 +190,6 @@ function NewStreamWizard() {
       ...overrides,
     });
   }
-  const [endDate, setEndDate] = useState("");
-  // Pre-fill cliff from preference (convert seconds offset to a future datetime-local string)
-  const [cliffDate, setCliffDate] = useState(() => {
-    if (!defaultCliffDuration || defaultCliffDuration <= 0) return "";
-    const dt = new Date(Date.now() + defaultCliffDuration * 1000);
-    // datetime-local format: "YYYY-MM-DDTHH:MM"
-    return dt.toISOString().slice(0, 16);
-  });
 
   // Scheduling
   const [schedulingEnabled, setSchedulingEnabled] = useState(false);
@@ -233,13 +215,6 @@ function NewStreamWizard() {
   const [txFailedStage, setTxFailedStage] = useState<TxStage | undefined>(undefined);
   const [txError, setTxError] = useState<string | undefined>(undefined);
 
-  function handleTemplateSelect(
-    seconds: number,
-    suggestedAmount?: string,
-    recipientOverride?: string,
-    tokenOverride?: string,
-    cliffDateOverride?: string,
-  ) {
   // Protocol fee state for review step
   const [feeBasisPoints, setFeeBasisPoints] = useState<number>(0);
   const [feeLoading, setFeeLoading] = useState(false);
@@ -412,7 +387,7 @@ function NewStreamWizard() {
     return () => { cancelled = true; };
   }, [step, address]);
 
-  function handleTemplateSelect(seconds: number, suggestedAmount?: string, recipientOverride?: string) {
+  function handleTemplateSelect(seconds: number, suggestedAmount?: string, recipientOverride?: string, tokenOverride?: string, cliffDateOverride?: string) {
     setDuration(seconds);
     setErrors((prev) => ({ ...prev, duration: "" }));
     const newAmount = suggestedAmount ?? amount;
@@ -1198,7 +1173,7 @@ function NewStreamWizard() {
         {step === "preview" && (
           <div className="space-y-6">
             <div className="bg-gray-800 rounded-xl p-6 space-y-4 border border-gray-700">
-              <p className="text-gray-400 text-sm mb-4">Here's what your stream will look like on-chain:</p>
+              <p className="text-gray-400 text-sm mb-4">Here&apos;s what your stream will look like on-chain:</p>
 
               {/* Flow rate per day */}
               <div>
@@ -1259,7 +1234,7 @@ function NewStreamWizard() {
             {/* Info box */}
             <div className="bg-blue-900/20 border border-blue-700/50 rounded-lg p-4">
               <p className="text-blue-300 text-sm">
-                Review the details above. Click "Confirm" to proceed to sign this transaction with your wallet, or "Back" to edit the stream parameters.
+                Review the details above. Click &quot;Confirm&quot; to proceed to sign this transaction with your wallet, or &quot;Back&quot; to edit the stream parameters.
               </p>
             </div>
           </div>

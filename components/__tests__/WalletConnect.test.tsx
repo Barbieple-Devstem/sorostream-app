@@ -125,11 +125,9 @@ describe('WalletConnect', () => {
     render(<WalletConnect />);
     const button = screen.getByRole('button', { name: /connect freighter wallet/i });
 
-    await act(async () => {
-      fireEvent.click(button);
-    });
+    fireEvent.click(button);
 
-    expect(button).toBeDisabled();
+    await waitFor(() => expect(button).toBeDisabled());
   });
 
   it('shows connected address and disconnect button when context has an address', () => {

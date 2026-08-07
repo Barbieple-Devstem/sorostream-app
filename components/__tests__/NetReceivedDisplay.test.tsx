@@ -3,15 +3,15 @@ import { describe, it, expect } from "vitest";
 describe("Net Received Display Feature", () => {
   // Test 1: Verify the component exists and exports
   it("should export NetReceivedDisplay component", async () => {
-    const module = await import("@/components/NetReceivedDisplay");
-    expect(module.default).toBeDefined();
+    const mod = await import("@/components/NetReceivedDisplay");
+    expect(mod.default).toBeDefined();
   });
 
   // Test 2: Verify stream new page imports
   it("should have NetReceivedDisplay imported in stream new page", async () => {
     const fs = await import("fs/promises");
     const content = await fs.readFile(
-      "/workspaces/sorostream-app/src/app/stream/new/page.tsx",
+      `${process.cwd()}/src/app/stream/new/page.tsx`,
       "utf-8"
     );
 
@@ -68,9 +68,9 @@ describe("Net Received Display Feature", () => {
 
     const keys = ["net_received_label", "net_received_fee_desc"];
     keys.forEach((key) => {
-      expect(en.default.stream_new[key]).toBeDefined();
-      expect(pt.default.stream_new[key]).toBeDefined();
-      expect(es.default.stream_new[key]).toBeDefined();
+      expect((en.default.stream_new as Record<string, unknown>)[key]).toBeDefined();
+      expect((pt.default.stream_new as Record<string, unknown>)[key]).toBeDefined();
+      expect((es.default.stream_new as Record<string, unknown>)[key]).toBeDefined();
     });
   });
 });

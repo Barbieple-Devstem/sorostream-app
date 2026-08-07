@@ -39,6 +39,8 @@ import WithdrawConfirmModal from "@/components/WithdrawConfirmModal";
 import StartCountdownTimer from "@/components/StartCountdownTimer";
 import EmbedWidgetModal from "@/components/EmbedWidgetModal";
 import StreamComparisonModal from "@/components/StreamComparisonModal";
+import StreamTagEditor from "@/components/StreamTagEditor";
+import { getGiftMessage } from "@/components/GiftStreamModal";
 import { useSettings } from "@/src/context/SettingsContext";
 import { formatStellarAmount } from "@/src/lib/sorostream";
 import { useTranslations } from "@/src/lib/i18n";
@@ -1356,7 +1358,6 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
             </section>
           </StreamErrorBoundary>
         </div>
-      </div>
 
       <StreamQrModal
         open={showQrModal}

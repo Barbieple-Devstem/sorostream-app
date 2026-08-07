@@ -60,7 +60,7 @@ export function getStreamHealth(
   if (stream.status === "Ended" || now >= endMs) return "Expired";
 
   // 4. Stream ends within the next 24 hours
-  if (endMs - now <= EXPIRING_SOON_THRESHOLD_MS) return "Expiring Soon";
+  if (endMs - now < EXPIRING_SOON_THRESHOLD_MS) return "Expiring Soon";
 
   // 5. Normal running state
   return "Active";

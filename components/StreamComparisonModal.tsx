@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { useFocusTrap } from "@/src/lib/useFocusTrap";
 import { useTranslations } from "@/src/lib/i18n";
 import type { StreamData } from "@/src/lib/sorostream";
-import { formatStellarAmount, formatStreamAmount } from "@/src/lib/sorostream";
+import { formatStellarAmount } from "@/src/lib/sorostream";
 import FederationName from "@/components/FederationName";
 
 interface StreamComparisonModalProps {
@@ -346,8 +346,8 @@ export default function StreamComparisonModal({
 
                     <ComparisonRow
                       label={t("compare_amount")}
-                      current={formatStreamAmount(currentStream.deposit)}
-                      compared={formatStreamAmount(selectedStream.deposit)}
+                      current={formatStellarAmount(currentStream.deposit)}
+                      compared={formatStellarAmount(selectedStream.deposit)}
                       highlighted={getDifference(
                         currentStream.deposit,
                         selectedStream.deposit

@@ -43,7 +43,6 @@ import {
   type TreasuryBalance,
   type ContractState,
   getMockStreams,
-  type TreasuryBalance,
   type StreamData,
 } from "@/src/lib/sorostream";
 import { useXlmPrice } from "@/src/lib/useXlmPrice";
@@ -346,7 +345,7 @@ export default function AdminPage() {
 
   // Non-admin wallets are redirected away from /admin with an error message.
   useEffect(() => {
-    if (address && ADMIN_WALLET && !isAdmin) {
+    if (address && ADMIN_ADDRESSES.length > 0 && !isAdmin) {
       addToast("Access denied: this page is restricted to the protocol admin wallet.", "error");
       router.replace("/dashboard");
     }
@@ -480,7 +479,7 @@ export default function AdminPage() {
   }
 
   // Non-admin wallets: render nothing while the redirect above takes effect.
-  if (ADMIN_WALLET && !isAdmin) {
+  if (ADMIN_ADDRESSES.length > 0 && !isAdmin) {
     return null;
   }
 
@@ -509,7 +508,7 @@ export default function AdminPage() {
             role="note"
             className="mb-6 rounded-lg bg-yellow-900/30 border border-yellow-700 text-yellow-300 text-sm px-4 py-3"
           >
-            <strong>NEXT_PUBLIC_ADMIN_WALLET</strong> is not configured. Admin
+            <strong>NEXT_PUBLIC_ADMIN_ADDRESS</strong> is not configured. Admin
             controls will not appear until an admin address is set.
           </div>
         )}
@@ -575,7 +574,6 @@ export default function AdminPage() {
             <strong>NEXT_PUBLIC_ADMIN_ADDRESS</strong> is not configured. The
             Sweep Fees button will not appear until at least one admin address is set.
           </div>
-        )}
 
         {address && ADMIN_ADDRESSES.length > 0 && !isAdmin && (
           <div
@@ -585,6 +583,7 @@ export default function AdminPage() {
             Connected as <span className="font-mono text-gray-300">{address}</span>. Sweep
             controls are only available to the configured admin wallet addresses.
           </div>
+        )}
         </section>
 
         {/* Fee Rate configuration */}

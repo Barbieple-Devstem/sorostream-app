@@ -3,14 +3,14 @@ import { describe, it, expect } from "vitest";
 describe("Stream Comparison Feature", () => {
   // Test 1: Verify the component exists and exports
   it("should export StreamComparisonModal component", async () => {
-    const module = await import("@/components/StreamComparisonModal");
-    expect(module.default).toBeDefined();
+    const mod = await import("@/components/StreamComparisonModal");
+    expect(mod.default).toBeDefined();
   });
 
   // Test 2: Verify stream detail imports are correct
   it("should have correct imports in stream detail page", async () => {
     // This is a simple validation that the file exists
-    const streamDetailPath = "/workspaces/sorostream-app/src/app/stream/[id]/page.tsx";
+    const streamDetailPath = `${process.cwd()}/src/app/stream/[id]/page.tsx`;
     const fs = await import("fs/promises");
     const content = await fs.readFile(streamDetailPath, "utf-8");
     
@@ -51,7 +51,7 @@ describe("Stream Comparison Feature", () => {
     ];
 
     expectedKeys.forEach((key) => {
-      expect(translations.stream_detail[key]).toBeDefined();
+      expect((translations.stream_detail as Record<string, unknown>)[key]).toBeDefined();
     });
   });
 });

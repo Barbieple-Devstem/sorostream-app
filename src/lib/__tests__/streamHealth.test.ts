@@ -16,7 +16,7 @@ function makeStream(
   const { endOffsetMs = EXPIRING_SOON_THRESHOLD_MS * 2, ...rest } = overrides;
   return {
     status: "Active",
-    endTime: new Date(Date.now() + endOffsetMs).toISOString(),
+    endTime: new Date(NOW + endOffsetMs).toISOString(),
     ...rest,
   };
 }
