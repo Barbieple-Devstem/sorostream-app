@@ -12,6 +12,23 @@ import StreamHealthBadge, {
 import { getMockStreamHistory } from "@/src/lib/sorostream";
 import StreamTagChips from "@/components/StreamTagChips";
 
+/** Streamed-out amount (stroops), frozen while the stream is paused. */
+function streamedSeconds(
+  flowRate: number,
+  startTime?: string,
+  status?: string,
+  pausedAt?: string,
+): number {
+  if (!startTime) return 0;
+  const startMs = new Date(startTime).getTime();
+  let elapsed = Math.max(0, (Date.now() - startMs) / 1000);
+  if (status === "Paused" && pausedAt) {
+    const pausedAtMs = new Date(pausedAt).getTime();
+    elapsed = Math.max(0, (pausedAtMs - startMs) / 1000);
+  }
+  return Math.max(0, flowRate * elapsed);
+}
+
 interface StreamCardProps {
   id?: string;
   sender?: string;
@@ -21,12 +38,18 @@ interface StreamCardProps {
   deposit?: number;
   selected?: boolean;
   onToggle?: (id: string) => void;
+  /** When true, render an in-place skeleton placeholder instead of the card. */
+  loading?: boolean;
+  /** Invoked when the user clicks the clone action. */
+  onClone?: (id: string) => void;
   /** Unix timestamp (seconds). When set and > now, a "Scheduled" badge is shown. */
   scheduledStartTime?: number;
   /** Stream start time ISO string. */
   startTime?: string;
   /** Stream end time ISO string. */
   endTime?: string;
+  /** ISO timestamp captured when the stream was paused (freezes remaining balance). */
+  pausedAt?: string;
 }
 
 export default function StreamCard({
@@ -38,12 +61,38 @@ export default function StreamCard({
   deposit = 0,
   selected = false,
   onToggle,
+  loading = false,
+  onClone,
   scheduledStartTime,
   startTime,
   endTime,
+  pausedAt,
 }: StreamCardProps) {
   const { isBookmarked, toggleBookmark } = useBookmarks();
   const bookmarked = isBookmarked(id);
+
+  if (loading) {
+    return (
+      <div
+        className="bg-white dark:bg-gray-800 rounded-lg p-4 space-y-3 border border-gray-200 dark:border-gray-700"
+        role="status"
+        aria-label={id ? `Loading stream ${id}` : "Loading stream"}
+        aria-busy="true"
+      >
+        <div className="flex justify-between">
+          <div className="h-4 w-20 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+          <div className="h-5 w-16 animate-pulse rounded-full bg-gray-200 dark:bg-gray-700" />
+        </div>
+        <div className="space-y-2">
+          <div className="h-3 w-40 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+          <div className="h-3 w-36 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+          <div className="h-3 w-32 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+          <div className="h-3 w-28 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+        </div>
+      </div>
+    );
+  }
+
 
   const isScheduled =
     typeof scheduledStartTime === "number" &&
@@ -59,7 +108,7 @@ export default function StreamCard({
       ? Math.max(0, Math.min(1, 1 - elapsed / totalDuration))
       : 0;
     // Estimate deposit remaining based on flow rate (simplified)
-    const estimatedStreamed = flowRate * Math.max(0, (now - new Date(startTime).getTime()) / 1000);
+    const estimatedStreamed = streamedSeconds(flowRate, startTime, status, pausedAt);
     const depositRemainingRatio = deposit > 0
       ? Math.max(0, Math.min(1, 1 - estimatedStreamed / deposit))
       : 0;
@@ -104,6 +153,19 @@ export default function StreamCard({
           <CopyButton value={id} label="Copy stream ID" />
         </span>
         <div className="flex items-center gap-2">
+          {onClone && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onClone(id); }}
+              aria-label="Clone stream"
+              title="Clone stream"
+              className="text-gray-400 dark:text-gray-600 hover:text-green-500 dark:hover:text-green-400 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 rounded"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+            </button>
+          )}
           <button
             onClick={(e) => { e.stopPropagation(); toggleBookmark(id); }}
             aria-label={bookmarked ? "Remove bookmark" : "Bookmark stream"}
@@ -139,7 +201,7 @@ export default function StreamCard({
             const totalDuration = endTime && startTime ? new Date(endTime).getTime() - new Date(startTime).getTime() : 0;
             const elapsed = startTime ? now - new Date(startTime).getTime() : 0;
             const timeRemainingRatio = totalDuration > 0 ? Math.max(0, Math.min(1, 1 - elapsed / totalDuration)) : 0;
-            const estimatedStreamed = flowRate * Math.max(0, elapsed / 1000);
+            const estimatedStreamed = streamedSeconds(flowRate, startTime, status, pausedAt);
             const depositRemainingRatio = deposit > 0 ? Math.max(0, Math.min(1, 1 - estimatedStreamed / deposit)) : 0;
             const history = getMockStreamHistory(id);
             const topUpCount = history.filter((e) => e.type === "top-up").length;

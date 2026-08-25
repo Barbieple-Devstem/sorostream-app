@@ -71,7 +71,13 @@
     "compare_auto_renew": "Auto-Renew",
     "compare_days": "{days} days",
     "compare_close": "Close",
-    "compare_button_tooltip": "Create another stream to compare"
+    "compare_button_tooltip": "Create another stream to compare",
+    "schedule_pause": "Schedule Pause",
+    "schedule_pause_title": "Schedule Pause",
+    "schedule_pause_desc": "Choose a future date and time for this stream to automatically pause.",
+    "pause_at_label": "Pause at (future date & time)",
+    "schedule_pause_confirm": "Schedule Pause",
+    "scheduled_pause_badge": "Pause scheduled"
   },
   "wallet": {
     "connect": "Connect {wallet}",
@@ -145,6 +151,7 @@
   "common": {
     "price_unavailable": "Price unavailable",
     "approximately_usd": "approximately {formatted} US dollars",
+    "approximately_fiat": "approximately {formatted} {currency}",
     "pending": "pending…",
     "pending_confirmation": " (pending confirmation)",
     "claimable": "Claimable: {val} USDC",
