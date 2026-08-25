@@ -136,6 +136,8 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
   // ── Pause / Resume states ──────────────────────────────────────────────────
   const [pauseLoading, setPauseLoading] = useState(false);
   const [resumeLoading, setResumeLoading] = useState(false);
+  /** Optimistic status applied while a pause/resume tx is in-flight. */
+  const [optimisticStatus, setOptimisticStatus] = useState<string | null>(null);
   const [showPauseModal, setShowPauseModal] = useState(false);
   const pauseModalRef = useRef<HTMLDivElement>(null);
   useFocusTrap(pauseModalRef, showPauseModal);
@@ -500,16 +502,30 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
 
   const isBusy = withdrawLoading || cancelLoading || cancelPending || topUpLoading || pauseLoading || resumeLoading || transferLoading;
 
+  /** Status used for rendering — reflects an in-flight pause/resume immediately. */
+  const displayStatus = optimisticStatus ?? (stream?.status ?? "");
+
+  // Clear the optimistic status once the real stream data catches up.
+  useEffect(() => {
+    if (optimisticStatus && stream?.status === optimisticStatus) {
+      setOptimisticStatus(null);
+    }
+  }, [stream?.status, optimisticStatus]);
+
   // ── Pause stream ──────────────────────────────────────────────────────
   const handlePauseConfirmed = useCallback(async () => {
     setShowPauseModal(false);
     setPauseLoading(true);
+    // Reflect the new state immediately so the button can't be re-triggered
+    // and the UI never shows the stale (incorrect) status while pending.
+    setOptimisticStatus("Paused");
     try {
       const result = await sorostream.pauseStream(params.id);
       const updated = await sorostream.getStream(params.id);
       if (updated) setStream(updated);
       addToast(`Stream paused. Tx: ${result.txHash}`, "success");
     } catch {
+      setOptimisticStatus(null);
       addToast("Failed to pause stream. Please try again.", "error");
     } finally {
       setPauseLoading(false);
@@ -520,12 +536,16 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
   const handleResumeConfirmed = useCallback(async () => {
     setShowResumeModal(false);
     setResumeLoading(true);
+    // Reflect the new state immediately so the button can't be re-triggered
+    // and the UI never shows the stale (incorrect) status while pending.
+    setOptimisticStatus("Active");
     try {
       const result = await sorostream.resumeStream(params.id);
       const updated = await sorostream.getStream(params.id);
       if (updated) setStream(updated);
       addToast(`Stream resumed. Tx: ${result.txHash}`, "success");
     } catch {
+      setOptimisticStatus(null);
       addToast("Failed to resume stream. Please try again.", "error");
     } finally {
       setResumeLoading(false);
@@ -581,17 +601,17 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
       shortcuts: [
         { key: "w", description: "Withdraw", action: () => { if (!isBusy) handleWithdraw(); } },
         { key: "c", description: "Cancel", action: () => { if (!cancelLoading && !withdrawLoading && !topUpLoading) setShowCancelModal(true); } },
-        { key: "p", description: stream?.status === "Paused" ? "Resume" : "Pause", action: () => {
+        { key: "p", description: displayStatus === "Paused" ? "Resume" : "Pause", action: () => {
           if (pauseLoading || resumeLoading || cancelLoading || withdrawLoading || topUpLoading) return;
-          if (stream?.status === "Paused") setShowResumeModal(true);
-          else if (stream?.status === "Active") setShowPauseModal(true);
+          if (displayStatus === "Paused") setShowResumeModal(true);
+          else if (displayStatus === "Active") setShowPauseModal(true);
         }},
         { key: "t", description: "Toggle top-up", action: () => setShowTopUp((v) => !v) },
         { key: "Escape", description: "Close modals", action: () => { setShowCancelModal(false); setShowQrModal(false); setShowTopUp(false); setShowPauseModal(false); setShowResumeModal(false); setShowTransferModal(false); } },
         { key: "?", shift: true, description: "Toggle keyboard shortcuts help", action: () => setShowShortcutsHelp((v) => !v) },
       ],
     },
-  ], [handleWithdraw, isBusy, cancelLoading, withdrawLoading, topUpLoading, stream?.status, pauseLoading, resumeLoading]);
+  ], [handleWithdraw, isBusy, cancelLoading, withdrawLoading, topUpLoading, displayStatus, pauseLoading, resumeLoading]);
 
   useKeyboardShortcuts(shortcutGroups);
 
@@ -750,23 +770,23 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
           <span className="hidden sm:inline" aria-hidden="true">|</span>
           <span
             className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-              stream.status === "Active"
+              displayStatus === "Active"
                 ? "bg-green-900 text-green-400"
-                : stream.status === "Paused"
+                : displayStatus === "Paused"
                 ? "bg-yellow-900 text-yellow-400"
-                : stream.status === "Cancelled"
+                : displayStatus === "Cancelled"
                 ? "bg-red-900 text-red-400"
                 : "bg-gray-700 text-gray-400"
             }`}
-            aria-label={`Status: ${stream.status}`}
+            aria-label={`Status: ${displayStatus}`}
             data-testid="stream-status"
           >
-            {stream.status}
+            {displayStatus}
           </span>
         </div>
 
         {/* Stream Health Score */}
-        {stream.status === "Active" && (() => {
+        {displayStatus === "Active" && (() => {
           const now = Date.now();
           const totalDuration = new Date(stream.endTime).getTime() - new Date(stream.startTime).getTime();
           const elapsed = now - new Date(stream.startTime).getTime();
@@ -819,7 +839,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
           </button>
 
           {/* Get Receipt — only for Completed or Cancelled streams */}
-          {(stream.status === "Ended" || stream.status === "Cancelled" || isCompleted) && (
+           {(displayStatus === "Ended" || displayStatus === "Cancelled" || isCompleted) && (
             <Link
               href={`/stream/${stream.id}/receipt`}
               className="inline-flex items-center gap-2 bg-green-700 hover:bg-green-800 text-white py-2 px-4 rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
@@ -836,19 +856,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
           )}
 
           <button
-            onClick={() => {
-              const duration = Math.round(
-                (new Date(stream.endTime).getTime() - new Date(stream.startTime).getTime()) / 1000,
-              );
-              const qp = new URLSearchParams({
-                recipient: stream.recipient,
-                amount: (stream.deposit / 10_000_000).toString(),
-                token: stream.token,
-                duration: String(duration),
-                cliff: "0",
-              });
-              router.push(`/stream/new?${qp.toString()}`);
-            }}
+            onClick={() => setShowCloneModal(true)}
             aria-label="Clone this stream"
             className="inline-flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-white py-2 px-4 rounded-lg text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
           >
@@ -954,7 +962,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
             endTime={stream.endTime}
             sender={stream.sender}
             recipient={stream.recipient}
-            status={stream.status}
+            status={displayStatus}
             flowRate={stream.flowRate}
           />
 
@@ -969,7 +977,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
           <StreamProgressBar stream={stream} />
 
           {/* Collateral unlock badge — shown when sender has collateral */}
-          {stream.status !== "Cancelled" && (
+          {displayStatus !== "Cancelled" && (
             <CollateralUnlockBadge
               endTime={stream.endTime}
               gracePeriodSeconds={86400}
@@ -1148,7 +1156,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
           </div>
 
           {/* Pause / Resume (visible to sender only, based on status) */}
-          {address && stream.sender.includes(address.slice(0, 5)) && stream.status === "Active" && (
+          {address && stream.sender.includes(address.slice(0, 5)) && displayStatus === "Active" && (
             <button
               onClick={() => setShowPauseModal(true)}
               disabled={isBusy}
@@ -1171,7 +1179,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
             </button>
           )}
 
-          {address && stream.sender.includes(address.slice(0, 5)) && stream.status === "Paused" && (
+          {address && stream.sender.includes(address.slice(0, 5)) && displayStatus === "Paused" && (
             <button
               onClick={() => setShowResumeModal(true)}
               disabled={isBusy}
@@ -1575,6 +1583,13 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
           onClose={() => setShowComparisonModal(false)}
           currentStream={stream}
           availableStreams={allStreams}
+        />
+      )}
+
+      {stream && showCloneModal && (
+        <StreamCloneModal
+          stream={stream}
+          onClose={() => setShowCloneModal(false)}
         />
       )}
     </main>

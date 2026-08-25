@@ -53,6 +53,10 @@ interface WalletContextValue {
   sessionExpired: boolean;
   /** Clear the session expired flag (called after user acknowledges the toast). */
   clearSessionExpired: () => void;
+  /** Number of active (non-ended / non-cancelled) streams for the connected wallet. */
+  activeStreamCount: number;
+  /** Reports the current active-stream count so UI can warn before disconnecting. */
+  setActiveStreamCount: (count: number) => void;
   /**
    * Attempt to re-establish the wallet session using the persisted wallet type
    * (from localStorage) without navigating away, so the user keeps their
@@ -110,6 +114,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [sessionExpired, setSessionExpired] = useState(false);
   /** The wallet type currently connected, used to scope session-validity checks. */
   const [connectedWalletType, setConnectedWalletType] = useState<string | null>(null);
+  const [activeStreamCount, setActiveStreamCount] = useState(0);
   const sessionValidityPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const watcherRef = useRef<ReturnType<typeof createWatchWalletChanges> | null>(
     null,
@@ -153,6 +158,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setNetworkMismatch(false);
     setSessionExpiresAt(null);
     setConnectedWalletType(null);
+    setActiveStreamCount(0);
     clearSessionWarnings();
     // Don't stop the watcher on disconnect — keep polling so we notice when
     // the user switches back or reconnects from within Freighter.
@@ -508,6 +514,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       clearSessionExpired,
       reconnect,
       handleWalletError,
+      activeStreamCount,
+      setActiveStreamCount,
       streamRefreshTrigger,
       triggerStreamRefresh,
     }),
@@ -529,6 +537,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       clearSessionExpired,
       reconnect,
       handleWalletError,
+      activeStreamCount,
+      setActiveStreamCount,
       streamRefreshTrigger,
       triggerStreamRefresh,
     ],
