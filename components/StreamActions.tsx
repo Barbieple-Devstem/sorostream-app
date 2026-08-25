@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import LiveCounter from "@/components/LiveCounter";
 import WithdrawFeeBreakdownModal from "@/components/WithdrawFeeBreakdownModal";
-import { sorostream, claimableNow, getMockStream } from "@/src/lib/sorostream";
+import { sorostream, claimableNow, getMockStream, truncateAddress } from "@/src/lib/sorostream";
 import { useToast } from "@/src/lib/toast";
 import { useSettings } from "@/src/context/SettingsContext";
 import { useWallet } from "@/src/context/WalletContext";
@@ -53,6 +53,7 @@ export default function StreamActions({
   const [cancelling, setCancelling] = useState(false);
   const [cancelPending, setCancelPending] = useState(false);
   const [confirmAmount, setConfirmAmount] = useState<number | null>(null);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const { addToast, upsertPersistentToast, removeToast } = useToast();
   const { withdrawThreshold } = useSettings();
   const { refetchBalance } = useWallet();
@@ -151,7 +152,8 @@ export default function StreamActions({
     }
   }, [streamId, addToast, removeToast]);
 
-  const handleCancel = useCallback(() => {
+  const handleCancelConfirmed = useCallback(() => {
+    setShowCancelConfirm(false);
     if (cancelPending || cancelling) return;
 
     undoRef.current = false;
@@ -191,6 +193,64 @@ export default function StreamActions({
 
   return (
     <>
+      {showCancelConfirm && (() => {
+        const stream = getMockStream(streamId);
+        return (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="cancel-confirm-title"
+            className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
+          >
+            <div className="bg-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-sm space-y-4 border border-gray-200 dark:border-gray-700">
+              <h2
+                id="cancel-confirm-title"
+                className="text-lg font-semibold text-gray-900 dark:text-white"
+              >
+                Cancel stream #{streamId}?
+              </h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Cancellation is irreversible. Any remaining deposit stays with the sender and the stream stops immediately.
+              </p>
+              {stream && (
+                <dl className="text-sm space-y-1 rounded-lg bg-gray-100 dark:bg-gray-700 p-3">
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-gray-500 dark:text-gray-400">Status</dt>
+                    <dd className="text-gray-900 dark:text-white">{stream.status}</dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-gray-500 dark:text-gray-400">From</dt>
+                    <dd className="text-gray-900 dark:text-white font-mono">{truncateAddress(stream.sender)}</dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-gray-500 dark:text-gray-400">To</dt>
+                    <dd className="text-gray-900 dark:text-white font-mono">{truncateAddress(stream.recipient)}</dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-gray-500 dark:text-gray-400">Deposit</dt>
+                    <dd className="text-gray-900 dark:text-white">{(stream.deposit / 10_000_000).toFixed(2)} {stream.token}</dd>
+                  </div>
+                </dl>
+              )}
+              <div className="flex gap-3 pt-1">
+                <button
+                  onClick={() => setShowCancelConfirm(false)}
+                  className="flex-1 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 py-2 rounded-lg text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
+                >
+                  Keep Stream
+                </button>
+                <button
+                  onClick={handleCancelConfirmed}
+                  className="flex-1 bg-red-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-red-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+                >
+                  Cancel Stream
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       <div className="text-center">
         <p className="text-gray-400 text-sm mb-2">Claimable now</p>
         <div className="text-3xl font-bold">
@@ -221,7 +281,7 @@ export default function StreamActions({
         </button>
 
         <button
-          onClick={cancelPending ? handleUndo : handleCancel}
+          onClick={cancelPending ? handleUndo : () => setShowCancelConfirm(true)}
           disabled={cancelling || withdrawing}
           aria-live="polite"
           className={`flex-1 py-3 rounded-lg font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed ${

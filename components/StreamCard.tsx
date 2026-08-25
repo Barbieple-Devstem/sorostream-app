@@ -12,6 +12,7 @@ import StreamHealthBadge, {
 import { getMockStreamHistory } from "@/src/lib/sorostream";
 import { formatDateWithTimezone } from "@/src/lib/timezone";
 import StreamTagChips from "@/components/StreamTagChips";
+import { formatDateUtc } from "@/src/lib/timezone";
 
 /** Streamed-out amount (stroops), frozen while the stream is paused. */
 function streamedSeconds(
@@ -124,6 +125,23 @@ export default function StreamCard({
   })();
   const healthTier = healthScore !== null ? getHealthTier(healthScore) : null;
 
+  /** Colour-coded status badge classes for quick visual scanning. */
+function statusBadgeClass(status: string): string {
+  switch (status) {
+    case "Active":
+      return "bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-400";
+    case "Paused":
+      return "bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-400";
+    case "Ended":
+    case "Completed":
+      return "bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-400";
+    case "Cancelled":
+      return "bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-400";
+    default:
+      return "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400";
+  }
+}
+
   /** Convert stroops → XLM (display value). */
   const toXlm = (val: number) => (val / 10_000_000).toFixed(2);
   const flowXlm = flowRate / 10_000_000;
@@ -189,18 +207,14 @@ export default function StreamCard({
             <span
               className="text-xs px-2 py-1 rounded-full bg-blue-900/60 text-blue-300 border border-blue-700 flex items-center gap-1"
               aria-label="Scheduled stream"
-              title={`Starts ${new Date((scheduledStartTime ?? 0) * 1000).toLocaleString()}`}
+              title={`Starts ${new Date((scheduledStartTime ?? 0) * 1000).toLocaleString()} (${formatDateUtc(new Date((scheduledStartTime ?? 0) * 1000))})`}
             >
               <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" aria-hidden="true" />
               Scheduled
             </span>
           )}
           <span
-            className={`text-xs px-2 py-1 rounded-full ${
-              status === "Active"
-                ? "bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-400"
-                : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400"
-            }`}
+            className={`text-xs px-2 py-1 rounded-full ${statusBadgeClass(status)}`}
             aria-label={`Status: ${status}`}
           >
             {status}

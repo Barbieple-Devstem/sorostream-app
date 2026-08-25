@@ -3,8 +3,9 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { formatUSDC, truncateAddress } from "@/src/lib/sorostream";
 import { useSettings } from "@/src/context/SettingsContext";
+import { useNetwork } from "@/src/lib/network";
 import { useTranslations } from "@/src/lib/i18n";
-import { formatDateWithTimezone } from "@/src/lib/timezone";
+import { formatDateWithTimezone, formatDateUtc } from "@/src/lib/timezone";
 
 const PAGE_SIZE = 20;
 
@@ -44,6 +45,10 @@ function formatDate(value: string, language: string): string {
 
 export default function StreamHistory({ entries, loading }: StreamHistoryProps) {
   const t = useTranslations("common");
+  const { network } = useNetwork();
+
+  const explorerUrl = (txHash: string) =>
+    `https://stellar.expert/explorer/${network}/tx/${txHash}`;
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [loadingMore, setLoadingMore] = useState(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
@@ -138,7 +143,9 @@ export default function StreamHistory({ entries, loading }: StreamHistoryProps) 
                 </span>
                 <div>
                   <p className="text-sm font-medium text-white">{t(config.labelKey)}</p>
-                  <p className="text-xs text-gray-400">{formatDate(entry.timestamp, language)}</p>
+                  <p className="text-xs text-gray-400" title={formatDateUtc(entry.timestamp)}>
+                    {formatDate(entry.timestamp, language)}
+                  </p>
                 </div>
               </div>
               <div className="text-right">
@@ -148,7 +155,15 @@ export default function StreamHistory({ entries, loading }: StreamHistoryProps) 
                     : `${entry.type === "top-up" ? "+" : "-"}${formatUSDC(BigInt(entry.amount))}`}
                 </p>
                 <p className="text-xs text-gray-400 font-mono">
-                  {truncateAddress(entry.txHash)}
+                  <a
+                    href={explorerUrl(entry.txHash)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:text-green-400 underline decoration-dotted"
+                    title="View transaction on Stellar Expert"
+                  >
+                    {truncateAddress(entry.txHash)}
+                  </a>
                 </p>
               </div>
             </div>
