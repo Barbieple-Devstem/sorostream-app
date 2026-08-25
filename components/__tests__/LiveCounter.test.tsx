@@ -61,4 +61,30 @@ describe('LiveCounter', () => {
 
     expect(screen.getByLabelText('Claimable: 6.0000000 USDC')).toBeInTheDocument();
   });
+
+  it('freezes the balance while the stream is paused', async () => {
+    vi.spyOn(sorostream, 'getClaimable').mockResolvedValue('100000000'); // 10 USDC
+
+    render(
+      <LiveCounter
+        streamId="stream-paused"
+        flowRate={10_000_000}
+        lastWithdrawTime={new Date('2026-06-25T00:00:00.000Z')}
+        status="Paused"
+        pausedAt="2026-06-25T00:00:10.000Z"
+        reconcileIntervalMs={60_000}
+      />
+    );
+
+    await act(async () => {});
+
+    expect(screen.getByLabelText('Claimable: 10.0000000 USDC')).toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+
+    // Balance must not advance while paused.
+    expect(screen.getByLabelText('Claimable: 10.0000000 USDC')).toBeInTheDocument();
+  });
 });

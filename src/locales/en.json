@@ -150,6 +150,7 @@
   "common": {
     "price_unavailable": "Price unavailable",
     "approximately_usd": "approximately {formatted} US dollars",
+    "approximately_fiat": "approximately {formatted} {currency}",
     "pending": "pending…",
     "pending_confirmation": " (pending confirmation)",
     "claimable": "Claimable: {val} USDC",

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from "react";
 import Link from "next/link";
 import StreamCard from "@/components/StreamCard";
 import type { StreamData } from "@/src/lib/sorostream";
@@ -53,6 +53,19 @@ export default function StreamVirtualList({ streams, selectedIds, onToggleSelect
 
     if (container.scrollTop !== savedScrollTop.current) {
       container.scrollTop = savedScrollTop.current;
+    }
+  }, [streams]);
+
+  // Restore the scroll position synchronously after a background refresh so
+  // the user never loses their place in the list (the visible jump-to-top is
+  // avoided because this runs before the browser paints).
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const target = savedScrollTop.current;
+    if (target > 0 && container.scrollTop !== target) {
+      container.scrollTop = target;
     }
   }, [streams]);
 
@@ -151,6 +164,7 @@ export default function StreamVirtualList({ streams, selectedIds, onToggleSelect
                       scheduledStartTime={stream.scheduledStartTime}
                       startTime={stream.startTime}
                       endTime={stream.endTime}
+                      pausedAt={stream.pausedAt}
                     />
                   </Link>
                 </div>

@@ -12,6 +12,23 @@ import StreamHealthBadge, {
 import { getMockStreamHistory } from "@/src/lib/sorostream";
 import StreamTagChips from "@/components/StreamTagChips";
 
+/** Streamed-out amount (stroops), frozen while the stream is paused. */
+function streamedSeconds(
+  flowRate: number,
+  startTime?: string,
+  status?: string,
+  pausedAt?: string,
+): number {
+  if (!startTime) return 0;
+  const startMs = new Date(startTime).getTime();
+  let elapsed = Math.max(0, (Date.now() - startMs) / 1000);
+  if (status === "Paused" && pausedAt) {
+    const pausedAtMs = new Date(pausedAt).getTime();
+    elapsed = Math.max(0, (pausedAtMs - startMs) / 1000);
+  }
+  return Math.max(0, flowRate * elapsed);
+}
+
 interface StreamCardProps {
   id?: string;
   sender?: string;
@@ -31,6 +48,8 @@ interface StreamCardProps {
   startTime?: string;
   /** Stream end time ISO string. */
   endTime?: string;
+  /** ISO timestamp captured when the stream was paused (freezes remaining balance). */
+  pausedAt?: string;
 }
 
 export default function StreamCard({
@@ -47,6 +66,7 @@ export default function StreamCard({
   scheduledStartTime,
   startTime,
   endTime,
+  pausedAt,
 }: StreamCardProps) {
   const { isBookmarked, toggleBookmark } = useBookmarks();
   const bookmarked = isBookmarked(id);
@@ -88,7 +108,7 @@ export default function StreamCard({
       ? Math.max(0, Math.min(1, 1 - elapsed / totalDuration))
       : 0;
     // Estimate deposit remaining based on flow rate (simplified)
-    const estimatedStreamed = flowRate * Math.max(0, (now - new Date(startTime).getTime()) / 1000);
+    const estimatedStreamed = streamedSeconds(flowRate, startTime, status, pausedAt);
     const depositRemainingRatio = deposit > 0
       ? Math.max(0, Math.min(1, 1 - estimatedStreamed / deposit))
       : 0;
@@ -181,7 +201,7 @@ export default function StreamCard({
             const totalDuration = endTime && startTime ? new Date(endTime).getTime() - new Date(startTime).getTime() : 0;
             const elapsed = startTime ? now - new Date(startTime).getTime() : 0;
             const timeRemainingRatio = totalDuration > 0 ? Math.max(0, Math.min(1, 1 - elapsed / totalDuration)) : 0;
-            const estimatedStreamed = flowRate * Math.max(0, elapsed / 1000);
+            const estimatedStreamed = streamedSeconds(flowRate, startTime, status, pausedAt);
             const depositRemainingRatio = deposit > 0 ? Math.max(0, Math.min(1, 1 - estimatedStreamed / deposit)) : 0;
             const history = getMockStreamHistory(id);
             const topUpCount = history.filter((e) => e.type === "top-up").length;

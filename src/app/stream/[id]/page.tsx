@@ -138,6 +138,8 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
 
   // ── Stream data ────────────────────────────────────────────────────────────
   const [stream, setStream] = useState<StreamData | null>(null);
+  const streamRef = useRef<StreamData | null>(null);
+  streamRef.current = stream;
   const [historyEntries, setHistoryEntries] = useState<StreamHistoryEntry[]>([]);
   const [pageLoading, setPageLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -353,6 +355,41 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
       cancelled = true;
     };
   }, [params.id, fetchKey]);
+
+  // ── Milestone notifications (#421) ────────────────────────────────────────
+  // Fire an in-app toast the first time a stream crosses 25/50/75/100% progress.
+  const firedMilestonesRef = useRef<Set<number>>(new Set());
+  useEffect(() => {
+    firedMilestonesRef.current = new Set();
+
+    const milestones = [25, 50, 75, 100];
+    const computeProgress = (s: StreamData): number => {
+      const start = new Date(s.startTime).getTime();
+      const end = new Date(s.endTime).getTime();
+      const total = end - start;
+      if (total <= 0) return s.status === "Ended" || s.status === "Cancelled" ? 100 : 0;
+      return Math.max(0, Math.min(100, ((Date.now() - start) / total) * 100));
+    };
+
+    const check = () => {
+      const s = streamRef.current;
+      if (!s) return;
+      // Progress is frozen for paused/cancelled streams — don't fire milestones.
+      if (s.status === "Paused" || s.status === "Cancelled") return;
+
+      const pct = computeProgress(s);
+      for (const m of milestones) {
+        if (pct >= m && !firedMilestonesRef.current.has(m)) {
+          firedMilestonesRef.current.add(m);
+          addToast(`Stream #${s.id} is ${m}% complete`, "info");
+        }
+      }
+    };
+
+    check();
+    const interval = setInterval(check, 1000);
+    return () => clearInterval(interval);
+  }, [stream?.id, addToast]);
 
   // ── Load all streams for comparison modal ──────────────────────────────────
   useEffect(() => {
@@ -1148,6 +1185,8 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
                   streamId={stream.id}
                   flowRate={stream.flowRate}
                   lastWithdrawTime={new Date(stream.lastWithdrawTime)}
+                  status={stream.status}
+                  pausedAt={stream.pausedAt}
                   optimisticOverride={optimisticClaimable}
                 />
               </div>
