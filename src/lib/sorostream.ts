@@ -551,18 +551,13 @@ export interface ActivityPage {
   nextCursor: string | null;
 }
 
-/**
- * Cursor-paginated, filterable activity feed over all stream events
- * (newest first). Filters are applied before pagination so `nextCursor`
- * always points at the next matching event, not just the next raw event.
- */
-export function getActivityEvents(query: ActivityQuery = {}): ActivityPage {
-  const { cursor = null, limit = 10, types, asset, from, to } = query;
-
+/** Apply the activity query filters to the full event store (no pagination). */
+function filterActivityEvents(query: ActivityQuery): StreamEvent[] {
+  const { types, asset, from, to } = query;
   const fromMs = from ? new Date(from).getTime() : null;
   const toMs = to ? new Date(to).getTime() + 86_400_000 - 1 : null;
 
-  const filtered = MOCK_EVENTS.filter((ev) => {
+  return MOCK_EVENTS.filter((ev) => {
     if (types && types.length > 0 && !types.includes(ev.type)) return false;
     if (asset && ev.asset !== asset) return false;
     const ts = new Date(ev.timestamp).getTime();
@@ -570,6 +565,17 @@ export function getActivityEvents(query: ActivityQuery = {}): ActivityPage {
     if (toMs !== null && ts > toMs) return false;
     return true;
   });
+}
+
+/**
+ * Cursor-paginated, filterable activity feed over all stream events
+ * (newest first). Filters are applied before pagination so `nextCursor`
+ * always points at the next matching event, not just the next raw event.
+ */
+export function getActivityEvents(query: ActivityQuery = {}): ActivityPage {
+  const { cursor = null, limit = 10 } = query;
+
+  const filtered = filterActivityEvents(query);
 
   const startIndex = cursor ? filtered.findIndex((ev) => ev.id === cursor) + 1 : 0;
   const page = filtered.slice(startIndex, startIndex + limit);
@@ -577,6 +583,78 @@ export function getActivityEvents(query: ActivityQuery = {}): ActivityPage {
     startIndex + limit < filtered.length ? page[page.length - 1]?.id ?? null : null;
 
   return { events: page, nextCursor };
+}
+
+/**
+ * Return every stream event matching the given query (filters applied, but
+ * no cursor/limit pagination). Used to build the full compliance audit log.
+ */
+export function getActivityEventsAll(query: ActivityQuery = {}): StreamEvent[] {
+  return filterActivityEvents(query);
+}
+
+export interface AuditLogEntry {
+  id: string;
+  streamId: string;
+  type: StreamEvent["type"];
+  timestamp: string;
+  transactionHash: string;
+  amount?: string;
+  asset?: string;
+  message?: string;
+}
+
+export interface StreamAuditLog {
+  /** Schema version for downstream compliance/accounting tooling. */
+  version: 1;
+  /** When this export was generated (ISO 8601). */
+  exportedAt: string;
+  /** Total number of events included in the export. */
+  count: number;
+  /** The filters that were applied to scope this export. */
+  filters: {
+    types?: StreamEvent["type"][];
+    asset?: string;
+    from?: string;
+    to?: string;
+  };
+  /** Every stream event in chronological (oldest-first) order. */
+  events: AuditLogEntry[];
+}
+
+/**
+ * Build a compliance-grade audit log of all matching stream events, including
+ * timestamps and transaction hashes, ready for JSON export and accounting use.
+ * Events are returned oldest-first so the export reads as a chronological ledger.
+ */
+export function buildStreamAuditLog(query: ActivityQuery = {}): StreamAuditLog {
+  const events = getActivityEventsAll(query)
+    .slice()
+    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+    .map<AuditLogEntry>((ev) => ({
+      id: ev.id,
+      streamId: ev.streamId,
+      type: ev.type,
+      timestamp: ev.timestamp,
+      transactionHash: ev.txHash,
+      amount: ev.amount,
+      asset: ev.asset,
+      message: ev.message,
+    }));
+
+  const { types, asset, from, to } = query;
+  return {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    count: events.length,
+    filters: {
+      ...(types && types.length > 0 ? { types } : {}),
+      ...(asset ? { asset } : {}),
+      ...(from ? { from } : {}),
+      ...(to ? { to } : {}),
+    },
+    events,
+  };
 }
 
 /** Unique asset codes seen across all events, for the asset filter dropdown. */
