@@ -1,3 +1,5 @@
+import { signTransaction as signWithFreighter } from "@/src/lib/freighter";
+
 export type WalletType = "freighter" | "ledger" | "server-keypair";
 
 export interface WalletAdapter {
@@ -19,7 +21,7 @@ export const freighterAdapter: WalletAdapter = {
     return (window as any).freighter.getPublicKey();
   },
   async signTransaction(xdr) {
-    return (window as any).freighter.signTransaction(xdr);
+    return signWithFreighter(xdr);
   },
   disconnect() {},
 };

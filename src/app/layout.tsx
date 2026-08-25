@@ -23,6 +23,8 @@ import { validateEnv } from "@/src/lib/env";
 import { initAnalytics } from "@/src/lib/analytics";
 import WebVitalsReporter from "@/src/components/WebVitalsReporter";
 import { RpcUnreachableBanner } from "@/components/RpcHealthIndicator";
+import RateLimitBanner from "@/components/RateLimitBanner";
+import { RateLimitProvider } from "@/src/context/RateLimitContext";
 import ContractVersionBanner from "@/components/ContractVersionBanner";
 
 validateEnv();
@@ -86,9 +88,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     <NotificationProvider>
                       <GlobalShortcutsProvider>
                         <ContractVersionProvider>
-                          <NavHeader />
-                          <RpcUnreachableBanner />
-                          <ContractVersionBanner />
+                          <RateLimitProvider>
+                            <NavHeader />
+                            <RpcUnreachableBanner />
+                            <RateLimitBanner />
+                            <ContractVersionBanner />
                           <PageViewTracker />
                           <WebVitalsReporter />
                           <PwaInit />

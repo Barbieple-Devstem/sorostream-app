@@ -62,6 +62,42 @@ export interface RpcClientOptions {
   onRetrySuccess?: () => void;
 }
 
+/** Snapshot of the current rate-limit state, broadcast to subscribers. */
+export interface RateLimitInfo {
+  /** True while a backoff countdown is in progress. */
+  active: boolean;
+  /** Seconds remaining in the current backoff (0 when inactive). */
+  secondsLeft: number;
+  /** Zero-based index of the retry attempt being backed off. */
+  attempt: number;
+}
+
+type RateLimitListener = (info: RateLimitInfo) => void;
+
+const rateLimitListeners = new Set<RateLimitListener>();
+
+/**
+ * Subscribe to RPC rate-limit events. The callback fires whenever the client
+ * enters a 429 backoff (with a live `secondsLeft` countdown) and again with
+ * `active: false` once the retry succeeds. Returns an unsubscribe function.
+ */
+export function onRateLimit(listener: RateLimitListener): () => void {
+  rateLimitListeners.add(listener);
+  return () => {
+    rateLimitListeners.delete(listener);
+  };
+}
+
+function emitRateLimit(info: RateLimitInfo): void {
+  rateLimitListeners.forEach((listener) => {
+    try {
+      listener(info);
+    } catch {
+      // Never let a broken subscriber break the retry loop.
+    }
+  });
+}
+
 /**
  * Wrap any async RPC call with automatic rate-limit retry + countdown callbacks.
  *
@@ -79,6 +115,8 @@ export async function rpcFetch<T>(
       const result = await fn();
       if (attempt > 0) {
         onRetrySuccess?.();
+        // A successful retry means we've left the rate-limited state.
+        emitRateLimit({ active: false, secondsLeft: 0, attempt });
       }
       return result;
     } catch (err) {
@@ -86,8 +124,10 @@ export async function rpcFetch<T>(
 
       if (isRateLimitError(err) && !isLast) {
         const delay = backoffMs(attempt);
+        emitRateLimit({ active: true, secondsLeft: Math.ceil(delay / 1000), attempt });
         await wait(delay, (secondsLeft) => {
           onRateLimit?.(secondsLeft, attempt);
+          emitRateLimit({ active: true, secondsLeft, attempt });
         });
         // Continue to next attempt
       } else {

@@ -139,7 +139,8 @@
     "main_navigation": "Main navigation",
     "keyboard_shortcuts": "Keyboard shortcuts (?)",
     "open_keyboard_shortcuts": "Open keyboard shortcuts help",
-    "shortcuts": "Shortcuts"
+    "shortcuts": "Shortcuts",
+    "analytics": "Analytics"
   },
   "common": {
     "price_unavailable": "Price unavailable",

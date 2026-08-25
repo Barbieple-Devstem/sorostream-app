@@ -139,7 +139,8 @@
     "main_navigation": "Navegação principal",
     "keyboard_shortcuts": "Atalhos de teclado (?)",
     "open_keyboard_shortcuts": "Abrir ajuda de atalhos de teclado",
-    "shortcuts": "Atalhos"
+    "shortcuts": "Atalhos",
+    "analytics": "Análises"
   },
   "common": {
     "price_unavailable": "Preço indisponível",

@@ -64,14 +64,61 @@ export async function getActiveAddress(): Promise<string> {
   }
 }
 
-export async function signTransaction(xdr: string): Promise<string> {
+/** Default timeout (ms) for a Freighter signature request. */
+export const SIGN_TRANSACTION_TIMEOUT_MS = 60_000;
+
+/**
+ * Error surfaced to the user when Freighter never returns a signature
+ * (e.g. the wallet popup was dismissed, the extension hung, or the user
+ * simply never approved the request).
+ */
+export const FREIGHTER_SIGN_TIMEOUT_MESSAGE =
+  "Freighter didn't respond in time. Make sure the wallet is unlocked and you approved the request, then try again.";
+
+export interface SignTransactionOptions {
+  /** Override the default signature timeout. */
+  timeoutMs?: number;
+}
+
+/**
+ * Request a signature from Freighter, rejecting with a clear error if the
+ * wallet does not respond within `timeoutMs` (default 60s) instead of hanging
+ * indefinitely. Also rejects when the user rejects the request or Freighter
+ * returns an error, so callers can surface the failure rather than silently
+ * receiving the unsigned XDR back.
+ */
+export async function signTransaction(
+  xdr: string,
+  options: SignTransactionOptions = {},
+): Promise<string> {
   if (typeof window === "undefined") return xdr;
+
+  const timeoutMs = options.timeoutMs ?? SIGN_TRANSACTION_TIMEOUT_MS;
+
+  let timer: ReturnType<typeof setTimeout>;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(FREIGHTER_SIGN_TIMEOUT_MESSAGE));
+    }, timeoutMs);
+  });
+
   try {
-    const result = await freighterSignTransaction(xdr);
-    if (result.error) return xdr;
+    const result = await Promise.race([
+      freighterSignTransaction(xdr),
+      timeoutPromise,
+    ]);
+
+    if (result.error) {
+      const message = String(result.error);
+      if (/reject/i.test(message)) {
+        throw new Error("Signature request was rejected in Freighter.");
+      }
+      throw new Error(`Freighter signing failed: ${message}`);
+    }
+
     return result.signedTxXdr ?? xdr;
-  } catch {
-    return xdr;
+  } finally {
+    clearTimeout(timer!);
   }
 }
 
