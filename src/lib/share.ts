@@ -36,3 +36,18 @@ export function generateLinkedInShareUrl(streamId: string | number, origin: stri
 export function generateCopyLinkUrl(streamId: string | number, origin: string): string {
   return getStreamDetailUrl(streamId, origin);
 }
+
+/**
+ * #418 — Generates a read-only shareable URL for a stream.
+ *
+ * Points at the public /embed route, which renders live stream status
+ * (claimable amount + progress) without requiring a connected wallet,
+ * so senders can share status with recipients.
+ */
+export function generateReadOnlyShareUrl(
+  streamId: string | number,
+  origin: string
+): string {
+  const base = origin.replace(/\/+$/, "");
+  return `${base}/embed/stream/${streamId}?theme=light&show=both`;
+}

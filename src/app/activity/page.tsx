@@ -13,6 +13,7 @@ import {
   getActivityEvents,
   getActivityAssets,
   simulateNewEvent,
+  buildStreamAuditLog,
   formatUSDC,
   truncateAddress,
   type StreamEvent,
@@ -138,6 +139,30 @@ export default function ActivityPage() {
 
   const hasFilters = activeTypes.size > 0 || assetFilter || fromDate || toDate;
 
+  // Build a compliance audit log (JSON) for the current filter scope and
+  // trigger a client-side download. The export honors the same filters as
+  // the on-screen feed so what you see is what gets exported.
+  const exportAuditLog = useCallback(() => {
+    const query: ActivityQuery = {
+      types: activeTypes.size > 0 ? Array.from(activeTypes) : undefined,
+      asset: assetFilter || undefined,
+      from: fromDate || undefined,
+      to: toDate || undefined,
+    };
+    const log = buildStreamAuditLog(query);
+    const blob = new Blob([JSON.stringify(log, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const stamp = new Date().toISOString().slice(0, 10);
+    const assetTag = assetFilter ? `-${assetFilter}` : "";
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `sorostream-audit-log${assetTag}-${stamp}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }, [activeTypes, assetFilter, fromDate, toDate]);
+
   return (
     <main id="main-content" tabIndex={-1} className="min-h-screen bg-gray-900 text-white p-4 sm:p-8">
       <div className="max-w-3xl mx-auto">
@@ -148,12 +173,22 @@ export default function ActivityPage() {
               A unified timeline of subscriptions, payments, alerts, and closures.
             </p>
           </div>
-          <Link
-            href="/dashboard"
-            className="text-sm text-green-400 hover:text-green-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
-          >
-            ← Dashboard
-          </Link>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={exportAuditLog}
+              className="px-3 py-2 text-sm rounded-lg border border-gray-700 text-gray-200 hover:bg-gray-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+              aria-label="Export compliance audit log as JSON"
+            >
+              ⬇ Export audit log
+            </button>
+            <Link
+              href="/dashboard"
+              className="text-sm text-green-400 hover:text-green-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+            >
+              ← Dashboard
+            </Link>
+          </div>
         </div>
 
         {/* Filters */}

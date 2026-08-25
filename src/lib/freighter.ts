@@ -64,14 +64,70 @@ export async function getActiveAddress(): Promise<string> {
   }
 }
 
+/**
+ * Typed, user-friendly error raised when a wallet operation fails because the
+ * Freighter session has expired (or the wallet is otherwise unable to sign).
+ * Components should catch this to surface a re-auth prompt instead of a raw
+ * XDR / SDK error.
+ */
+export class SessionExpiredWalletError extends Error {
+  constructor(
+    message = "Your wallet session has expired. Please reconnect to continue.",
+  ) {
+    super(message);
+    this.name = "SessionExpiredWalletError";
+  }
+}
+
+export const FRIENDLY_SESSION_EXPIRED_MESSAGE =
+  "Your wallet session has expired. Please reconnect to continue.";
+
+/**
+ * Returns true when an error most likely indicates an expired/invalid wallet
+ * session that should trigger a re-auth prompt (rather than being surfaced to
+ * the user as a raw XDR or SDK error).
+ */
+export function isSessionExpiredError(err: unknown): boolean {
+  if (err instanceof SessionExpiredWalletError) return true;
+  const msg = err instanceof Error ? err.message : String(err ?? "");
+  const lower = msg.toLowerCase();
+  return (
+    lower.includes("session") ||
+    lower.includes("expir") ||
+    lower.includes("xdr") ||
+    lower.includes("not connected") ||
+    lower.includes("unauthorized") ||
+    lower.includes("unauthorised") ||
+    lower.includes("locked") ||
+    lower.includes("reconnect") ||
+    lower.includes("timed out") ||
+    lower.includes("timeout") ||
+    lower.includes("not found") ||
+    (lower.includes("sign") && (lower.includes("fail") || lower.includes("reject")))
+  );
+}
+
 export async function signTransaction(xdr: string): Promise<string> {
   if (typeof window === "undefined") return xdr;
   try {
     const result = await freighterSignTransaction(xdr);
-    if (result.error) return xdr;
-    return result.signedTxXdr ?? xdr;
-  } catch {
-    return xdr;
+    if (result.error) {
+      // Surface a friendly, typed error instead of letting a raw/unsigned XDR
+      // bubble up and produce a cryptic "XDR parse error" downstream.
+      throw new SessionExpiredWalletError(result.error);
+    }
+    const signed = result.signedTxXdr;
+    if (!signed) {
+      throw new SessionExpiredWalletError("Wallet returned an empty signature.");
+    }
+    return signed;
+  } catch (err) {
+    if (err instanceof SessionExpiredWalletError) throw err;
+    // Any other signing failure (e.g. thrown by the SDK) is normalized to the
+    // same friendly re-auth error rather than a raw XDR parse message.
+    throw new SessionExpiredWalletError(
+      err instanceof Error ? err.message : "Transaction signing failed.",
+    );
   }
 }
 

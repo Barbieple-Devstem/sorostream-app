@@ -32,6 +32,7 @@ import {
   getMockStream,
   toStroops,
   getStreamsForWallet,
+  getStreamMemo,
 } from "@/src/lib/sorostream";
 import { useToast } from "@/src/lib/toast";
 import StreamQrModal from "@/components/StreamQrModal";
@@ -50,7 +51,8 @@ import { useWallet } from "@/src/context/WalletContext";
 import {
   generateTwitterShareUrl,
   generateLinkedInShareUrl,
-  generateCopyLinkUrl
+  generateCopyLinkUrl,
+  generateReadOnlyShareUrl,
 } from "@/src/lib/share";
 import StreamShareButtons from "@/components/StreamShareButtons";
 import StreamCloneModal from "@/components/StreamCloneModal";
@@ -103,6 +105,28 @@ function Spinner() {
 const DEEP_LINK_KEY = "sorostream-deep-link";
 const DEEP_LINK_COUNT_KEY = "sorostream-deep-link-count";
 
+/**
+ * Copies text to the clipboard, falling back to a hidden textarea +
+ * execCommand for browsers without the async clipboard API.
+ * Never rejects — failures are swallowed after attempting the fallback.
+ */
+function copyText(text: string): void {
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).catch(() => {
+      /* ignore */
+    });
+    return;
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.style.cssText = "position:fixed;top:-9999px;left:-9999px;opacity:0;";
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  document.execCommand("copy");
+  document.body.removeChild(textarea);
+}
+
 export default function StreamDetail({ params }: { params: { id: string } }) {
   const router = useRouter();
   const { addToast, upsertPersistentToast, removeToast } = useToast();
@@ -138,12 +162,21 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
   // ── Pause / Resume states ──────────────────────────────────────────────────
   const [pauseLoading, setPauseLoading] = useState(false);
   const [resumeLoading, setResumeLoading] = useState(false);
+  /** Optimistic status applied while a pause/resume tx is in-flight. */
+  const [optimisticStatus, setOptimisticStatus] = useState<string | null>(null);
   const [showPauseModal, setShowPauseModal] = useState(false);
   const pauseModalRef = useRef<HTMLDivElement>(null);
   useFocusTrap(pauseModalRef, showPauseModal);
   const [showResumeModal, setShowResumeModal] = useState(false);
   const resumeModalRef = useRef<HTMLDivElement>(null);
   useFocusTrap(resumeModalRef, showResumeModal);
+
+  // ── Schedule pause (future auto-pause) states ───────────────────────────────
+  const [showSchedulePauseModal, setShowSchedulePauseModal] = useState(false);
+  const [pauseAtInput, setPauseAtInput] = useState("");
+  const [schedulePauseLoading, setSchedulePauseLoading] = useState(false);
+  const schedulePauseModalRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(schedulePauseModalRef, showSchedulePauseModal);
 
   // ── Transfer recipient states ──────────────────────────────────────────────
   const [showTransferModal, setShowTransferModal] = useState(false);
@@ -537,16 +570,30 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
 
   const isBusy = withdrawLoading || cancelLoading || cancelPending || topUpLoading || pauseLoading || resumeLoading || transferLoading;
 
+  /** Status used for rendering — reflects an in-flight pause/resume immediately. */
+  const displayStatus = optimisticStatus ?? (stream?.status ?? "");
+
+  // Clear the optimistic status once the real stream data catches up.
+  useEffect(() => {
+    if (optimisticStatus && stream?.status === optimisticStatus) {
+      setOptimisticStatus(null);
+    }
+  }, [stream?.status, optimisticStatus]);
+
   // ── Pause stream ──────────────────────────────────────────────────────
   const handlePauseConfirmed = useCallback(async () => {
     setShowPauseModal(false);
     setPauseLoading(true);
+    // Reflect the new state immediately so the button can't be re-triggered
+    // and the UI never shows the stale (incorrect) status while pending.
+    setOptimisticStatus("Paused");
     try {
       const result = await sorostream.pauseStream(params.id);
       const updated = await sorostream.getStream(params.id);
       if (updated) setStream(updated);
       addToast(`Stream paused. Tx: ${result.txHash}`, "success");
     } catch {
+      setOptimisticStatus(null);
       addToast("Failed to pause stream. Please try again.", "error");
     } finally {
       setPauseLoading(false);
@@ -557,17 +604,43 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
   const handleResumeConfirmed = useCallback(async () => {
     setShowResumeModal(false);
     setResumeLoading(true);
+    // Reflect the new state immediately so the button can't be re-triggered
+    // and the UI never shows the stale (incorrect) status while pending.
+    setOptimisticStatus("Active");
     try {
       const result = await sorostream.resumeStream(params.id);
       const updated = await sorostream.getStream(params.id);
       if (updated) setStream(updated);
       addToast(`Stream resumed. Tx: ${result.txHash}`, "success");
     } catch {
+      setOptimisticStatus(null);
       addToast("Failed to resume stream. Please try again.", "error");
     } finally {
       setResumeLoading(false);
     }
   }, [params.id, addToast]);
+
+  // ── Schedule pause at a future time ──────────────────────────────────────
+  const handleSchedulePauseConfirmed = useCallback(async () => {
+    const ms = new Date(pauseAtInput).getTime();
+    if (!pauseAtInput || !Number.isFinite(ms) || ms <= Date.now()) {
+      addToast("Please choose a future date and time.", "error");
+      return;
+    }
+    setSchedulePauseLoading(true);
+    try {
+      const result = await sorostream.schedulePause(params.id, Math.floor(ms / 1000));
+      const updated = await sorostream.getStream(params.id);
+      if (updated) setStream(updated);
+      setShowSchedulePauseModal(false);
+      setPauseAtInput("");
+      addToast(`Pause scheduled. Tx: ${result.txHash}`, "success");
+    } catch {
+      addToast("Failed to schedule pause. Please try again.", "error");
+    } finally {
+      setSchedulePauseLoading(false);
+    }
+  }, [params.id, pauseAtInput, addToast]);
 
   // ── Transfer recipient ───────────────────────────────────────────────
   const handleTransferConfirmed = useCallback(async () => {
@@ -618,17 +691,17 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
       shortcuts: [
         { key: "w", description: "Withdraw", action: () => { if (!isBusy) handleWithdraw(); } },
         { key: "c", description: "Cancel", action: () => { if (!cancelLoading && !withdrawLoading && !topUpLoading) setShowCancelModal(true); } },
-        { key: "p", description: stream?.status === "Paused" ? "Resume" : "Pause", action: () => {
+        { key: "p", description: displayStatus === "Paused" ? "Resume" : "Pause", action: () => {
           if (pauseLoading || resumeLoading || cancelLoading || withdrawLoading || topUpLoading) return;
-          if (stream?.status === "Paused") setShowResumeModal(true);
-          else if (stream?.status === "Active") setShowPauseModal(true);
+          if (displayStatus === "Paused") setShowResumeModal(true);
+          else if (displayStatus === "Active") setShowPauseModal(true);
         }},
         { key: "t", description: "Toggle top-up", action: () => setShowTopUp((v) => !v) },
         { key: "Escape", description: "Close modals", action: () => { setShowCancelModal(false); setShowQrModal(false); setShowTopUp(false); setShowPauseModal(false); setShowResumeModal(false); setShowTransferModal(false); } },
         { key: "?", shift: true, description: "Toggle keyboard shortcuts help", action: () => setShowShortcutsHelp((v) => !v) },
       ],
     },
-  ], [handleWithdraw, isBusy, cancelLoading, withdrawLoading, topUpLoading, stream?.status, pauseLoading, resumeLoading]);
+  ], [handleWithdraw, isBusy, cancelLoading, withdrawLoading, topUpLoading, displayStatus, pauseLoading, resumeLoading]);
 
   useKeyboardShortcuts(shortcutGroups);
 
@@ -787,23 +860,33 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
           <span className="hidden sm:inline" aria-hidden="true">|</span>
           <span
             className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-              stream.status === "Active"
+              displayStatus === "Active"
                 ? "bg-green-900 text-green-400"
-                : stream.status === "Paused"
+                : displayStatus === "Paused"
                 ? "bg-yellow-900 text-yellow-400"
-                : stream.status === "Cancelled"
+                : displayStatus === "Cancelled"
                 ? "bg-red-900 text-red-400"
                 : "bg-gray-700 text-gray-400"
             }`}
-            aria-label={`Status: ${stream.status}`}
+            aria-label={`Status: ${displayStatus}`}
             data-testid="stream-status"
           >
-            {stream.status}
+            {displayStatus}
           </span>
         </div>
 
+        {/* #408 — Plaintext memo attached at creation time */}
+        {getStreamMemo(stream) && (
+          <p className="mb-4 text-sm text-gray-300 flex items-center gap-2">
+            <span className="text-gray-500">Memo:</span>
+            <span className="bg-gray-800 border border-gray-700 rounded-full px-3 py-1">
+              {getStreamMemo(stream)}
+            </span>
+          </p>
+        )}
+
         {/* Stream Health Score */}
-        {stream.status === "Active" && (() => {
+        {displayStatus === "Active" && (() => {
           const now = Date.now();
           const totalDuration = new Date(stream.endTime).getTime() - new Date(stream.startTime).getTime();
           const elapsed = now - new Date(stream.startTime).getTime();
@@ -856,7 +939,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
           </button>
 
           {/* Get Receipt — only for Completed or Cancelled streams */}
-          {(stream.status === "Ended" || stream.status === "Cancelled" || isCompleted) && (
+           {(displayStatus === "Ended" || displayStatus === "Cancelled" || isCompleted) && (
             <Link
               href={`/stream/${stream.id}/receipt`}
               className="inline-flex items-center gap-2 bg-green-700 hover:bg-green-800 text-white py-2 px-4 rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
@@ -873,19 +956,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
           )}
 
           <button
-            onClick={() => {
-              const duration = Math.round(
-                (new Date(stream.endTime).getTime() - new Date(stream.startTime).getTime()) / 1000,
-              );
-              const qp = new URLSearchParams({
-                recipient: stream.recipient,
-                amount: (stream.deposit / 10_000_000).toString(),
-                token: stream.token,
-                duration: String(duration),
-                cliff: "0",
-              });
-              router.push(`/stream/new?${qp.toString()}`);
-            }}
+            onClick={() => setShowCloneModal(true)}
             aria-label="Clone this stream"
             className="inline-flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-white py-2 px-4 rounded-lg text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
           >
@@ -937,21 +1008,8 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
                 </a>
                 <button
                   onClick={() => {
-                    const url = generateCopyLinkUrl(stream.id, window.location.origin);
-                    navigator.clipboard.writeText(url).then(
-                      () => addToast("Deep link copied to clipboard!", "success"),
-                      () => {
-                        const textarea = document.createElement("textarea");
-                        textarea.value = url;
-                        textarea.style.cssText = "position:fixed;top:-9999px;left:-9999px;opacity:0;";
-                        document.body.appendChild(textarea);
-                        textarea.focus();
-                        textarea.select();
-                        document.execCommand("copy");
-                        document.body.removeChild(textarea);
-                        addToast("Deep link copied to clipboard!", "success");
-                      },
-                    );
+                    copyText(generateCopyLinkUrl(stream.id, window.location.origin));
+                    addToast("Deep link copied to clipboard!", "success");
                     setShowShareMenu(false);
                   }}
                   className="w-full text-left flex items-center gap-2 px-4 py-2 text-sm text-gray-200 hover:bg-gray-700 hover:text-white transition-colors"
@@ -961,6 +1019,21 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
                     <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
                   </svg>
                   Copy Link
+                </button>
+                {/* #418 — read-only shareable link, no wallet required */}
+                <button
+                  onClick={() => {
+                    copyText(generateReadOnlyShareUrl(stream.id, window.location.origin));
+                    addToast("Read-only link copied to clipboard!", "success");
+                    setShowShareMenu(false);
+                  }}
+                  className="w-full text-left flex items-center gap-2 px-4 py-2 text-sm text-gray-200 hover:bg-gray-700 hover:text-white transition-colors"
+                >
+                  <svg className="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                    <path d="M7 11V7a5 5 0 0 1 9.9-1" />
+                  </svg>
+                  Copy Read-only Link
                 </button>
               </div>
             )}
@@ -991,7 +1064,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
             endTime={stream.endTime}
             sender={stream.sender}
             recipient={stream.recipient}
-            status={stream.status}
+            status={displayStatus}
             flowRate={stream.flowRate}
           />
 
@@ -1006,7 +1079,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
           <StreamProgressBar stream={stream} />
 
           {/* Collateral unlock badge — shown when sender has collateral */}
-          {stream.status !== "Cancelled" && (
+          {displayStatus !== "Cancelled" && (
             <CollateralUnlockBadge
               endTime={stream.endTime}
               gracePeriodSeconds={86400}
@@ -1187,7 +1260,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
           </div>
 
           {/* Pause / Resume (visible to sender only, based on status) */}
-          {address && stream.sender.includes(address.slice(0, 5)) && stream.status === "Active" && (
+          {address && stream.sender.includes(address.slice(0, 5)) && displayStatus === "Active" && (
             <button
               onClick={() => setShowPauseModal(true)}
               disabled={isBusy}
@@ -1210,7 +1283,28 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
             </button>
           )}
 
+          {address && stream.sender.includes(address.slice(0, 5)) && stream.status === "Active" && (
+            <button
+              onClick={() => setShowSchedulePauseModal(true)}
+              disabled={isBusy}
+              className="w-full border border-indigo-600 text-indigo-400 py-3 rounded-lg font-medium hover:bg-indigo-900 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" />
+                <polyline points="12 7 12 12 15 14" />
+              </svg>
+              {t("schedule_pause")}
+            </button>
+          )}
+
+          {stream.pauseAt && stream.pauseAt > Math.floor(Date.now() / 1000) && (
+            <p className="text-xs text-indigo-400/80 text-center">
+              {t("scheduled_pause_badge")}: {new Date(stream.pauseAt * 1000).toLocaleString()}
+            </p>
+          )}
+
           {address && stream.sender.includes(address.slice(0, 5)) && stream.status === "Paused" && (
+          {address && stream.sender.includes(address.slice(0, 5)) && displayStatus === "Paused" && (
             <button
               onClick={() => setShowResumeModal(true)}
               disabled={isBusy}
@@ -1402,9 +1496,6 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
         open={showQrModal}
         onClose={() => setShowQrModal(false)}
         recipient={stream.recipient}
-        amount={(stream.deposit / 10_000_000).toString()}
-        token={stream.token}
-        duration={Math.round((new Date(stream.endTime).getTime() - new Date(stream.startTime).getTime()) / 1000)}
       />
 
       <KeyboardShortcutsHelp
@@ -1522,6 +1613,51 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
         </div>
       )}
 
+      {/* Schedule pause modal */}
+      {showSchedulePauseModal && (
+        <div
+          ref={schedulePauseModalRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="schedule-pause-modal-title"
+          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
+        >
+          <div className="bg-gray-800 rounded-xl p-6 max-w-sm w-full mx-4 space-y-4">
+            <h2 id="schedule-pause-modal-title" className="text-lg font-semibold text-white">
+              {t("schedule_pause_title")}
+            </h2>
+            <p className="text-gray-400 text-sm">{t("schedule_pause_desc")}</p>
+            <div>
+              <label htmlFor="pause-at" className="text-gray-200 text-sm font-medium block mb-1">
+                {t("pause_at_label")}
+              </label>
+              <input
+                id="pause-at"
+                type="datetime-local"
+                value={pauseAtInput}
+                onChange={(e) => setPauseAtInput(e.target.value)}
+                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2.5 text-white text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+              />
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => { setShowSchedulePauseModal(false); setPauseAtInput(""); }}
+                className="flex-1 border border-gray-600 text-gray-300 py-2 rounded-lg hover:bg-gray-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSchedulePauseConfirmed}
+                disabled={schedulePauseLoading || !pauseAtInput}
+                className="flex-1 bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+              >
+                {schedulePauseLoading ? "Scheduling…" : t("schedule_pause_confirm")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Transfer recipient modal */}
       {showTransferModal && (
         <div
@@ -1614,6 +1750,13 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
           onClose={() => setShowComparisonModal(false)}
           currentStream={stream}
           availableStreams={allStreams}
+        />
+      )}
+
+      {stream && showCloneModal && (
+        <StreamCloneModal
+          stream={stream}
+          onClose={() => setShowCloneModal(false)}
         />
       )}
     </main>

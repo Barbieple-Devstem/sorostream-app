@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import type { StreamData } from "@/src/lib/sorostream";
+import { getStreamedAmount } from "@/src/lib/sorostream";
 
 interface StreamProgressBarProps {
   stream: StreamData;
@@ -20,8 +21,22 @@ export default function StreamProgressBar({ stream }: StreamProgressBarProps) {
       return { percentage: 0, isCompleted: false, elapsedText: "0%" };
     }
 
+    // For cancelled streams, the recipient only received what dripped before
+    // cancellation — not the full deposit. Use the pro-rated streamed amount
+    // so the bar reflects the actual net received.
+    if (stream.status === "Cancelled") {
+      const streamed = getStreamedAmount(stream);
+      const pct = stream.deposit > 0 ? (streamed / stream.deposit) * 100 : 0;
+      const percentage = Math.max(0, Math.min(100, pct));
+      return {
+        percentage,
+        isCompleted: true,
+        elapsedText: `${Math.round(percentage)}%`,
+      };
+    }
+
     const rawPercentage = Math.max(0, Math.min(100, (elapsed / totalDuration) * 100));
-    const isCompleted = stream.status === "Ended" || stream.status === "Cancelled" || now >= end;
+    const isCompleted = stream.status === "Ended" || now >= end;
     const finalPercentage = isCompleted ? 100 : rawPercentage;
 
     return {
