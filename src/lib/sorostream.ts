@@ -11,6 +11,10 @@ export interface StreamData {
   endTime: string;
   lastWithdrawTime: string;
   status: "Active" | "Cancelled" | "Ended" | "Paused";
+  /** Unix timestamp (seconds) when the stream was cancelled. Set on cancel. */
+  cancelledAt?: number;
+  /** Unix timestamp (seconds) when the stream is scheduled to auto-pause. */
+  pauseAt?: number;
   /** Whether the stream auto-renews on expiry. */
   autoRenew?: boolean;
   /** Duration in seconds for each auto-renewal cycle (defaults to original duration). */
@@ -301,7 +305,10 @@ export const sorostream = {
   cancelStream: async (id?: string) => {
     if (id) {
       const stream = MOCK_STREAMS.find((s) => s.id === id);
-      if (stream) stream.status = "Cancelled";
+      if (stream) {
+        stream.status = "Cancelled";
+        stream.cancelledAt = Math.floor(Date.now() / 1000);
+      }
     }
     return { txHash: "mock-tx-hash" };
   },
@@ -319,6 +326,14 @@ export const sorostream = {
     }
     return { txHash: "mock-resume-tx-hash" };
   },
+  /** Schedule a stream to automatically pause at a future unix timestamp (seconds). */
+  schedulePause: async (id?: string, pauseAt?: number) => {
+    if (id && pauseAt) {
+      const stream = MOCK_STREAMS.find((s) => s.id === id);
+      if (stream && stream.status === "Active") stream.pauseAt = pauseAt;
+    }
+    return { txHash: "mock-schedule-pause-tx-hash" };
+  },
   transferRecipient: async (id?: string, newRecipient?: string) => {
     if (id && newRecipient) {
       const stream = MOCK_STREAMS.find((s) => s.id === id);
@@ -327,10 +342,10 @@ export const sorostream = {
     return { txHash: "mock-transfer-tx-hash" };
   },
   topUp: async (_streamId?: string) => ({ txHash: "", newEndTime: new Date() }),
-  getStream: async (id: string) => getMockStream(id),
+  getStream: async (id: string) => { applyScheduledPauses(); return getMockStream(id); },
   getClaimable: async (streamId: string) => claimableNow(getMockStream(streamId)),
-  getStreamsBySender: async () => MOCK_STREAMS,
-  getStreamsByRecipient: async () => MOCK_STREAMS,
+  getStreamsBySender: async () => { applyScheduledPauses(); return MOCK_STREAMS; },
+  getStreamsByRecipient: async () => { applyScheduledPauses(); return MOCK_STREAMS; },
   getEvents: async () => getStreamEvents(),
   batchWithdraw: async (streamIds: string[]) => ({
     txHash: "mock-batch-tx-hash",
@@ -370,6 +385,20 @@ export const sorostream = {
 
 export function getMockStream(id: string): StreamData | null {
   return MOCK_STREAMS.find(s => s.id === id) ?? null;
+}
+
+/**
+ * Auto-pause any Active stream whose scheduled `pauseAt` timestamp has passed.
+ * Mutates the in-memory store. Safe to call on every read.
+ */
+export function applyScheduledPauses(): void {
+  const nowSec = Math.floor(Date.now() / 1000);
+  for (const s of MOCK_STREAMS) {
+    if (s.status === "Active" && s.pauseAt && s.pauseAt > 0 && s.pauseAt <= nowSec) {
+      s.status = "Paused";
+      s.pauseAt = undefined;
+    }
+  }
 }
 
 export function getMockStreams(): StreamData[] {
@@ -485,8 +514,44 @@ export function claimableNow(stream: any): string {
     return "0";
   }
 
-  const elapsedSeconds = Math.max(0, (Date.now() - lastWithdrawTime) / 1000);
+  // A cancelled or ended stream stops accruing once it can no longer drip.
+  // Cap the effective "now" so the recipient can only claim what actually
+  // streamed before the stream stopped.
+  let effectiveNow = Date.now();
+  if (stream.status === "Cancelled" && stream.cancelledAt) {
+    effectiveNow = Math.min(effectiveNow, stream.cancelledAt * 1000);
+  } else if (stream.status === "Ended") {
+    effectiveNow = Math.min(effectiveNow, new Date(stream.endTime).getTime());
+  }
+
+  const elapsedSeconds = Math.max(0, (effectiveNow - lastWithdrawTime) / 1000);
   return Math.floor(flowRate * elapsedSeconds).toString();
+}
+
+/**
+ * Total amount that has dripped into a stream up to the current effective
+ * time, taking cancellation and end time into account. For a cancelled stream
+ * this is the pro-rated amount streamed before cancellation, not the full
+ * deposit.
+ */
+export function getStreamedAmount(stream: StreamData): number {
+  const flowRate = Number(stream.flowRate);
+  const start = new Date(stream.startTime).getTime();
+  if (!Number.isFinite(flowRate) || !Number.isFinite(start)) return 0;
+
+  let effectiveNow = Date.now();
+  if (stream.status === "Cancelled" && stream.cancelledAt) {
+    effectiveNow = Math.min(effectiveNow, stream.cancelledAt * 1000);
+  } else if (stream.status === "Ended") {
+    effectiveNow = Math.min(effectiveNow, new Date(stream.endTime).getTime());
+  } else if (stream.status === "Paused") {
+    // Paused streams are treated like active for display (no special cap),
+    // but we still never exceed the end time.
+    effectiveNow = Math.min(effectiveNow, new Date(stream.endTime).getTime());
+  }
+
+  if (effectiveNow <= start) return 0;
+  return Math.floor(flowRate * (effectiveNow - start) / 1000);
 }
 
 export interface StreamEvent {

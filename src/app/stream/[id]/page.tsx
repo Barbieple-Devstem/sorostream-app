@@ -145,6 +145,13 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
   const resumeModalRef = useRef<HTMLDivElement>(null);
   useFocusTrap(resumeModalRef, showResumeModal);
 
+  // ── Schedule pause (future auto-pause) states ───────────────────────────────
+  const [showSchedulePauseModal, setShowSchedulePauseModal] = useState(false);
+  const [pauseAtInput, setPauseAtInput] = useState("");
+  const [schedulePauseLoading, setSchedulePauseLoading] = useState(false);
+  const schedulePauseModalRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(schedulePauseModalRef, showSchedulePauseModal);
+
   // ── Transfer recipient states ──────────────────────────────────────────────
   const [showTransferModal, setShowTransferModal] = useState(false);
   const transferModalRef = useRef<HTMLDivElement>(null);
@@ -551,6 +558,28 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
       setResumeLoading(false);
     }
   }, [params.id, addToast]);
+
+  // ── Schedule pause at a future time ──────────────────────────────────────
+  const handleSchedulePauseConfirmed = useCallback(async () => {
+    const ms = new Date(pauseAtInput).getTime();
+    if (!pauseAtInput || !Number.isFinite(ms) || ms <= Date.now()) {
+      addToast("Please choose a future date and time.", "error");
+      return;
+    }
+    setSchedulePauseLoading(true);
+    try {
+      const result = await sorostream.schedulePause(params.id, Math.floor(ms / 1000));
+      const updated = await sorostream.getStream(params.id);
+      if (updated) setStream(updated);
+      setShowSchedulePauseModal(false);
+      setPauseAtInput("");
+      addToast(`Pause scheduled. Tx: ${result.txHash}`, "success");
+    } catch {
+      addToast("Failed to schedule pause. Please try again.", "error");
+    } finally {
+      setSchedulePauseLoading(false);
+    }
+  }, [params.id, pauseAtInput, addToast]);
 
   // ── Transfer recipient ───────────────────────────────────────────────
   const handleTransferConfirmed = useCallback(async () => {
@@ -1179,6 +1208,27 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
             </button>
           )}
 
+          {address && stream.sender.includes(address.slice(0, 5)) && stream.status === "Active" && (
+            <button
+              onClick={() => setShowSchedulePauseModal(true)}
+              disabled={isBusy}
+              className="w-full border border-indigo-600 text-indigo-400 py-3 rounded-lg font-medium hover:bg-indigo-900 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" />
+                <polyline points="12 7 12 12 15 14" />
+              </svg>
+              {t("schedule_pause")}
+            </button>
+          )}
+
+          {stream.pauseAt && stream.pauseAt > Math.floor(Date.now() / 1000) && (
+            <p className="text-xs text-indigo-400/80 text-center">
+              {t("scheduled_pause_badge")}: {new Date(stream.pauseAt * 1000).toLocaleString()}
+            </p>
+          )}
+
+          {address && stream.sender.includes(address.slice(0, 5)) && stream.status === "Paused" && (
           {address && stream.sender.includes(address.slice(0, 5)) && displayStatus === "Paused" && (
             <button
               onClick={() => setShowResumeModal(true)}
@@ -1485,6 +1535,51 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
                 className="flex-1 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
               >
                 {resumeLoading ? "Resuming…" : "Yes, Resume"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Schedule pause modal */}
+      {showSchedulePauseModal && (
+        <div
+          ref={schedulePauseModalRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="schedule-pause-modal-title"
+          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
+        >
+          <div className="bg-gray-800 rounded-xl p-6 max-w-sm w-full mx-4 space-y-4">
+            <h2 id="schedule-pause-modal-title" className="text-lg font-semibold text-white">
+              {t("schedule_pause_title")}
+            </h2>
+            <p className="text-gray-400 text-sm">{t("schedule_pause_desc")}</p>
+            <div>
+              <label htmlFor="pause-at" className="text-gray-200 text-sm font-medium block mb-1">
+                {t("pause_at_label")}
+              </label>
+              <input
+                id="pause-at"
+                type="datetime-local"
+                value={pauseAtInput}
+                onChange={(e) => setPauseAtInput(e.target.value)}
+                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2.5 text-white text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+              />
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => { setShowSchedulePauseModal(false); setPauseAtInput(""); }}
+                className="flex-1 border border-gray-600 text-gray-300 py-2 rounded-lg hover:bg-gray-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSchedulePauseConfirmed}
+                disabled={schedulePauseLoading || !pauseAtInput}
+                className="flex-1 bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+              >
+                {schedulePauseLoading ? "Scheduling…" : t("schedule_pause_confirm")}
               </button>
             </div>
           </div>
