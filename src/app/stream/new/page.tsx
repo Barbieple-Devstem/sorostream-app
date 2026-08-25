@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import DurationPicker from "@/components/DurationPicker";
+import EndDatePicker from "@/components/EndDatePicker";
 import FlowRatePreview from "@/components/FlowRatePreview";
 import StreamTemplatePicker from "@/components/StreamTemplatePicker";
 import RecipientAutocomplete from "@/components/RecipientAutocomplete";
@@ -885,31 +886,26 @@ function NewStreamWizard() {
               error={errors.scheduledStart || undefined}
             />
 
-            {/* Optional end date */}
-            <div>
-              <label htmlFor="end-date" className="text-gray-200 text-sm font-medium block mb-2">
-                End Date <span className="text-gray-400 font-normal">(optional)</span>
-              </label>
-              <input
-                id="end-date"
-                type="datetime-local"
-                value={endDate}
-                onChange={(e) => {
-                  setEndDate(e.target.value);
-                  setErrors((prev) => ({ ...prev, endDate: validateEndDate(e.target.value) }));
-                  persist({ endDate: e.target.value });
-                }}
-                onBlur={() => setErrors((prev) => ({ ...prev, endDate: validateEndDate(endDate) }))}
-                className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-3 text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
-                aria-invalid={!!errors.endDate}
-                aria-describedby={errors.endDate ? "end-date-error" : undefined}
-              />
-              {errors.endDate && (
-                <p id="end-date-error" role="alert" className="text-red-400 text-sm mt-1">
-                  {errors.endDate}
-                </p>
-              )}
-            </div>
+            {/* Optional end date (#427) — timezone-aware alternative input
+                to the duration picker. Picking an instant resolves the
+                equivalent duration and keeps the absolute UTC value in state. */}
+            <EndDatePicker
+              id="end-date"
+              value={endDate}
+              onChange={(isoUtc) => {
+                setEndDate(isoUtc);
+                setErrors((prev) => ({ ...prev, endDate: validateEndDate(isoUtc) }));
+                persist({ endDate: isoUtc });
+              }}
+              onDurationResolved={(seconds) => {
+                if (seconds > 0) {
+                  setDuration(seconds);
+                  setErrors((prev) => ({ ...prev, duration: "" }));
+                  persist({ duration: seconds });
+                }
+              }}
+              error={errors.endDate || undefined}
+            />
 
             {/* Optional cliff date */}
             <div>

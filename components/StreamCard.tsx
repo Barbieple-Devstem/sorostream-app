@@ -2,7 +2,7 @@
 
 import CopyButton from "@/components/CopyButton";
 import FiatDisplay from "@/components/FiatDisplay";
-import { truncateAddress, formatStellarAmount } from "@/src/lib/sorostream";
+import { truncateAddress, formatStellarAmount, estimateStreamCompletionTime, formatTimeUntil } from "@/src/lib/sorostream";
 import FederationName from "@/components/FederationName";
 import { useBookmarks } from "@/src/context/BookmarksContext";
 import StreamHealthBadge, {
@@ -10,6 +10,7 @@ import StreamHealthBadge, {
   getHealthTier,
 } from "@/components/StreamHealthBadge";
 import { getMockStreamHistory } from "@/src/lib/sorostream";
+import { formatDateWithTimezone } from "@/src/lib/timezone";
 import StreamTagChips from "@/components/StreamTagChips";
 
 interface StreamCardProps {
@@ -78,6 +79,14 @@ export default function StreamCard({
   const toXlm = (val: number) => (val / 10_000_000).toFixed(2);
   const flowXlm = flowRate / 10_000_000;
   const depositXlm = deposit / 10_000_000;
+
+  // ── Estimated completion time (#415) ──────────────────────────────────
+  // For active streams with a fixed total amount, estimate when the
+  // deposit will be fully dripped: startTime + deposit / flowRate.
+  const estimatedCompletion = (() => {
+    if (status !== "Active" || !startTime || isScheduled) return null;
+    return estimateStreamCompletionTime({ startTime, flowRate, deposit });
+  })();
 
   return (
     <div
@@ -188,6 +197,21 @@ export default function StreamCard({
             <FiatDisplay xlmAmount={depositXlm} />
           </span>
         </p>
+
+        {estimatedCompletion && (
+          <p className="text-gray-600 dark:text-gray-400">
+            Est. completion:{" "}
+            <span
+              className="text-gray-900 dark:text-white"
+              title={`Estimated time when this stream will be fully dripped (${formatTimeUntil(estimatedCompletion)})`}
+            >
+              {formatDateWithTimezone(estimatedCompletion)}
+              <span className="text-green-600 dark:text-green-400 ml-1">
+                ({formatTimeUntil(estimatedCompletion)})
+              </span>
+            </span>
+          </p>
+        )}
       </div>
 
       {/* Tag chips */}

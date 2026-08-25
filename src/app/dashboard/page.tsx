@@ -21,6 +21,7 @@ import { getAllTags, getTagMap } from "@/src/lib/streamTags";
 import PortfolioChart from "@/components/PortfolioChart";
 import StreamExpiryAlerts from "@/components/StreamExpiryAlerts";
 import PortfolioSummaryCard from "@/components/PortfolioSummaryCard";
+import StreamPerformanceMetrics from "@/components/StreamPerformanceMetrics";
 import WatchlistTab from "@/components/WatchlistTab";
 
 type DashboardState = "loading" | "filtered-empty" | "empty" | "ready";
@@ -368,6 +369,11 @@ function DashboardContent() {
             {address && (
               <PortfolioSummaryCard streams={streams} walletAddress={address} />
             )}
+
+            {/* Aggregated performance metrics (#419) */}
+            <StreamErrorBoundary section="Performance Metrics">
+              <StreamPerformanceMetrics streams={streams} walletAddress={address} />
+            </StreamErrorBoundary>
 
             {/* Tab switcher */}
             <div className="flex rounded-xl bg-gray-800 p-1 mb-6" role="tablist" aria-label="Dashboard view">
