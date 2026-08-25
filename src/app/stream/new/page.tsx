@@ -121,6 +121,7 @@ function NewStreamWizard() {
   const recipientParam = searchParams.get("recipient");
   const amountParam = searchParams.get("amount");
   const durationParam = searchParams.get("duration");
+  const tokenParam = searchParams.get("token");
 
   // ----- sessionStorage draft -----
   // Read once before any useState initialisation so we can use draft values
@@ -146,15 +147,32 @@ function NewStreamWizard() {
     return draft?.duration ?? 0;
   })();
 
+  // Prefill the token when arriving from a "Clone stream" action. A token that
+  // matches a supported symbol selects it directly; a contract address (or
+  // other asset id) is routed through the custom-token field.
+  const initialTokenIsCustom =
+    !!tokenParam && /^C[A-Z2-7]{55}$/.test(tokenParam);
+  const initialToken = (() => {
+    if (tokenParam && SUPPORTED_TOKENS.some((t) => t.symbol === tokenParam)) {
+      return tokenParam;
+    }
+    if (initialTokenIsCustom) return CUSTOM_TOKEN_VALUE;
+    return undefined;
+  })();
+
   const [recipient, setRecipient] = useState(initialRecipient);
   const [amount, setAmount] = useState(initialAmount);
   // Use URL param first, then saved preference, then 0
   const [duration, setDuration] = useState(initialDuration || defaultDuration || 0);
   // Pre-select token from preference when no URL param overrides
   const [selectedToken, setSelectedToken] = useState<string>(
-    SUPPORTED_TOKENS.find((t) => t.symbol === defaultToken)?.symbol ?? SUPPORTED_TOKENS[0].symbol,
+    initialToken ??
+      SUPPORTED_TOKENS.find((t) => t.symbol === defaultToken)?.symbol ??
+      SUPPORTED_TOKENS[0].symbol,
   );
-  const [customTokenAddress, setCustomTokenAddress] = useState(draft?.customTokenAddress ?? "");
+  const [customTokenAddress, setCustomTokenAddress] = useState(
+    draft?.customTokenAddress ?? (initialTokenIsCustom ? (tokenParam ?? "") : ""),
+  );
   const [customTokenError, setCustomTokenError] = useState("");
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({ recipient: "", amount: "", duration: "", endDate: "", cliffDate: "", scheduledStart: "" });
@@ -237,6 +255,30 @@ function NewStreamWizard() {
       });
     return () => { active = false; };
   }, [step]);
+
+  // Also surface the Soroban network fee estimate on the review step so users
+  // know the cost before signing, even if they skipped past the amount step
+  // (e.g. when arriving from a clone action).
+  useEffect(() => {
+    if (step !== "review") return;
+    const parsed = parseFloat(amount);
+    if (!(parsed > 0) || gasFee) return;
+    let active = true;
+    setGasFeeLoading(true);
+    getGasFeeEstimate(Math.round(parsed * 10_000_000))
+      .then((estimate) => {
+        if (active) setGasFee(estimate);
+      })
+      .catch(() => {
+        /* keep last known value; the panel degrades gracefully */
+      })
+      .finally(() => {
+        if (active) setGasFeeLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [step, amount, gasFee]);
 
   // Address verification state
   const [addressVerification, setAddressVerification] = useState<AddressVerification | null>(null);

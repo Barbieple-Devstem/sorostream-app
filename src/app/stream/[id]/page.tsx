@@ -856,19 +856,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
           )}
 
           <button
-            onClick={() => {
-              const duration = Math.round(
-                (new Date(stream.endTime).getTime() - new Date(stream.startTime).getTime()) / 1000,
-              );
-              const qp = new URLSearchParams({
-                recipient: stream.recipient,
-                amount: (stream.deposit / 10_000_000).toString(),
-                token: stream.token,
-                duration: String(duration),
-                cliff: "0",
-              });
-              router.push(`/stream/new?${qp.toString()}`);
-            }}
+            onClick={() => setShowCloneModal(true)}
             aria-label="Clone this stream"
             className="inline-flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-white py-2 px-4 rounded-lg text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
           >
@@ -1595,6 +1583,13 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
           onClose={() => setShowComparisonModal(false)}
           currentStream={stream}
           availableStreams={allStreams}
+        />
+      )}
+
+      {stream && showCloneModal && (
+        <StreamCloneModal
+          stream={stream}
+          onClose={() => setShowCloneModal(false)}
         />
       )}
     </main>
