@@ -9,6 +9,7 @@ import VestingPreviewChart from "@/components/VestingPreviewChart";
 import TransactionStepper, { TxStage } from "@/components/TransactionStepper";
 import SchedulingToggle from "@/components/SchedulingToggle";
 import FeeEstimationPanel from "@/components/FeeEstimationPanel";
+import StreamCostCalculator from "@/components/StreamCostCalculator";
 import BatchCreateTab from "@/components/BatchCreateTab";
 import NetReceivedDisplay from "@/components/NetReceivedDisplay";
 import AddressVerificationBadge from "@/components/AddressVerificationBadge";
@@ -948,6 +949,14 @@ function NewStreamWizard() {
 
             {amount && duration > 0 && (
               <FlowRatePreview amount={amount} durationSeconds={duration} />
+            )}
+
+            {amount && duration > 0 && (
+              <StreamCostCalculator
+                amount={amount}
+                durationSeconds={duration}
+                tokenSymbol={selectedToken === CUSTOM_TOKEN_VALUE ? "tokens" : selectedToken}
+              />
             )}
 
             {/* Gas fee estimate */}

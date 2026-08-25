@@ -21,6 +21,8 @@ interface StreamCardProps {
   deposit?: number;
   selected?: boolean;
   onToggle?: (id: string) => void;
+  /** When true, render an in-place skeleton placeholder instead of the card. */
+  loading?: boolean;
   /** Unix timestamp (seconds). When set and > now, a "Scheduled" badge is shown. */
   scheduledStartTime?: number;
   /** Stream start time ISO string. */
@@ -38,12 +40,36 @@ export default function StreamCard({
   deposit = 0,
   selected = false,
   onToggle,
+  loading = false,
   scheduledStartTime,
   startTime,
   endTime,
 }: StreamCardProps) {
   const { isBookmarked, toggleBookmark } = useBookmarks();
   const bookmarked = isBookmarked(id);
+
+  if (loading) {
+    return (
+      <div
+        className="bg-white dark:bg-gray-800 rounded-lg p-4 space-y-3 border border-gray-200 dark:border-gray-700"
+        role="status"
+        aria-label={id ? `Loading stream ${id}` : "Loading stream"}
+        aria-busy="true"
+      >
+        <div className="flex justify-between">
+          <div className="h-4 w-20 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+          <div className="h-5 w-16 animate-pulse rounded-full bg-gray-200 dark:bg-gray-700" />
+        </div>
+        <div className="space-y-2">
+          <div className="h-3 w-40 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+          <div className="h-3 w-36 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+          <div className="h-3 w-32 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+          <div className="h-3 w-28 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+        </div>
+      </div>
+    );
+  }
+
 
   const isScheduled =
     typeof scheduledStartTime === "number" &&
