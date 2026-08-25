@@ -23,6 +23,26 @@ export interface StreamData {
   scheduledStartTime?: number;
   /** Optional metadata URI (ipfs://, https://, or ar://) pointing to stream metadata. */
   metadataUri?: string;
+  /** Optional short plaintext memo attached at creation time. */
+  memo?: string;
+}
+
+/**
+ * Returns the plaintext memo for a stream, reading it from the dedicated
+ * field or decoding it out of the stream's metadata URI (`?memo=` / `#memo=`).
+ */
+export function getStreamMemo(stream: StreamData): string | undefined {
+  if (stream.memo) return stream.memo;
+  if (!stream.metadataUri) return undefined;
+  try {
+    const uri = new URL(stream.metadataUri);
+    const fromQuery = uri.searchParams.get("memo");
+    if (fromQuery) return decodeURIComponent(fromQuery);
+    if (uri.hash.startsWith("#memo=")) return decodeURIComponent(uri.hash.slice("#memo=".length));
+    return undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 // ── Protocol stats ───────────────────────────────────────────────────────────
@@ -234,6 +254,8 @@ export interface CreateStreamParams {
   scheduledStartTime?: number;
   /** Optional metadata URI (ipfs://, https://, or ar://) pointing to stream metadata. */
   metadataUri?: string;
+  /** Optional short plaintext memo; persisted inside the stream metadata URI. */
+  memo?: string;
   /** When true, construct a fee-bump envelope using the configured fee sponsor account. */
   feeBump?: boolean;
   /** The fee sponsor's Stellar public key. Required when feeBump is true. */
@@ -280,6 +302,13 @@ export const sorostream = {
       ? params.scheduledStartTime
       : undefined;
     const startDate = scheduledStartTime ? new Date(scheduledStartTime * 1000) : now;
+    // #408 — the memo travels inside the stream metadata URI; when the user
+    // supplied their own URI we keep it untouched and store the memo alongside.
+    const memo = params?.memo?.trim() || undefined;
+    const metadataUri =
+      memo && !params?.metadataUri
+        ? `https://metadata.sorostream.app/streams/memo.json?memo=${encodeURIComponent(memo)}`
+        : params?.metadataUri;
     const stream: StreamData = {
       id,
       sender: "GTEST...SENDER",
@@ -296,7 +325,8 @@ export const sorostream = {
         ? (params.autoRenewDurationSeconds ?? durationSeconds)
         : undefined,
       scheduledStartTime,
-      metadataUri: params?.metadataUri,
+      metadataUri,
+      memo,
     };
     MOCK_STREAMS.push(stream);
     return { streamId: id, txHash: `mock-tx-${id}` };

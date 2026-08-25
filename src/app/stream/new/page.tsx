@@ -331,6 +331,9 @@ function NewStreamWizard() {
   const [metadataUri, setMetadataUri] = useState("");
   const [metadataUriError, setMetadataUriError] = useState("");
 
+  // #408 — optional plaintext memo stored in the stream metadata URI
+  const [memo, setMemo] = useState("");
+
   // Preview state
   const [previewLoading, setPreviewLoading] = useState(false);
 
@@ -576,6 +579,7 @@ function NewStreamWizard() {
         autoRenewDurationSeconds: autoRenew && autoRenewDuration > 0 ? autoRenewDuration : undefined,
         scheduledStartTime,
         metadataUri: metadataUri || undefined,
+        memo: memo.trim() || undefined,
         feeBump: feeBumpEnabled && !!feeSponsorAddress,
         feeSponsorAddress: feeBumpEnabled && feeSponsorAddress ? feeSponsorAddress : undefined,
       });
@@ -1115,6 +1119,25 @@ function NewStreamWizard() {
                       />
                     </div>
                   )}
+
+                  {/* #408 — Memo / note field */}
+                  <div>
+                    <label htmlFor="stream-memo" className="text-sm text-gray-200 font-medium block mb-2">
+                      Memo <span className="text-gray-400 font-normal">(optional)</span>
+                    </label>
+                    <input
+                      id="stream-memo"
+                      type="text"
+                      value={memo}
+                      onChange={(e) => setMemo(e.target.value)}
+                      maxLength={100}
+                      placeholder="e.g. Rent for March"
+                      className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-3 text-white text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+                    />
+                    <p className="text-gray-500 text-xs mt-1">
+                      Short plaintext note attached to the stream metadata. {memo.length}/100
+                    </p>
+                  </div>
 
                   {/* Metadata URI field */}
                   <div>

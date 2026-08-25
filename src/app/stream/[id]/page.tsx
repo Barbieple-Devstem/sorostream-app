@@ -32,6 +32,7 @@ import {
   getMockStream,
   toStroops,
   getStreamsForWallet,
+  getStreamMemo,
 } from "@/src/lib/sorostream";
 import { useToast } from "@/src/lib/toast";
 import StreamQrModal from "@/components/StreamQrModal";
@@ -50,7 +51,8 @@ import { useWallet } from "@/src/context/WalletContext";
 import {
   generateTwitterShareUrl,
   generateLinkedInShareUrl,
-  generateCopyLinkUrl
+  generateCopyLinkUrl,
+  generateReadOnlyShareUrl,
 } from "@/src/lib/share";
 import StreamShareButtons from "@/components/StreamShareButtons";
 import StreamCloneModal from "@/components/StreamCloneModal";
@@ -102,6 +104,28 @@ function Spinner() {
 
 const DEEP_LINK_KEY = "sorostream-deep-link";
 const DEEP_LINK_COUNT_KEY = "sorostream-deep-link-count";
+
+/**
+ * Copies text to the clipboard, falling back to a hidden textarea +
+ * execCommand for browsers without the async clipboard API.
+ * Never rejects — failures are swallowed after attempting the fallback.
+ */
+function copyText(text: string): void {
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).catch(() => {
+      /* ignore */
+    });
+    return;
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.style.cssText = "position:fixed;top:-9999px;left:-9999px;opacity:0;";
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  document.execCommand("copy");
+  document.body.removeChild(textarea);
+}
 
 export default function StreamDetail({ params }: { params: { id: string } }) {
   const router = useRouter();
@@ -814,6 +838,16 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
           </span>
         </div>
 
+        {/* #408 — Plaintext memo attached at creation time */}
+        {getStreamMemo(stream) && (
+          <p className="mb-4 text-sm text-gray-300 flex items-center gap-2">
+            <span className="text-gray-500">Memo:</span>
+            <span className="bg-gray-800 border border-gray-700 rounded-full px-3 py-1">
+              {getStreamMemo(stream)}
+            </span>
+          </p>
+        )}
+
         {/* Stream Health Score */}
         {displayStatus === "Active" && (() => {
           const now = Date.now();
@@ -937,21 +971,8 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
                 </a>
                 <button
                   onClick={() => {
-                    const url = generateCopyLinkUrl(stream.id, window.location.origin);
-                    navigator.clipboard.writeText(url).then(
-                      () => addToast("Deep link copied to clipboard!", "success"),
-                      () => {
-                        const textarea = document.createElement("textarea");
-                        textarea.value = url;
-                        textarea.style.cssText = "position:fixed;top:-9999px;left:-9999px;opacity:0;";
-                        document.body.appendChild(textarea);
-                        textarea.focus();
-                        textarea.select();
-                        document.execCommand("copy");
-                        document.body.removeChild(textarea);
-                        addToast("Deep link copied to clipboard!", "success");
-                      },
-                    );
+                    copyText(generateCopyLinkUrl(stream.id, window.location.origin));
+                    addToast("Deep link copied to clipboard!", "success");
                     setShowShareMenu(false);
                   }}
                   className="w-full text-left flex items-center gap-2 px-4 py-2 text-sm text-gray-200 hover:bg-gray-700 hover:text-white transition-colors"
@@ -961,6 +982,21 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
                     <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
                   </svg>
                   Copy Link
+                </button>
+                {/* #418 — read-only shareable link, no wallet required */}
+                <button
+                  onClick={() => {
+                    copyText(generateReadOnlyShareUrl(stream.id, window.location.origin));
+                    addToast("Read-only link copied to clipboard!", "success");
+                    setShowShareMenu(false);
+                  }}
+                  className="w-full text-left flex items-center gap-2 px-4 py-2 text-sm text-gray-200 hover:bg-gray-700 hover:text-white transition-colors"
+                >
+                  <svg className="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                    <path d="M7 11V7a5 5 0 0 1 9.9-1" />
+                  </svg>
+                  Copy Read-only Link
                 </button>
               </div>
             )}
@@ -1421,9 +1457,6 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
         open={showQrModal}
         onClose={() => setShowQrModal(false)}
         recipient={stream.recipient}
-        amount={(stream.deposit / 10_000_000).toString()}
-        token={stream.token}
-        duration={Math.round((new Date(stream.endTime).getTime() - new Date(stream.startTime).getTime()) / 1000)}
       />
 
       <KeyboardShortcutsHelp
