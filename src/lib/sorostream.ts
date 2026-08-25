@@ -1,4 +1,5 @@
 import type { StreamHistoryEntry } from "./export";
+import { dispatchWebhook } from "./webhooks";
 
 export interface StreamData {
   id: string;
@@ -83,6 +84,89 @@ export async function getProtocolStats(): Promise<ProtocolStats> {
     tvlHistory,
     activeStreamsHistory,
   };
+}
+
+export interface VolumePoint {
+  date: string;
+  usdc: number;
+  xlm: number;
+}
+
+export interface TopRecipient {
+  recipient: string;
+  totalStroops: number;
+}
+
+export interface AssetSlice {
+  asset: string;
+  valueStroops: number;
+}
+
+export interface StreamAnalytics {
+  volumeOverTime: VolumePoint[];
+  topRecipients: TopRecipient[];
+  assetBreakdown: AssetSlice[];
+  totalValueStroops: number;
+}
+
+/**
+ * Compute stream analytics for the dedicated analytics dashboard, derived from
+ * the in-memory stream store today; in production this would aggregate
+ * on-chain history / an indexer.
+ *
+ * @param windowDays  Number of trailing days to bucket volume into (default 14).
+ */
+export function getStreamAnalytics(windowDays = 14): StreamAnalytics {
+  const now = Date.now();
+  const cutoff = now - windowDays * 86_400_000;
+
+  const buckets = new Map<number, VolumePoint>();
+  for (let i = windowDays - 1; i >= 0; i--) {
+    const dayStart = new Date(now - i * 86_400_000);
+    dayStart.setHours(0, 0, 0, 0);
+    const key = dayStart.getTime();
+    const label = `${String(dayStart.getMonth() + 1).padStart(2, "0")}/${String(
+      dayStart.getDate(),
+    ).padStart(2, "0")}`;
+    buckets.set(key, { date: label, usdc: 0, xlm: 0 });
+  }
+
+  const recipients = new Map<string, number>();
+  const assets = new Map<string, number>();
+  let totalValueStroops = 0;
+
+  for (const stream of MOCK_STREAMS) {
+    const start = new Date(stream.startTime).getTime();
+    const key = new Date(start).setHours(0, 0, 0, 0);
+    const bucket = buckets.get(key);
+    if (bucket) {
+      if (stream.token === "XLM") bucket.xlm += stream.deposit;
+      else bucket.usdc += stream.deposit;
+    }
+
+    if (start >= cutoff) {
+      recipients.set(
+        stream.recipient,
+        (recipients.get(stream.recipient) ?? 0) + stream.deposit,
+      );
+      assets.set(
+        stream.token,
+        (assets.get(stream.token) ?? 0) + stream.deposit,
+      );
+      totalValueStroops += stream.deposit;
+    }
+  }
+
+  const volumeOverTime = Array.from(buckets.values());
+  const topRecipients = Array.from(recipients.entries())
+    .map(([recipient, totalStroops]) => ({ recipient, totalStroops }))
+    .sort((a, b) => b.totalStroops - a.totalStroops)
+    .slice(0, 6);
+  const assetBreakdown = Array.from(assets.entries())
+    .map(([asset, valueStroops]) => ({ asset, valueStroops }))
+    .sort((a, b) => b.valueStroops - a.valueStroops);
+
+  return { volumeOverTime, topRecipients, assetBreakdown, totalValueStroops };
 }
 
 // ── Fee simulation ────────────────────────────────────────────────────────────
@@ -331,47 +415,67 @@ export const sorostream = {
       memo,
     };
     MOCK_STREAMS.push(stream);
+    void dispatchWebhook({
+      type: "stream.created",
+      streamId: id,
+      timestamp: new Date().toISOString(),
+      asset: stream.token,
+      message: `Stream ${id} created for ${stream.recipient}`,
+    });
     return { streamId: id, txHash: `mock-tx-${id}` };
   },
-  withdraw: async () => ({ txHash: "mock-tx-hash", amount: "0" }),
+  withdraw: async (id?: string) => {
+    if (id) {
+      const stream = MOCK_STREAMS.find((s) => s.id === id);
+      void dispatchWebhook({
+        type: "stream.withdrawn",
+        streamId: id,
+        timestamp: new Date().toISOString(),
+        asset: stream?.token,
+        message: `Withdrawal processed for stream ${id}`,
+      });
+    }
+    return { txHash: "mock-tx-hash", amount: "0" };
+  },
   cancelStream: async (id?: string) => {
     if (id) {
       const stream = MOCK_STREAMS.find((s) => s.id === id);
-      if (stream) {
-        stream.status = "Cancelled";
-        stream.cancelledAt = Math.floor(Date.now() / 1000);
-      }
+      if (stream) stream.status = "Cancelled";
+      void dispatchWebhook({
+        type: "stream.cancelled",
+        streamId: id,
+        timestamp: new Date().toISOString(),
+        asset: stream?.token,
+        message: `Stream ${id} cancelled`,
+      });
     }
     return { txHash: "mock-tx-hash" };
   },
   pauseStream: async (id?: string) => {
     if (id) {
       const stream = MOCK_STREAMS.find((s) => s.id === id);
-      // Only an active stream can be paused. Capture the pause moment so that
-      // balances freeze at the value they held when streaming stopped.
-      if (stream && stream.status === "Active") {
-        stream.status = "Paused";
-        stream.pausedAt = new Date().toISOString();
-      }
+      if (stream && stream.status === "Active") stream.status = "Paused";
+      void dispatchWebhook({
+        type: "stream.paused",
+        streamId: id,
+        timestamp: new Date().toISOString(),
+        asset: stream?.token,
+        message: `Stream ${id} paused`,
+      });
     }
     return { txHash: "mock-pause-tx-hash" };
   },
   resumeStream: async (id?: string) => {
     if (id) {
       const stream = MOCK_STREAMS.find((s) => s.id === id);
-      if (stream && stream.status === "Paused") {
-        // Advance the withdraw baseline by the duration of the pause so that
-        // accrued balances resume seamlessly from the frozen value rather than
-        // jumping forward to include the paused gap.
-        const lastWithdraw = new Date(stream.lastWithdrawTime).getTime();
-        const pausedAt = stream.pausedAt
-          ? new Date(stream.pausedAt).getTime()
-          : Date.now();
-        const pausedForMs = Math.max(0, Date.now() - pausedAt);
-        stream.lastWithdrawTime = new Date(lastWithdraw + pausedForMs).toISOString();
-        stream.pausedAt = undefined;
-        stream.status = "Active";
-      }
+      if (stream && stream.status === "Paused") stream.status = "Active";
+      void dispatchWebhook({
+        type: "stream.resumed",
+        streamId: id,
+        timestamp: new Date().toISOString(),
+        asset: stream?.token,
+        message: `Stream ${id} resumed`,
+      });
     }
     return { txHash: "mock-resume-tx-hash" };
   },
@@ -387,11 +491,30 @@ export const sorostream = {
     if (id && newRecipient) {
       const stream = MOCK_STREAMS.find((s) => s.id === id);
       if (stream) stream.recipient = newRecipient;
+      void dispatchWebhook({
+        type: "stream.recipient_transferred",
+        streamId: id,
+        timestamp: new Date().toISOString(),
+        asset: stream?.token,
+        message: `Stream ${id} recipient changed to ${newRecipient}`,
+      });
     }
     return { txHash: "mock-transfer-tx-hash" };
   },
-  topUp: async (_streamId?: string) => ({ txHash: "", newEndTime: new Date() }),
-  getStream: async (id: string) => { applyScheduledPauses(); return getMockStream(id); },
+  topUp: async (id?: string) => {
+    if (id) {
+      const stream = MOCK_STREAMS.find((s) => s.id === id);
+      void dispatchWebhook({
+        type: "stream.topped_up",
+        streamId: id,
+        timestamp: new Date().toISOString(),
+        asset: stream?.token,
+        message: `Stream ${id} topped up`,
+      });
+    }
+    return { txHash: "", newEndTime: new Date() };
+  },
+  getStream: async (id: string) => getMockStream(id),
   getClaimable: async (streamId: string) => claimableNow(getMockStream(streamId)),
   getStreamsBySender: async () => { applyScheduledPauses(); return MOCK_STREAMS; },
   getStreamsByRecipient: async () => { applyScheduledPauses(); return MOCK_STREAMS; },

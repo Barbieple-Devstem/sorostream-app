@@ -14,6 +14,10 @@ export interface NotificationPrefs {
   emailEnabled: boolean;
   email: string;
   events: NotificationEventPrefs;
+  /** When true, stream state-change events are POSTed to `webhookUrl`. */
+  webhookEnabled: boolean;
+  /** Destination for webhook POST events (must be an https:// URL). */
+  webhookUrl: string;
 }
 
 const STORAGE_KEY = "sorostream_notification_prefs";
@@ -28,10 +32,48 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
     expiringSoon: true,
     withdrawalAvailable: true,
   },
+  webhookEnabled: false,
+  webhookUrl: "",
 };
 
 export function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+}
+
+/**
+ * Validate a webhook URL. Requires a secure https:// endpoint (no secrets in
+ * plain http), and must be a syntactically valid absolute URL.
+ */
+export function isValidWebhookUrl(url: string): boolean {
+  const trimmed = url.trim();
+  if (!trimmed) return false;
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+export interface WebhookConfig {
+  enabled: boolean;
+  url: string;
+}
+
+export function getWebhookConfig(): WebhookConfig {
+  const prefs = getNotificationPrefs();
+  return { enabled: prefs.webhookEnabled, url: prefs.webhookUrl.trim() };
+}
+
+export function setWebhookConfig(next: WebhookConfig): NotificationPrefs {
+  const prefs = getNotificationPrefs();
+  const updated: NotificationPrefs = {
+    ...prefs,
+    webhookEnabled: next.enabled && isValidWebhookUrl(next.url),
+    webhookUrl: next.url.trim(),
+  };
+  saveNotificationPrefs(updated);
+  return updated;
 }
 
 export function getNotificationPrefs(): NotificationPrefs {
