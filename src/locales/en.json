@@ -71,7 +71,13 @@
     "compare_auto_renew": "Auto-Renew",
     "compare_days": "{days} days",
     "compare_close": "Close",
-    "compare_button_tooltip": "Create another stream to compare"
+    "compare_button_tooltip": "Create another stream to compare",
+    "schedule_pause": "Schedule Pause",
+    "schedule_pause_title": "Schedule Pause",
+    "schedule_pause_desc": "Choose a future date and time for this stream to automatically pause.",
+    "pause_at_label": "Pause at (future date & time)",
+    "schedule_pause_confirm": "Schedule Pause",
+    "scheduled_pause_badge": "Pause scheduled"
   },
   "wallet": {
     "connect": "Connect {wallet}",
@@ -79,6 +85,7 @@
     "disconnect": "Disconnect",
     "secret_placeholder": "Secret key (S...)",
     "error_freighter": "Freighter extension not found. Please install it.",
+    "error_lobstr": "LOBSTR extension not found. Please install it.",
     "error_ledger": "No USB device found. Connect your Ledger.",
     "error_server_keypair": "Please enter a valid secret key."
   },
@@ -139,11 +146,13 @@
     "main_navigation": "Main navigation",
     "keyboard_shortcuts": "Keyboard shortcuts (?)",
     "open_keyboard_shortcuts": "Open keyboard shortcuts help",
-    "shortcuts": "Shortcuts"
+    "shortcuts": "Shortcuts",
+    "analytics": "Analytics"
   },
   "common": {
     "price_unavailable": "Price unavailable",
     "approximately_usd": "approximately {formatted} US dollars",
+    "approximately_fiat": "approximately {formatted} {currency}",
     "pending": "pending…",
     "pending_confirmation": " (pending confirmation)",
     "claimable": "Claimable: {val} USDC",

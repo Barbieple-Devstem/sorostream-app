@@ -14,6 +14,7 @@
  */
 import { useEffect, useState } from "react";
 import { resolveFederationName } from "@/src/lib/federation";
+import { resolveTomlDisplayName } from "@/src/lib/stellarToml";
 
 interface FederationNameProps {
   address: string;
@@ -30,6 +31,7 @@ export default function FederationName({
   truncate = false,
 }: FederationNameProps) {
   const [fedName, setFedName] = useState<string | null>(null);
+  const [tomlName, setTomlName] = useState<string | null>(null);
 
   useEffect(() => {
     if (!address) return;
@@ -37,6 +39,9 @@ export default function FederationName({
 
     resolveFederationName(address).then((name) => {
       if (!cancelled) setFedName(name);
+    });
+    resolveTomlDisplayName(address).then((name) => {
+      if (!cancelled) setTomlName(name);
     });
 
     return () => { cancelled = true; };
@@ -47,13 +52,13 @@ export default function FederationName({
   return (
     <span className="inline-flex items-center gap-1.5 flex-wrap">
       <span className="font-mono">{displayAddress}</span>
-      {fedName && (
+      {(fedName || tomlName) && (
         <span
           className="text-green-600 dark:text-green-400 text-xs font-medium bg-green-100 dark:bg-green-900/40 px-1.5 py-0.5 rounded"
-          title={`Federation address: ${fedName}`}
-          aria-label={`Federation name: ${fedName}`}
+          title={tomlName ? `Account alias: ${tomlName}` : `Federation address: ${fedName}`}
+          aria-label={tomlName ? `Account alias: ${tomlName}` : `Federation name: ${fedName}`}
         >
-          {fedName}
+          {tomlName ?? fedName}
         </span>
       )}
     </span>

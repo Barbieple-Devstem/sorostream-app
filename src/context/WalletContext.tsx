@@ -16,7 +16,10 @@ import {
   createWatchWalletChanges,
   getActiveAddress,
   getFreighterAdapter,
+  isSessionExpiredError,
+  FRIENDLY_SESSION_EXPIRED_MESSAGE,
 } from "@/src/lib/freighter";
+import { ServerKeypairAdapter } from "@/src/lib/wallets";
 
 interface WalletContextValue {
   address: string | null;
@@ -50,6 +53,23 @@ interface WalletContextValue {
   sessionExpired: boolean;
   /** Clear the session expired flag (called after user acknowledges the toast). */
   clearSessionExpired: () => void;
+  /** Number of active (non-ended / non-cancelled) streams for the connected wallet. */
+  activeStreamCount: number;
+  /** Reports the current active-stream count so UI can warn before disconnecting. */
+  setActiveStreamCount: (count: number) => void;
+  /**
+   * Attempt to re-establish the wallet session using the persisted wallet type
+   * (from localStorage) without navigating away, so the user keeps their
+   * current navigation context. Returns true when reconnection succeeded.
+   */
+  reconnect: () => Promise<boolean>;
+  /**
+   * Classify an arbitrary wallet/signing error. If it looks like an expired
+   * session, flags the session as expired and kicks off an auto-reconnect
+   * attempt (so the user sees a re-auth prompt instead of a raw XDR error).
+   * Returns the (possibly normalized) error for the caller to surface.
+   */
+  handleWalletError: (err: unknown) => unknown;
   /**
    * Bumps a counter that signals consumers (e.g. dashboard stream list)
    * to immediately re-fetch stream data instead of showing stale cached state.
@@ -92,6 +112,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [showSessionWarning5Min, setShowSessionWarning5Min] = useState(false);
   const [showSessionWarning1Min, setShowSessionWarning1Min] = useState(false);
   const [sessionExpired, setSessionExpired] = useState(false);
+  /** The wallet type currently connected, used to scope session-validity checks. */
+  const [connectedWalletType, setConnectedWalletType] = useState<string | null>(null);
+  const [activeStreamCount, setActiveStreamCount] = useState(0);
   const sessionValidityPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const watcherRef = useRef<ReturnType<typeof createWatchWalletChanges> | null>(
     null,
@@ -134,6 +157,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setError(null);
     setNetworkMismatch(false);
     setSessionExpiresAt(null);
+    setConnectedWalletType(null);
+    setActiveStreamCount(0);
     clearSessionWarnings();
     // Don't stop the watcher on disconnect — keep polling so we notice when
     // the user switches back or reconnects from within Freighter.
@@ -249,6 +274,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       const publicKey = await getActiveAddress();
       setAddress(publicKey || null);
+      setConnectedWalletType(publicKey ? "freighter" : null);
 
       // Start session timeout tracking
       if (publicKey) {
@@ -261,11 +287,26 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       // idempotent so calling it here is a safe no-op.
       startWatcher();
 
+      // Signal consumers (e.g. dashboard stream list) to re-fetch immediately.
+      // Without this, a reconnect that resolves to the SAME address as the
+      // previous session leaves the list showing stale session data.
+      if (publicKey) {
+        triggerStreamRefresh();
+      }
+
       return publicKey || null;
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Connection failed";
+      // Route through the session-error classifier so an expired-session /
+      // XDR failure surfaces a re-auth prompt instead of a raw error.
+      handleWalletError(err);
+      const isExpired = isSessionExpiredError(err);
+      const message = isExpired
+        ? FRIENDLY_SESSION_EXPIRED_MESSAGE
+        : err instanceof Error
+          ? err.message
+          : "Connection failed";
       // Check if it's a timeout error
-      if (message.includes("timeout") || message.includes("Timeout")) {
+      if (!isExpired && (message.includes("timeout") || message.includes("Timeout"))) {
         setError("Connection timed out. Please check that Freighter is unlocked and try again.");
       } else {
         setError(message);
@@ -274,7 +315,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsConnecting(false);
     }
-  }, [verifyNetwork, startWatcher, startSessionTracking]);
+  }, [verifyNetwork, startWatcher, startSessionTracking, triggerStreamRefresh]);
+  }, [verifyNetwork, startWatcher, startSessionTracking, handleWalletError]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -287,6 +329,100 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setSessionExpired(false);
   }, []);
 
+  /**
+   * Re-establish the wallet session using the wallet type persisted in
+   * localStorage. This runs without any route change, so the user keeps their
+   * current navigation context. Returns true when the session was restored.
+   */
+  const attemptAutoReconnect = useCallback(async (): Promise<boolean> => {
+    if (typeof window === "undefined") return false;
+    const storedType = localStorage.getItem("sorostream_wallet_type");
+    if (!storedType) return false;
+
+    try {
+      if (storedType === "freighter") {
+        const publicKey = await getActiveAddress();
+        if (publicKey) {
+          setAddress(publicKey);
+          setConnectedWalletType("freighter");
+          startSessionTracking();
+          return true;
+        }
+        return false;
+      }
+
+      if (storedType === "server-keypair") {
+        const secret = localStorage.getItem("sorostream_wallet_secret") || "";
+        const adapter = new ServerKeypairAdapter(secret);
+        const available = await adapter.isAvailable();
+        if (!available) return false;
+        const key = await adapter.getPublicKey();
+        if (key) {
+          setAddress(key);
+          setConnectedWalletType("server-keypair");
+          startSessionTracking();
+          return true;
+        }
+        return false;
+      }
+
+      // Ledger requires manual transport interaction — cannot auto-reconnect.
+      return false;
+    } catch {
+      return false;
+    }
+  }, [startSessionTracking]);
+
+  /** Public reconnect entry point used by the re-auth prompt. */
+  const reconnect = useCallback(async (): Promise<boolean> => {
+    const ok = await attemptAutoReconnect();
+    if (ok) {
+      setSessionExpired(false);
+      setError(null);
+    } else {
+      // Fall back to the standard connect flow (e.g. for Ledger / fresh start).
+      const key = await connect();
+      if (key) {
+        setSessionExpired(false);
+        setError(null);
+        return true;
+      }
+    }
+    return ok;
+  }, [attemptAutoReconnect, connect]);
+
+  /**
+   * Classify a wallet/signing error. Expired-session errors set the
+   * `sessionExpired` flag and trigger an auto-reconnect attempt instead of
+   * surfacing a raw XDR / SDK error to the user. Returns the error so the
+   * caller can still present a friendly message.
+   */
+  const handleWalletError = useCallback(
+    (err: unknown): unknown => {
+      if (isSessionExpiredError(err)) {
+        setSessionExpired(true);
+        void attemptAutoReconnect().then((ok) => {
+          if (ok) setSessionExpired(false);
+        });
+      }
+      return err;
+    },
+    [attemptAutoReconnect],
+  );
+
+  // When the session is flagged as expired, attempt an automatic reconnect so
+  // the user is re-authenticated in place without losing navigation context.
+  useEffect(() => {
+    if (!sessionExpired) return;
+    let active = true;
+    void attemptAutoReconnect().then((ok) => {
+      if (ok && active) setSessionExpired(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, [sessionExpired, attemptAutoReconnect]);
+
   /** Proactive session validity check. Called every 60s when app is focused. */
   const checkSessionValidity = useCallback(async () => {
     if (!address || !sessionExpiresAt) return;
@@ -296,18 +432,21 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       disconnect();
       return;
     }
-    // Also check if Freighter is still available
-    try {
-      const adapter = await getFreighterAdapter();
-      const connected = await adapter.isConnected();
-      if (!connected && address) {
-        setSessionExpired(true);
-        disconnect();
+    // Also check if Freighter is still available (only meaningful for Freighter).
+    // Non-Freighter adapters (server-keypair) rely on the time-based check above.
+    if (connectedWalletType === "freighter") {
+      try {
+        const adapter = await getFreighterAdapter();
+        const connected = await adapter.isConnected();
+        if (!connected && address) {
+          setSessionExpired(true);
+          disconnect();
+        }
+      } catch {
+        // Silently fail — the time-based check above is the primary guard
       }
-    } catch {
-      // Silently fail — the time-based check above is the primary guard
     }
-  }, [address, sessionExpiresAt, disconnect]);
+  }, [address, sessionExpiresAt, disconnect, connectedWalletType]);
 
   /** Start/stop the 60-second session validity poll based on page visibility. */
   useEffect(() => {
@@ -381,6 +520,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       extendSession,
       sessionExpired,
       clearSessionExpired,
+      reconnect,
+      handleWalletError,
+      activeStreamCount,
+      setActiveStreamCount,
       streamRefreshTrigger,
       triggerStreamRefresh,
     }),
@@ -400,6 +543,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       extendSession,
       sessionExpired,
       clearSessionExpired,
+      reconnect,
+      handleWalletError,
+      activeStreamCount,
+      setActiveStreamCount,
       streamRefreshTrigger,
       triggerStreamRefresh,
     ],

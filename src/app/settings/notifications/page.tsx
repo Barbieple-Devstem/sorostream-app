@@ -16,9 +16,11 @@ import {
   requestPushPermission,
   isPushSupported,
   isValidEmail,
+  isValidWebhookUrl,
   type NotificationPrefs,
   type NotificationEventPrefs,
 } from "@/src/lib/notificationPrefs";
+import { dispatchWebhook } from "@/src/lib/webhooks";
 import { useToast } from "@/src/lib/toast";
 
 const EVENT_LABELS: { key: keyof NotificationEventPrefs; label: string; description: string }[] = [
@@ -77,11 +79,15 @@ export default function NotificationSettingsPage() {
   const [emailInput, setEmailInput] = useState("");
   const [emailError, setEmailError] = useState("");
   const [pushPending, setPushPending] = useState(false);
+  const [webhookInput, setWebhookInput] = useState("");
+  const [webhookError, setWebhookError] = useState("");
+  const [sendingTest, setSendingTest] = useState(false);
 
   useEffect(() => {
     const loaded = getNotificationPrefs();
     setPrefs(loaded);
     setEmailInput(loaded.email);
+    setWebhookInput(loaded.webhookUrl);
   }, []);
 
   function persist(next: NotificationPrefs) {
@@ -148,6 +154,55 @@ export default function NotificationSettingsPage() {
   function handleToggleEvent(key: keyof NotificationEventPrefs, next: boolean) {
     if (!prefs) return;
     persist({ ...prefs, events: { ...prefs.events, [key]: next } });
+  }
+
+  function handleSaveWebhook(enabled: boolean) {
+    if (!prefs) return;
+    const trimmed = webhookInput.trim();
+    if (enabled && !isValidWebhookUrl(trimmed)) {
+      setWebhookError("Enter a valid https:// webhook URL to enable webhooks.");
+      return;
+    }
+    setWebhookError("");
+    persist({ ...prefs, webhookEnabled: enabled, webhookUrl: trimmed });
+    addToast(
+      enabled ? "Webhook notifications enabled." : "Webhook notifications disabled.",
+      "info",
+    );
+  }
+
+  function handleToggleWebhook(next: boolean) {
+    if (!prefs) return;
+    if (!next) {
+      setWebhookError("");
+      persist({ ...prefs, webhookEnabled: false });
+      return;
+    }
+    handleSaveWebhook(true);
+  }
+
+  async function handleSendTestWebhook() {
+    if (!prefs) return;
+    const trimmed = webhookInput.trim();
+    if (!isValidWebhookUrl(trimmed)) {
+      setWebhookError("Enter a valid https:// webhook URL before sending a test.");
+      return;
+    }
+    setWebhookError("");
+    setSendingTest(true);
+    try {
+      await dispatchWebhook({
+        type: "stream.created",
+        streamId: "test",
+        timestamp: new Date().toISOString(),
+        message: "SoroStream webhook test event",
+      });
+      addToast("Test event sent to your webhook.", "success");
+    } catch {
+      addToast("Failed to deliver test event.", "error");
+    } finally {
+      setSendingTest(false);
+    }
   }
 
   if (!prefs) {
@@ -252,6 +307,58 @@ export default function NotificationSettingsPage() {
             )}
             {prefs.emailEnabled && !emailError && (
               <p className="text-green-400 text-xs mt-1">Email notifications active for {prefs.email}.</p>
+            )}
+          </div>
+        </div>
+
+        {/* Webhook */}
+        <div className="bg-gray-800 rounded-xl p-6 space-y-4 mb-6">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold">Stream Webhook</h2>
+              <p className="text-gray-400 text-sm mt-1">
+                Receive a POST request whenever a stream changes state (created, withdrawn, cancelled, …).
+              </p>
+            </div>
+            <Toggle
+              checked={prefs.webhookEnabled}
+              onChange={handleToggleWebhook}
+              disabled={subControlsDisabled}
+              label="Enable stream webhook notifications"
+            />
+          </div>
+          <div>
+            <label htmlFor="notification-webhook" className="text-gray-200 text-sm font-medium block mb-1">
+              Webhook URL
+            </label>
+            <div className="flex gap-3">
+              <input
+                id="notification-webhook"
+                type="url"
+                value={webhookInput}
+                onChange={(e) => { setWebhookInput(e.target.value); setWebhookError(""); }}
+                placeholder="https://example.com/webhook"
+                disabled={subControlsDisabled}
+                className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
+                aria-invalid={!!webhookError}
+                aria-describedby={webhookError ? "notification-webhook-error" : undefined}
+              />
+              <button
+                type="button"
+                onClick={() => handleSendTestWebhook()}
+                disabled={subControlsDisabled || sendingTest}
+                className="bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-600 disabled:opacity-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
+              >
+                {sendingTest ? "Sending…" : "Send test"}
+              </button>
+            </div>
+            {webhookError && (
+              <p id="notification-webhook-error" role="alert" className="text-red-400 text-xs mt-1">
+                {webhookError}
+              </p>
+            )}
+            {prefs.webhookEnabled && !webhookError && (
+              <p className="text-green-400 text-xs mt-1">Webhook events will be POSTed to {prefs.webhookUrl}.</p>
             )}
           </div>
         </div>

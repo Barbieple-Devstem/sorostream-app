@@ -71,7 +71,13 @@
     "compare_auto_renew": "Renovação Automática",
     "compare_days": "{days} dias",
     "compare_close": "Fechar",
-    "compare_button_tooltip": "Crie outro fluxo para comparar"
+    "compare_button_tooltip": "Crie outro fluxo para comparar",
+    "schedule_pause": "Agendar Pausa",
+    "schedule_pause_title": "Agendar Pausa",
+    "schedule_pause_desc": "Escolha uma data e hora futuras para este fluxo pausar automaticamente.",
+    "pause_at_label": "Pausar em (data e hora futuras)",
+    "schedule_pause_confirm": "Agendar Pausa",
+    "scheduled_pause_badge": "Pausa agendada"
   },
   "wallet": {
     "connect": "Conectar {wallet}",
@@ -79,6 +85,7 @@
     "disconnect": "Desconectar",
     "secret_placeholder": "Chave secreta (S...)",
     "error_freighter": "Extensão Freighter não encontrada. Por favor, instale-a.",
+    "error_lobstr": "Extensão LOBSTR não encontrada. Por favor, instale-a.",
     "error_ledger": "Nenhum dispositivo USB encontrado. Conecte sua Ledger.",
     "error_server_keypair": "Por favor, insira uma chave secreta válida."
   },
@@ -139,11 +146,13 @@
     "main_navigation": "Navegação principal",
     "keyboard_shortcuts": "Atalhos de teclado (?)",
     "open_keyboard_shortcuts": "Abrir ajuda de atalhos de teclado",
-    "shortcuts": "Atalhos"
+    "shortcuts": "Atalhos",
+    "analytics": "Análises"
   },
   "common": {
     "price_unavailable": "Preço indisponível",
     "approximately_usd": "aproximadamente {formatted} dólares americanos",
+    "approximately_fiat": "aproximadamente {formatted} {currency}",
     "pending": "pendente…",
     "pending_confirmation": " (confirmação pendente)",
     "claimable": "Disponível: {val} USDC",

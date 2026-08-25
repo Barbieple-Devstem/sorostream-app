@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from "react";
 import Link from "next/link";
 import StreamCard from "@/components/StreamCard";
 import type { StreamData } from "@/src/lib/sorostream";
@@ -9,13 +9,15 @@ interface StreamVirtualListProps {
   streams: StreamData[];
   selectedIds?: Set<string>;
   onToggleSelect?: (id: string) => void;
+  /** Invoked when the user clicks the clone action on a stream card. */
+  onClone?: (id: string) => void;
 }
 
 /** Estimated row height in px (two-column grid). Grows if items are taller. */
 const BASE_ROW_HEIGHT = 280;
 const OVERSCAN_ROWS = 5;
 
-export default function StreamVirtualList({ streams, selectedIds, onToggleSelect }: StreamVirtualListProps) {
+export default function StreamVirtualList({ streams, selectedIds, onToggleSelect, onClone }: StreamVirtualListProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const savedScrollTop = useRef(0);
   const [scrollTop, setScrollTop] = useState(0);
@@ -51,6 +53,19 @@ export default function StreamVirtualList({ streams, selectedIds, onToggleSelect
 
     if (container.scrollTop !== savedScrollTop.current) {
       container.scrollTop = savedScrollTop.current;
+    }
+  }, [streams]);
+
+  // Restore the scroll position synchronously after a background refresh so
+  // the user never loses their place in the list (the visible jump-to-top is
+  // avoided because this runs before the browser paints).
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const target = savedScrollTop.current;
+    if (target > 0 && container.scrollTop !== target) {
+      container.scrollTop = target;
     }
   }, [streams]);
 
@@ -145,9 +160,11 @@ export default function StreamVirtualList({ streams, selectedIds, onToggleSelect
                       status={stream.status}
                       selected={selectedIds?.has(stream.id)}
                       onToggle={onToggleSelect}
+                      onClone={onClone}
                       scheduledStartTime={stream.scheduledStartTime}
                       startTime={stream.startTime}
                       endTime={stream.endTime}
+                      pausedAt={stream.pausedAt}
                     />
                   </Link>
                 </div>

@@ -1,4 +1,5 @@
 import type { StreamHistoryEntry } from "./export";
+import { dispatchWebhook } from "./webhooks";
 
 export interface StreamData {
   id: string;
@@ -11,6 +12,12 @@ export interface StreamData {
   endTime: string;
   lastWithdrawTime: string;
   status: "Active" | "Cancelled" | "Ended" | "Paused";
+  /** ISO timestamp captured when the stream was paused. Frozen balances use this. */
+  pausedAt?: string;
+  /** Unix timestamp (seconds) when the stream was cancelled. Set on cancel. */
+  cancelledAt?: number;
+  /** Unix timestamp (seconds) when the stream is scheduled to auto-pause. */
+  pauseAt?: number;
   /** Whether the stream auto-renews on expiry. */
   autoRenew?: boolean;
   /** Duration in seconds for each auto-renewal cycle (defaults to original duration). */
@@ -19,6 +26,26 @@ export interface StreamData {
   scheduledStartTime?: number;
   /** Optional metadata URI (ipfs://, https://, or ar://) pointing to stream metadata. */
   metadataUri?: string;
+  /** Optional short plaintext memo attached at creation time. */
+  memo?: string;
+}
+
+/**
+ * Returns the plaintext memo for a stream, reading it from the dedicated
+ * field or decoding it out of the stream's metadata URI (`?memo=` / `#memo=`).
+ */
+export function getStreamMemo(stream: StreamData): string | undefined {
+  if (stream.memo) return stream.memo;
+  if (!stream.metadataUri) return undefined;
+  try {
+    const uri = new URL(stream.metadataUri);
+    const fromQuery = uri.searchParams.get("memo");
+    if (fromQuery) return decodeURIComponent(fromQuery);
+    if (uri.hash.startsWith("#memo=")) return decodeURIComponent(uri.hash.slice("#memo=".length));
+    return undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 // ── Protocol stats ───────────────────────────────────────────────────────────
@@ -57,6 +84,89 @@ export async function getProtocolStats(): Promise<ProtocolStats> {
     tvlHistory,
     activeStreamsHistory,
   };
+}
+
+export interface VolumePoint {
+  date: string;
+  usdc: number;
+  xlm: number;
+}
+
+export interface TopRecipient {
+  recipient: string;
+  totalStroops: number;
+}
+
+export interface AssetSlice {
+  asset: string;
+  valueStroops: number;
+}
+
+export interface StreamAnalytics {
+  volumeOverTime: VolumePoint[];
+  topRecipients: TopRecipient[];
+  assetBreakdown: AssetSlice[];
+  totalValueStroops: number;
+}
+
+/**
+ * Compute stream analytics for the dedicated analytics dashboard, derived from
+ * the in-memory stream store today; in production this would aggregate
+ * on-chain history / an indexer.
+ *
+ * @param windowDays  Number of trailing days to bucket volume into (default 14).
+ */
+export function getStreamAnalytics(windowDays = 14): StreamAnalytics {
+  const now = Date.now();
+  const cutoff = now - windowDays * 86_400_000;
+
+  const buckets = new Map<number, VolumePoint>();
+  for (let i = windowDays - 1; i >= 0; i--) {
+    const dayStart = new Date(now - i * 86_400_000);
+    dayStart.setHours(0, 0, 0, 0);
+    const key = dayStart.getTime();
+    const label = `${String(dayStart.getMonth() + 1).padStart(2, "0")}/${String(
+      dayStart.getDate(),
+    ).padStart(2, "0")}`;
+    buckets.set(key, { date: label, usdc: 0, xlm: 0 });
+  }
+
+  const recipients = new Map<string, number>();
+  const assets = new Map<string, number>();
+  let totalValueStroops = 0;
+
+  for (const stream of MOCK_STREAMS) {
+    const start = new Date(stream.startTime).getTime();
+    const key = new Date(start).setHours(0, 0, 0, 0);
+    const bucket = buckets.get(key);
+    if (bucket) {
+      if (stream.token === "XLM") bucket.xlm += stream.deposit;
+      else bucket.usdc += stream.deposit;
+    }
+
+    if (start >= cutoff) {
+      recipients.set(
+        stream.recipient,
+        (recipients.get(stream.recipient) ?? 0) + stream.deposit,
+      );
+      assets.set(
+        stream.token,
+        (assets.get(stream.token) ?? 0) + stream.deposit,
+      );
+      totalValueStroops += stream.deposit;
+    }
+  }
+
+  const volumeOverTime = Array.from(buckets.values());
+  const topRecipients = Array.from(recipients.entries())
+    .map(([recipient, totalStroops]) => ({ recipient, totalStroops }))
+    .sort((a, b) => b.totalStroops - a.totalStroops)
+    .slice(0, 6);
+  const assetBreakdown = Array.from(assets.entries())
+    .map(([asset, valueStroops]) => ({ asset, valueStroops }))
+    .sort((a, b) => b.valueStroops - a.valueStroops);
+
+  return { volumeOverTime, topRecipients, assetBreakdown, totalValueStroops };
 }
 
 // ── Fee simulation ────────────────────────────────────────────────────────────
@@ -112,6 +222,61 @@ export function calculateTotalValueLocked(streams: TvlStreamLike[]): number {
 
     return total + Math.max(0, deposit - withdrawn);
   }, 0);
+}
+
+export interface CompletionTimeInput {
+  /** Stream start time (ISO string or Date). */
+  startTime: string | Date;
+  /** Flow rate in stroops per second. */
+  flowRate: number;
+  /** Total deposit (fixed stream amount) in stroops. */
+  deposit: number;
+}
+
+/**
+ * Estimate when a stream will be fully dripped (#415).
+ *
+ * For streams with a fixed total amount, the completion instant is
+ * `startTime + deposit / flowRate` — independent of the configured endTime,
+ * so it stays correct after top-ups extend the total.
+ *
+ * Returns `null` when the estimate cannot be computed (zero/negative rate or
+ * deposit, or an unparseable start time).
+ */
+export function estimateStreamCompletionTime({
+  startTime,
+  flowRate,
+  deposit,
+}: CompletionTimeInput): Date | null {
+  const rate = Number(flowRate);
+  const total = Number(deposit);
+  if (!Number.isFinite(rate) || rate <= 0) return null;
+  if (!Number.isFinite(total) || total <= 0) return null;
+
+  const startMs =
+    typeof startTime === "string" ? new Date(startTime).getTime() : startTime.getTime();
+  if (!Number.isFinite(startMs)) return null;
+
+  const durationSeconds = total / rate;
+  return new Date(startMs + durationSeconds * 1000);
+}
+
+/**
+ * Human-readable relative time until the given date ("in 3d 4h", "in 45m").
+ * Past dates return "completed". Used next to the estimated completion time.
+ */
+export function formatTimeUntil(date: Date, now: Date = new Date()): string {
+  const diffMs = date.getTime() - now.getTime();
+  if (diffMs <= 0) return "completed";
+
+  const totalMinutes = Math.floor(diffMs / 60_000);
+  const days = Math.floor(totalMinutes / 1_440);
+  const hours = Math.floor((totalMinutes % 1_440) / 60);
+  const minutes = totalMinutes % 60;
+
+  if (days > 0) return hours > 0 ? `in ${days}d ${hours}h` : `in ${days}d`;
+  if (hours > 0) return minutes > 0 ? `in ${hours}h ${minutes}m` : `in ${hours}h`;
+  return `in ${Math.max(1, minutes)}m`;
 }
 
 /** Mutable stream store — seeded with test data, extended by createStream(). */
@@ -230,6 +395,8 @@ export interface CreateStreamParams {
   scheduledStartTime?: number;
   /** Optional metadata URI (ipfs://, https://, or ar://) pointing to stream metadata. */
   metadataUri?: string;
+  /** Optional short plaintext memo; persisted inside the stream metadata URI. */
+  memo?: string;
   /** When true, construct a fee-bump envelope using the configured fee sponsor account. */
   feeBump?: boolean;
   /** The fee sponsor's Stellar public key. Required when feeBump is true. */
@@ -276,6 +443,13 @@ export const sorostream = {
       ? params.scheduledStartTime
       : undefined;
     const startDate = scheduledStartTime ? new Date(scheduledStartTime * 1000) : now;
+    // #408 — the memo travels inside the stream metadata URI; when the user
+    // supplied their own URI we keep it untouched and store the memo alongside.
+    const memo = params?.memo?.trim() || undefined;
+    const metadataUri =
+      memo && !params?.metadataUri
+        ? `https://metadata.sorostream.app/streams/memo.json?memo=${encodeURIComponent(memo)}`
+        : params?.metadataUri;
     const stream: StreamData = {
       id,
       sender: "GTEST...SENDER",
@@ -292,16 +466,43 @@ export const sorostream = {
         ? (params.autoRenewDurationSeconds ?? durationSeconds)
         : undefined,
       scheduledStartTime,
-      metadataUri: params?.metadataUri,
+      metadataUri,
+      memo,
     };
     MOCK_STREAMS.push(stream);
+    void dispatchWebhook({
+      type: "stream.created",
+      streamId: id,
+      timestamp: new Date().toISOString(),
+      asset: stream.token,
+      message: `Stream ${id} created for ${stream.recipient}`,
+    });
     return { streamId: id, txHash: `mock-tx-${id}` };
   },
-  withdraw: async () => ({ txHash: "mock-tx-hash", amount: "0" }),
+  withdraw: async (id?: string) => {
+    if (id) {
+      const stream = MOCK_STREAMS.find((s) => s.id === id);
+      void dispatchWebhook({
+        type: "stream.withdrawn",
+        streamId: id,
+        timestamp: new Date().toISOString(),
+        asset: stream?.token,
+        message: `Withdrawal processed for stream ${id}`,
+      });
+    }
+    return { txHash: "mock-tx-hash", amount: "0" };
+  },
   cancelStream: async (id?: string) => {
     if (id) {
       const stream = MOCK_STREAMS.find((s) => s.id === id);
       if (stream) stream.status = "Cancelled";
+      void dispatchWebhook({
+        type: "stream.cancelled",
+        streamId: id,
+        timestamp: new Date().toISOString(),
+        asset: stream?.token,
+        message: `Stream ${id} cancelled`,
+      });
     }
     return { txHash: "mock-tx-hash" };
   },
@@ -309,6 +510,13 @@ export const sorostream = {
     if (id) {
       const stream = MOCK_STREAMS.find((s) => s.id === id);
       if (stream && stream.status === "Active") stream.status = "Paused";
+      void dispatchWebhook({
+        type: "stream.paused",
+        streamId: id,
+        timestamp: new Date().toISOString(),
+        asset: stream?.token,
+        message: `Stream ${id} paused`,
+      });
     }
     return { txHash: "mock-pause-tx-hash" };
   },
@@ -316,21 +524,55 @@ export const sorostream = {
     if (id) {
       const stream = MOCK_STREAMS.find((s) => s.id === id);
       if (stream && stream.status === "Paused") stream.status = "Active";
+      void dispatchWebhook({
+        type: "stream.resumed",
+        streamId: id,
+        timestamp: new Date().toISOString(),
+        asset: stream?.token,
+        message: `Stream ${id} resumed`,
+      });
     }
     return { txHash: "mock-resume-tx-hash" };
+  },
+  /** Schedule a stream to automatically pause at a future unix timestamp (seconds). */
+  schedulePause: async (id?: string, pauseAt?: number) => {
+    if (id && pauseAt) {
+      const stream = MOCK_STREAMS.find((s) => s.id === id);
+      if (stream && stream.status === "Active") stream.pauseAt = pauseAt;
+    }
+    return { txHash: "mock-schedule-pause-tx-hash" };
   },
   transferRecipient: async (id?: string, newRecipient?: string) => {
     if (id && newRecipient) {
       const stream = MOCK_STREAMS.find((s) => s.id === id);
       if (stream) stream.recipient = newRecipient;
+      void dispatchWebhook({
+        type: "stream.recipient_transferred",
+        streamId: id,
+        timestamp: new Date().toISOString(),
+        asset: stream?.token,
+        message: `Stream ${id} recipient changed to ${newRecipient}`,
+      });
     }
     return { txHash: "mock-transfer-tx-hash" };
   },
-  topUp: async (_streamId?: string) => ({ txHash: "", newEndTime: new Date() }),
+  topUp: async (id?: string) => {
+    if (id) {
+      const stream = MOCK_STREAMS.find((s) => s.id === id);
+      void dispatchWebhook({
+        type: "stream.topped_up",
+        streamId: id,
+        timestamp: new Date().toISOString(),
+        asset: stream?.token,
+        message: `Stream ${id} topped up`,
+      });
+    }
+    return { txHash: "", newEndTime: new Date() };
+  },
   getStream: async (id: string) => getMockStream(id),
   getClaimable: async (streamId: string) => claimableNow(getMockStream(streamId)),
-  getStreamsBySender: async () => MOCK_STREAMS,
-  getStreamsByRecipient: async () => MOCK_STREAMS,
+  getStreamsBySender: async () => { applyScheduledPauses(); return MOCK_STREAMS; },
+  getStreamsByRecipient: async () => { applyScheduledPauses(); return MOCK_STREAMS; },
   getEvents: async () => getStreamEvents(),
   batchWithdraw: async (streamIds: string[]) => ({
     txHash: "mock-batch-tx-hash",
@@ -370,6 +612,20 @@ export const sorostream = {
 
 export function getMockStream(id: string): StreamData | null {
   return MOCK_STREAMS.find(s => s.id === id) ?? null;
+}
+
+/**
+ * Auto-pause any Active stream whose scheduled `pauseAt` timestamp has passed.
+ * Mutates the in-memory store. Safe to call on every read.
+ */
+export function applyScheduledPauses(): void {
+  const nowSec = Math.floor(Date.now() / 1000);
+  for (const s of MOCK_STREAMS) {
+    if (s.status === "Active" && s.pauseAt && s.pauseAt > 0 && s.pauseAt <= nowSec) {
+      s.status = "Paused";
+      s.pauseAt = undefined;
+    }
+  }
 }
 
 export function getMockStreams(): StreamData[] {
@@ -485,8 +741,98 @@ export function claimableNow(stream: any): string {
     return "0";
   }
 
+  // When paused, freeze the elapsed window at the moment of pausing so the
+  // streamed/claimable balance stops advancing.
+  if (stream.status === "Paused" && stream.pausedAt) {
+    const pausedAt = new Date(stream.pausedAt).getTime();
+    const elapsedSeconds = Math.max(0, (pausedAt - lastWithdrawTime) / 1000);
+    return Math.floor(flowRate * elapsedSeconds).toString();
+  }
+
   const elapsedSeconds = Math.max(0, (Date.now() - lastWithdrawTime) / 1000);
+  // A cancelled or ended stream stops accruing once it can no longer drip.
+  // Cap the effective "now" so the recipient can only claim what actually
+  // streamed before the stream stopped.
+  let effectiveNow = Date.now();
+  if (stream.status === "Cancelled" && stream.cancelledAt) {
+    effectiveNow = Math.min(effectiveNow, stream.cancelledAt * 1000);
+  } else if (stream.status === "Ended") {
+    effectiveNow = Math.min(effectiveNow, new Date(stream.endTime).getTime());
+  }
+
+  const elapsedSeconds = Math.max(0, (effectiveNow - lastWithdrawTime) / 1000);
   return Math.floor(flowRate * elapsedSeconds).toString();
+}
+
+/**
+ * Amount (stroops) streamed out of the deposit so far, respecting pause state.
+ * For a paused stream this freezes at the value when the stream was paused.
+ */
+export function getStreamedAmount(stream: any): number {
+  if (!stream) return 0;
+  const flowRate = Number(stream.flowRate);
+  const lastWithdrawTime = new Date(stream.lastWithdrawTime).getTime();
+  if (!Number.isFinite(flowRate) || !Number.isFinite(lastWithdrawTime)) return 0;
+
+  let elapsedSeconds = Math.max(0, (Date.now() - lastWithdrawTime) / 1000);
+  if (stream.status === "Paused" && stream.pausedAt) {
+    const pausedAt = new Date(stream.pausedAt).getTime();
+    elapsedSeconds = Math.max(0, (pausedAt - lastWithdrawTime) / 1000);
+  }
+  return Math.floor(flowRate * elapsedSeconds);
+}
+
+/**
+ * Remaining (unstreamed) deposit in stroops. Freezes while the stream is
+ * paused instead of continuing to count down.
+ */
+export function getRemainingBalance(stream: any): number {
+  if (!stream) return 0;
+  const deposit = Number(stream.deposit);
+  if (!Number.isFinite(deposit)) return 0;
+  return Math.max(0, deposit - getStreamedAmount(stream));
+}
+
+/**
+ * On-chain price oracle (simulated). Returns the USD price for a given token
+ * asset code by reading a contract-style price feed. USD-pegged assets map to
+ * 1; volatile assets (e.g. XLM) carry a snapshot price.
+ */
+const ORACLE_PRICES: Record<string, number> = {
+  USDC: 1,
+  USDA: 1,
+  EURT: 1.08,
+  YUSDC: 1,
+  XLM: 0.12,
+};
+
+export async function getOraclePrice(token: string): Promise<number | null> {
+  const key = (token || "").toUpperCase();
+  if (key in ORACLE_PRICES) return ORACLE_PRICES[key];
+  return null;
+ * Total amount that has dripped into a stream up to the current effective
+ * time, taking cancellation and end time into account. For a cancelled stream
+ * this is the pro-rated amount streamed before cancellation, not the full
+ * deposit.
+ */
+export function getStreamedAmount(stream: StreamData): number {
+  const flowRate = Number(stream.flowRate);
+  const start = new Date(stream.startTime).getTime();
+  if (!Number.isFinite(flowRate) || !Number.isFinite(start)) return 0;
+
+  let effectiveNow = Date.now();
+  if (stream.status === "Cancelled" && stream.cancelledAt) {
+    effectiveNow = Math.min(effectiveNow, stream.cancelledAt * 1000);
+  } else if (stream.status === "Ended") {
+    effectiveNow = Math.min(effectiveNow, new Date(stream.endTime).getTime());
+  } else if (stream.status === "Paused") {
+    // Paused streams are treated like active for display (no special cap),
+    // but we still never exceed the end time.
+    effectiveNow = Math.min(effectiveNow, new Date(stream.endTime).getTime());
+  }
+
+  if (effectiveNow <= start) return 0;
+  return Math.floor(flowRate * (effectiveNow - start) / 1000);
 }
 
 export interface StreamEvent {
@@ -551,18 +897,13 @@ export interface ActivityPage {
   nextCursor: string | null;
 }
 
-/**
- * Cursor-paginated, filterable activity feed over all stream events
- * (newest first). Filters are applied before pagination so `nextCursor`
- * always points at the next matching event, not just the next raw event.
- */
-export function getActivityEvents(query: ActivityQuery = {}): ActivityPage {
-  const { cursor = null, limit = 10, types, asset, from, to } = query;
-
+/** Apply the activity query filters to the full event store (no pagination). */
+function filterActivityEvents(query: ActivityQuery): StreamEvent[] {
+  const { types, asset, from, to } = query;
   const fromMs = from ? new Date(from).getTime() : null;
   const toMs = to ? new Date(to).getTime() + 86_400_000 - 1 : null;
 
-  const filtered = MOCK_EVENTS.filter((ev) => {
+  return MOCK_EVENTS.filter((ev) => {
     if (types && types.length > 0 && !types.includes(ev.type)) return false;
     if (asset && ev.asset !== asset) return false;
     const ts = new Date(ev.timestamp).getTime();
@@ -570,6 +911,17 @@ export function getActivityEvents(query: ActivityQuery = {}): ActivityPage {
     if (toMs !== null && ts > toMs) return false;
     return true;
   });
+}
+
+/**
+ * Cursor-paginated, filterable activity feed over all stream events
+ * (newest first). Filters are applied before pagination so `nextCursor`
+ * always points at the next matching event, not just the next raw event.
+ */
+export function getActivityEvents(query: ActivityQuery = {}): ActivityPage {
+  const { cursor = null, limit = 10 } = query;
+
+  const filtered = filterActivityEvents(query);
 
   const startIndex = cursor ? filtered.findIndex((ev) => ev.id === cursor) + 1 : 0;
   const page = filtered.slice(startIndex, startIndex + limit);
@@ -577,6 +929,78 @@ export function getActivityEvents(query: ActivityQuery = {}): ActivityPage {
     startIndex + limit < filtered.length ? page[page.length - 1]?.id ?? null : null;
 
   return { events: page, nextCursor };
+}
+
+/**
+ * Return every stream event matching the given query (filters applied, but
+ * no cursor/limit pagination). Used to build the full compliance audit log.
+ */
+export function getActivityEventsAll(query: ActivityQuery = {}): StreamEvent[] {
+  return filterActivityEvents(query);
+}
+
+export interface AuditLogEntry {
+  id: string;
+  streamId: string;
+  type: StreamEvent["type"];
+  timestamp: string;
+  transactionHash: string;
+  amount?: string;
+  asset?: string;
+  message?: string;
+}
+
+export interface StreamAuditLog {
+  /** Schema version for downstream compliance/accounting tooling. */
+  version: 1;
+  /** When this export was generated (ISO 8601). */
+  exportedAt: string;
+  /** Total number of events included in the export. */
+  count: number;
+  /** The filters that were applied to scope this export. */
+  filters: {
+    types?: StreamEvent["type"][];
+    asset?: string;
+    from?: string;
+    to?: string;
+  };
+  /** Every stream event in chronological (oldest-first) order. */
+  events: AuditLogEntry[];
+}
+
+/**
+ * Build a compliance-grade audit log of all matching stream events, including
+ * timestamps and transaction hashes, ready for JSON export and accounting use.
+ * Events are returned oldest-first so the export reads as a chronological ledger.
+ */
+export function buildStreamAuditLog(query: ActivityQuery = {}): StreamAuditLog {
+  const events = getActivityEventsAll(query)
+    .slice()
+    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+    .map<AuditLogEntry>((ev) => ({
+      id: ev.id,
+      streamId: ev.streamId,
+      type: ev.type,
+      timestamp: ev.timestamp,
+      transactionHash: ev.txHash,
+      amount: ev.amount,
+      asset: ev.asset,
+      message: ev.message,
+    }));
+
+  const { types, asset, from, to } = query;
+  return {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    count: events.length,
+    filters: {
+      ...(types && types.length > 0 ? { types } : {}),
+      ...(asset ? { asset } : {}),
+      ...(from ? { from } : {}),
+      ...(to ? { to } : {}),
+    },
+    events,
+  };
 }
 
 /** Unique asset codes seen across all events, for the asset filter dropdown. */

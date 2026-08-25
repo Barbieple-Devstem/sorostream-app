@@ -79,8 +79,15 @@ export default function StreamTimeline({
 
         <div className="flex justify-between items-center text-[11px] text-gray-400">
           <span>Flow Rate: {flowRate.toFixed(4)} / sec</span>
-          <span className="font-semibold text-gray-300">
-            {isPaused ? "⏸ Flow Paused" : isInactive ? "⏹ Stream Ended" : "▶ Streaming Funds"}
+          <span
+            className="font-semibold text-gray-300"
+            role="status"
+            aria-live="polite"
+            aria-label={isPaused ? "Flow paused" : isInactive ? "Stream ended" : "Streaming funds"}
+          >
+            <span aria-hidden="true">
+              {isPaused ? "⏸ Flow Paused" : isInactive ? "⏹ Stream Ended" : "▶ Streaming Funds"}
+            </span>
           </span>
         </div>
       </div>

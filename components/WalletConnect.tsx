@@ -6,6 +6,7 @@ import {
   WalletAdapter,
   WALLET_LABELS,
   freighterAdapter,
+  lobstrAdapter,
   ledgerAdapter,
   ServerKeypairAdapter,
 } from "@/src/lib/wallets";
@@ -22,7 +23,7 @@ interface WalletConnectProps {
   compact?: boolean;
 }
 
-const WALLET_TYPES: WalletType[] = ["freighter", "ledger", "server-keypair"];
+const WALLET_TYPES: WalletType[] = ["freighter", "lobstr", "ledger", "server-keypair"];
 
 /**
  * Multi-wallet connect button.
@@ -34,7 +35,7 @@ const WALLET_TYPES: WalletType[] = ["freighter", "ledger", "server-keypair"];
  */
 export default function WalletConnect({ onConnect, compact = false }: WalletConnectProps) {
   const t = useTranslations("wallet");
-  const { address: contextAddress, connect: contextConnect, disconnect: contextDisconnect } = useWallet();
+  const { address: contextAddress, connect: contextConnect, disconnect: contextDisconnect, activeStreamCount } = useWallet();
 
   const [walletType, setWalletType] = useState<WalletType>("freighter");
   const [secretInput, setSecretInput] = useState("");
@@ -43,6 +44,8 @@ export default function WalletConnect({ onConnect, compact = false }: WalletConn
   const [adapter, setAdapter] = useState<WalletAdapter | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  /** When true, shows a warning before disconnecting while streams are active. */
+  const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
 
   // ── Freighter extension detection ──────────────────────────────────────
   // Start as `null` (unknown) so we don't flash the install prompt during SSR
@@ -92,6 +95,13 @@ export default function WalletConnect({ onConnect, compact = false }: WalletConn
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [dropdownOpen]);
 
+  // "w" keyboard shortcut (GlobalShortcuts) opens the connect dropdown
+  useEffect(() => {
+    const open = () => setDropdownOpen(true);
+    window.addEventListener("sorostream:open-wallet", open);
+    return () => window.removeEventListener("sorostream:open-wallet", open);
+  }, []);
+
   /**
    * Keep local adapter state aligned with the context address.
    * When the context detects an account switch (via WatchWalletChanges) and
@@ -110,11 +120,20 @@ export default function WalletConnect({ onConnect, compact = false }: WalletConn
     adapter?.disconnect();
     setAdapter(null);
     setSecretInput("");
+    setShowDisconnectConfirm(false);
     contextDisconnect();
     localStorage.removeItem("sorostream_wallet_connected");
     localStorage.removeItem("sorostream_wallet_type");
     localStorage.removeItem("sorostream_wallet_secret");
   }, [adapter, contextDisconnect]);
+
+  const handleDisconnectClick = useCallback(() => {
+    if (activeStreamCount > 0) {
+      setShowDisconnectConfirm(true);
+    } else {
+      handleDisconnect();
+    }
+  }, [activeStreamCount, handleDisconnect]);
 
   useEffect(() => {
     async function autoReconnect() {
@@ -128,6 +147,8 @@ export default function WalletConnect({ onConnect, compact = false }: WalletConn
         let selected: WalletAdapter;
         if (storedType === "freighter") {
           selected = freighterAdapter;
+        } else if (storedType === "lobstr") {
+          selected = lobstrAdapter;
         } else if (storedType === "ledger") {
           selected = ledgerAdapter;
         } else if (storedType === "server-keypair") {
@@ -170,6 +191,7 @@ export default function WalletConnect({ onConnect, compact = false }: WalletConn
     try {
       let selected: WalletAdapter;
       if (walletType === "freighter") selected = freighterAdapter;
+      else if (walletType === "lobstr") selected = lobstrAdapter;
       else if (walletType === "ledger") selected = ledgerAdapter;
       else selected = new ServerKeypairAdapter(secretInput);
 
@@ -178,6 +200,8 @@ export default function WalletConnect({ onConnect, compact = false }: WalletConn
         setError(
           walletType === "freighter"
             ? t("error_freighter")
+            : walletType === "lobstr"
+            ? t("error_lobstr")
             : walletType === "ledger"
             ? t("error_ledger")
             : t("error_server_keypair")
@@ -292,12 +316,72 @@ export default function WalletConnect({ onConnect, compact = false }: WalletConn
           <CopyButton value={publicKey} label="Copy wallet address" />
         </span>
         <button
-          onClick={handleDisconnect}
+          onClick={handleDisconnectClick}
           className="shrink-0 rounded-lg border border-slate-500 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
           aria-label="Disconnect wallet"
         >
           {t("disconnect")}
         </button>
+
+        {showDisconnectConfirm && (
+          <div
+            className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setShowDisconnectConfirm(false);
+            }}
+          >
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="disconnect-confirm-title"
+              className="bg-gray-800 rounded-xl shadow-2xl max-w-sm w-full border border-amber-700"
+            >
+              <div className="p-6 space-y-4">
+                <h2
+                  id="disconnect-confirm-title"
+                  className="text-lg font-semibold text-white flex items-center gap-2"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="text-amber-400"
+                    aria-hidden="true"
+                  >
+                    <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                    <line x1="12" y1="9" x2="12" y2="13" />
+                    <line x1="12" y1="17" x2="12.01" y2="17" />
+                  </svg>
+                  Disconnect wallet?
+                </h2>
+                <p className="text-sm text-gray-300">
+                  You have {activeStreamCount} active stream{activeStreamCount !== 1 ? "s" : ""}.
+                  Disconnecting stops live updates — you&apos;ll need to reconnect to manage them.
+                </p>
+                <div className="flex gap-3 pt-2">
+                  <button
+                    onClick={() => setShowDisconnectConfirm(false)}
+                    className="flex-1 border border-gray-600 text-gray-300 py-2 rounded-lg text-sm hover:bg-gray-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+                  >
+                    Keep Connected
+                  </button>
+                  <button
+                    onClick={handleDisconnect}
+                    className="flex-1 bg-red-700 text-white py-2 rounded-lg text-sm font-medium hover:bg-red-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+                  >
+                    Disconnect
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }

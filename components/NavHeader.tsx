@@ -19,6 +19,7 @@ import RpcHealthIndicator from "@/components/RpcHealthIndicator";
 const NAV_LINKS = [
   { href: "/", key: "home" },
   { href: "/dashboard", key: "dashboard" },
+  { href: "/analytics", key: "analytics" },
   { href: "/stream/new", key: "create" },
   { href: "/activity", key: "activity" },
   { href: "/admin", key: "admin" },

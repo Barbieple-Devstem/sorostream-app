@@ -44,6 +44,8 @@ interface Settings {
   defaultDurationSeconds: number;
   defaultCliffDurationSeconds: number;
   preferredTheme: "light" | "dark" | "system";
+  /** Preferred fiat currency for asset conversion previews (e.g. USD, EUR). */
+  preferredFiat: string;
 }
 
 interface SettingsContextValue extends Settings {
@@ -70,6 +72,7 @@ const defaultSettings: Settings = {
   defaultDurationSeconds: 0,
   defaultCliffDurationSeconds: 0,
   preferredTheme: "system",
+  preferredFiat: "USD",
 };
 
 const SettingsContext = createContext<SettingsContextValue | undefined>(undefined);
@@ -89,6 +92,7 @@ function loadSettings(): Settings {
       defaultDurationSeconds: parsed.defaultDurationSeconds ?? defaultSettings.defaultDurationSeconds,
       defaultCliffDurationSeconds: parsed.defaultCliffDurationSeconds ?? defaultSettings.defaultCliffDurationSeconds,
       preferredTheme: (parsed.preferredTheme as any) ?? defaultSettings.preferredTheme,
+      preferredFiat: parsed.preferredFiat ?? defaultSettings.preferredFiat,
     };
   } catch {
     return defaultSettings;
