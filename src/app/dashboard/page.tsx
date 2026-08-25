@@ -51,7 +51,7 @@ function DashboardContent() {
   const router = useRouter();
   const { addToast } = useToast();
   const { bookmarkedIds } = useBookmarks();
-  const { address, streamRefreshTrigger } = useWallet();
+  const { address, streamRefreshTrigger, setActiveStreamCount } = useWallet();
   const [loading, setLoading] = useState(true);
   const [streams, setStreams] = useState<StreamData[]>([]);
 
@@ -95,6 +95,8 @@ function DashboardContent() {
   // UI state
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
   const [showGiftModal, setShowGiftModal] = useState(false);
+  // When "asset", streams are grouped by their token in the list view.
+  const [groupBy, setGroupBy] = useState<"none" | "asset">("none");
   const searchRef = useRef<HTMLInputElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -233,6 +235,20 @@ function DashboardContent() {
 
   const hasActiveFilters = statusFilter || tokenFilter || search.trim() || bookmarksOnly || selectedTags.length > 0;
 
+  // Grouped view: bucket the (already filtered + sorted) streams by token.
+  const assetGroups = useMemo(() => {
+    if (groupBy !== "asset") return [];
+    const map = new Map<string, StreamData[]>();
+    for (const s of sortedFiltered) {
+      const key = s.token || "Unknown";
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(s);
+    }
+    return Array.from(map.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([token, items]) => ({ token, items }));
+  }, [groupBy, sortedFiltered]);
+
   const state: DashboardState = loading
     ? "loading"
     : sortedFiltered.length > 0
@@ -264,6 +280,32 @@ function DashboardContent() {
   }, [allFilteredSelected, filtered]);
 
   const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
+
+  // Keep the wallet context informed of how many streams are still active so
+  // it can warn before disconnecting (#397).
+  useEffect(() => {
+    setActiveStreamCount(streams.filter((s) => s.status === "Active").length);
+  }, [streams, setActiveStreamCount]);
+
+  // Clone a stream by pre-filling the create form with its parameters (#393).
+  const handleClone = useCallback(
+    (id: string) => {
+      const s = streams.find((x) => x.id === id);
+      if (!s) return;
+      const duration = Math.round(
+        (new Date(s.endTime).getTime() - new Date(s.startTime).getTime()) / 1000,
+      );
+      const qp = new URLSearchParams({
+        recipient: s.recipient,
+        amount: (s.deposit / 10_000_000).toString(),
+        token: s.token,
+        duration: String(duration),
+        cliff: "0",
+      });
+      router.push(`/stream/new?${qp.toString()}`);
+    },
+    [streams, router],
+  );
 
   const handleBulkCancel = useCallback(async () => {
     const ids = Array.from(selectedIds);
@@ -573,6 +615,17 @@ function DashboardContent() {
               >
                 {sortOrder === "asc" ? "↑ Asc" : "↓ Desc"}
               </button>
+              <button
+                onClick={() => setGroupBy((g) => (g === "asset" ? "none" : "asset"))}
+                aria-pressed={groupBy === "asset"}
+                className={`ml-1 px-3 py-1.5 rounded-lg text-xs border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 ${
+                  groupBy === "asset"
+                    ? "bg-green-700 border-green-600 text-white"
+                    : "border-gray-700 text-gray-400 hover:bg-gray-800"
+                }`}
+              >
+                Group by asset
+              </button>
             </div>
 
             {/* Bulk actions bar */}
@@ -672,12 +725,50 @@ function DashboardContent() {
                   </button>
                 )}
               </div>
+            ) : groupBy === "asset" ? (
+              <div className="space-y-6">
+                {assetGroups.map(({ token, items }) => (
+                  <section key={token} aria-label={`Streams in ${token}`}>
+                    <div className="flex items-center gap-2 mb-3">
+                      <h3 className="text-sm font-semibold text-white">{token}</h3>
+                      <span className="text-xs text-gray-400 bg-gray-800 rounded-full px-2 py-0.5">
+                        {items.length}
+                      </span>
+                    </div>
+                    <div className="rounded-xl border border-gray-700 bg-gray-900 p-2">
+                      <div className="grid gap-4 md:grid-cols-2">
+                        {items.map((s) => (
+                          <div key={s.id} className="relative">
+                            <Link href={`/stream/${s.id}`} className="block">
+                              <StreamCard
+                                id={s.id}
+                                sender={s.sender}
+                                recipient={s.recipient}
+                                flowRate={s.flowRate}
+                                deposit={s.deposit}
+                                status={s.status}
+                                selected={multiSelectMode ? selectedIds.has(s.id) : false}
+                                onToggle={multiSelectMode ? toggleSelect : undefined}
+                                onClone={handleClone}
+                                scheduledStartTime={s.scheduledStartTime}
+                                startTime={s.startTime}
+                                endTime={s.endTime}
+                              />
+                            </Link>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </section>
+                ))}
+              </div>
             ) : (
               <div className="rounded-xl border border-gray-700 bg-gray-900 p-2">
                 <StreamVirtualList
                   streams={sortedFiltered}
                   selectedIds={multiSelectMode ? selectedIds : undefined}
                   onToggleSelect={multiSelectMode ? toggleSelect : undefined}
+                  onClone={handleClone}
                 />
               </div>
             )}
