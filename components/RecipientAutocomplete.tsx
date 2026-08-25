@@ -11,6 +11,8 @@ interface RecipientAutocompleteProps {
   placeholder?: string;
   error?: string;
   touched?: boolean;
+  /** Connected sender address — scopes the contact list to this sender's book (#432). */
+  senderAddress?: string;
 }
 
 function truncateAddress(address: string): string {
@@ -25,13 +27,14 @@ export default function RecipientAutocomplete({
   placeholder,
   error,
   touched,
+  senderAddress,
 }: RecipientAutocompleteProps) {
   const [open, setOpen] = useState(false);
   const [contacts, setContacts] = useState<AddressBookContact[]>([]);
   const [highlightedIdx, setHighlightedIdx] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
-  
+
   // Federation lookup state
   const [federationResolution, setFederationResolution] = useState<{
     status: "idle" | "resolving" | "resolved" | "failed";
@@ -41,8 +44,8 @@ export default function RecipientAutocomplete({
   const federationTimeoutRef = useRef<NodeJS.Timeout>();
 
   useEffect(() => {
-    setContacts(getContacts());
-  }, []);
+    setContacts(getContacts(senderAddress));
+  }, [senderAddress]);
 
   // Federation lookup effect - triggered when value contains * (federation address)
   useEffect(() => {
