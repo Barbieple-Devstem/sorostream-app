@@ -6,10 +6,13 @@ import {
   saveContact,
   updateContact,
   deleteContact,
+  isWhitelistEnforced,
+  setWhitelistEnforced,
   MAX_CONTACTS,
   type AddressBookContact,
 } from "@/src/lib/addressBook";
 import { useToast } from "@/src/lib/toast";
+import { useWallet } from "@/src/context/WalletContext";
 
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -43,6 +46,9 @@ function validateName(name: string): string {
 
 export default function AddressBookPage() {
   const { addToast } = useToast();
+  const { address } = useWallet();
+  // Per-sender scoping (#432): each connected wallet maintains its own book.
+  const owner = address ?? undefined;
   const [contacts, setContacts] = useState<AddressBookContact[]>([]);
   const [search, setSearch] = useState("");
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -50,12 +56,28 @@ export default function AddressBookPage() {
   const [formErrors, setFormErrors] = useState({ name: "", address: "" });
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [whitelistOn, setWhitelistOn] = useState(false);
 
-  const reload = useCallback(() => setContacts(getContacts()), []);
+  const reload = useCallback(() => {
+    setContacts(getContacts(owner));
+    setWhitelistOn(isWhitelistEnforced(owner));
+  }, [owner]);
 
   useEffect(() => {
     reload();
   }, [reload]);
+
+  function handleToggleWhitelist() {
+    const next = !whitelistOn;
+    setWhitelistEnforced(next, owner);
+    setWhitelistOn(next);
+    addToast(
+      next
+        ? "Whitelist enabled — only saved recipients can receive your streams."
+        : "Whitelist disabled — any valid recipient is allowed.",
+      next ? "success" : "info",
+    );
+  }
 
   const filtered = contacts.filter(
     (c) =>
@@ -114,7 +136,7 @@ export default function AddressBookPage() {
       const ok = updateContact(editing, {
         name: form.name.trim(),
         address: form.address.trim(),
-      });
+      }, owner);
       if (ok) {
         addToast("Contact updated.", "success");
       } else {
@@ -129,7 +151,7 @@ export default function AddressBookPage() {
         id: generateId(),
         name: form.name.trim(),
         address: form.address.trim(),
-      });
+      }, owner);
       if (ok) {
         addToast("Contact saved.", "success");
       } else {
@@ -142,7 +164,7 @@ export default function AddressBookPage() {
   }
 
   function handleDelete(id: string) {
-    deleteContact(id);
+    deleteContact(id, owner);
     addToast("Contact deleted.", "success");
     reload();
     setConfirmDeleteId(null);
@@ -161,6 +183,7 @@ export default function AddressBookPage() {
             <h1 className="text-2xl font-bold">Address Book</h1>
             <p className="text-gray-400 text-sm mt-1">
               {contacts.length}/{MAX_CONTACTS} contacts
+              {address && <span className="text-gray-500"> · scoped to your wallet</span>}
             </p>
           </div>
           <button
@@ -171,6 +194,46 @@ export default function AddressBookPage() {
           >
             + Add Contact
           </button>
+        </div>
+
+        {/* Recipient whitelist toggle (#432) */}
+        <div className="bg-gray-800 border border-gray-700 rounded-xl p-5 mb-6">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1">
+              <h2 className="text-base font-semibold">Recipient Whitelist</h2>
+              <p className="text-gray-400 text-sm mt-1">
+                When enabled, streams can only be created to addresses saved in
+                your address book.
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={whitelistOn}
+              aria-label="Toggle recipient whitelist enforcement"
+              disabled={!owner}
+              onClick={handleToggleWhitelist}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed ${
+                whitelistOn ? "bg-green-600" : "bg-gray-600"
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                  whitelistOn ? "translate-x-6" : "translate-x-1"
+                }`}
+              />
+            </button>
+          </div>
+          {!owner && (
+            <p className="text-yellow-400 text-xs mt-2">
+              Connect a wallet to maintain your own per-sender recipient list.
+            </p>
+          )}
+          {whitelistOn && (
+            <p className="text-green-400 text-xs mt-2" data-testid="whitelist-status">
+              ✓ Whitelist active for {address?.slice(0, 6)}…{address?.slice(-4)}
+            </p>
+          )}
         </div>
 
         {/* Inline Add / Edit Form */}

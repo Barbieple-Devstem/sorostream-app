@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import Link from "next/link";
 import CopyButton from "@/components/CopyButton";
 import { useNetwork, NETWORK_CONFIG } from "@/src/lib/network";
 import { useContractVersion } from "@/src/context/ContractVersionContext";
@@ -153,9 +154,17 @@ export default function AppFooter() {
           </span>
         </div>
 
-        {/* Right: copyright */}
-        <span className="text-gray-400 dark:text-gray-600">
-          © {new Date().getFullYear()} SoroStream
+        {/* Right: fee docs + copyright */}
+        <span className="flex items-center gap-3">
+          <Link
+            href="/docs/fees"
+            className="hover:text-gray-700 dark:hover:text-gray-200 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 rounded"
+          >
+            Fee Structure
+          </Link>
+          <span className="text-gray-400 dark:text-gray-600">
+            © {new Date().getFullYear()} SoroStream
+          </span>
         </span>
       </div>
     </footer>

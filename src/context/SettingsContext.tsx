@@ -5,6 +5,7 @@
  * Manages:
  *   showUsd: boolean           — display USD equivalents alongside XLM amounts.
  *   withdrawThreshold: number  — XLM amount above which a typed confirmation is required.
+ *   streamThreshold: number    — stream amount above which typed confirmation is required (#428).
  */
 import {
   createContext,
@@ -37,6 +38,7 @@ export const DEFAULT_SHORTCUTS: ShortcutMap = {
 interface Settings {
   showUsd: boolean;
   withdrawThreshold: number;
+  streamThreshold: number;
   language: string;
   keyboardShortcuts: ShortcutMap;
   // Stream creation preferences
@@ -51,6 +53,7 @@ interface Settings {
 interface SettingsContextValue extends Settings {
   toggleShowUsd: () => void;
   setWithdrawThreshold: (value: number) => void;
+  setStreamThreshold: (value: number) => void;
   setLanguage: (value: string) => void;
   setKeyboardShortcuts: (shortcuts: ShortcutMap) => void;
   resetKeyboardShortcuts: () => void;
@@ -66,6 +69,7 @@ interface SettingsContextValue extends Settings {
 const defaultSettings: Settings = {
   showUsd: true,
   withdrawThreshold: 1000,
+  streamThreshold: 10_000,
   language: "en",
   keyboardShortcuts: DEFAULT_SHORTCUTS,
   defaultToken: "USDC",
@@ -86,6 +90,7 @@ function loadSettings(): Settings {
     return {
       showUsd: parsed.showUsd ?? defaultSettings.showUsd,
       withdrawThreshold: parsed.withdrawThreshold ?? defaultSettings.withdrawThreshold,
+      streamThreshold: parsed.streamThreshold ?? defaultSettings.streamThreshold,
       language: parsed.language ?? defaultSettings.language,
       keyboardShortcuts: parsed.keyboardShortcuts ?? defaultSettings.keyboardShortcuts,
       defaultToken: parsed.defaultToken ?? defaultSettings.defaultToken,
@@ -133,6 +138,14 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const setWithdrawThreshold = useCallback((value: number) => {
     setSettings((prev) => {
       const next = { ...prev, withdrawThreshold: value };
+      persist(next);
+      return next;
+    });
+  }, []);
+
+  const setStreamThreshold = useCallback((value: number) => {
+    setSettings((prev) => {
+      const next = { ...prev, streamThreshold: value };
       persist(next);
       return next;
     });
@@ -224,6 +237,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       ...settings,
       toggleShowUsd,
       setWithdrawThreshold,
+      setStreamThreshold,
       setLanguage,
       setKeyboardShortcuts,
       resetKeyboardShortcuts,
@@ -238,6 +252,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       settings,
       toggleShowUsd,
       setWithdrawThreshold,
+      setStreamThreshold,
       setLanguage,
       setKeyboardShortcuts,
       resetKeyboardShortcuts,

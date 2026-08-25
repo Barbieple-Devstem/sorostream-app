@@ -40,6 +40,8 @@ export default function SettingsPage() {
   const {
     withdrawThreshold,
     setWithdrawThreshold,
+    streamThreshold,
+    setStreamThreshold,
     language,
     setLanguage,
     defaultToken,
@@ -55,6 +57,8 @@ export default function SettingsPage() {
   const { address } = useWallet();
   const [thresholdInput, setThresholdInput] = useState(String(withdrawThreshold));
   const [thresholdError, setThresholdError] = useState("");
+  const [streamThresholdInput, setStreamThresholdInput] = useState(String(streamThreshold));
+  const [streamThresholdError, setStreamThresholdError] = useState("");
   const [showTwoFactorSetup, setShowTwoFactorSetup] = useState(false);
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
   
@@ -66,7 +70,8 @@ export default function SettingsPage() {
   // Sync input when context hydrates from localStorage
   useEffect(() => {
     setThresholdInput(String(withdrawThreshold));
-  }, [withdrawThreshold]);
+    setStreamThresholdInput(String(streamThreshold));
+  }, [withdrawThreshold, streamThreshold]);
 
   // Sync preferences
   useEffect(() => {
@@ -78,9 +83,12 @@ export default function SettingsPage() {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [errors, setErrors] = useState({ name: "", address: "" });
 
+  // Per-sender address book scoping (#432)
+  const senderOwner = address ?? undefined;
+
   const load = useCallback(() => {
-    setContacts(getContacts());
-  }, []);
+    setContacts(getContacts(senderOwner));
+  }, [senderOwner]);
 
   useEffect(() => {
     load();
@@ -100,7 +108,7 @@ export default function SettingsPage() {
     if (!validate()) return;
 
     if (form.id) {
-      const ok = updateContact(form.id, { name: form.name.trim(), address: form.address.trim() });
+      const ok = updateContact(form.id, { name: form.name.trim(), address: form.address.trim() }, senderOwner);
       if (ok) {
         addToast(t("toast_contact_updated"), "success");
       } else {
@@ -116,7 +124,7 @@ export default function SettingsPage() {
         name: form.name.trim(),
         address: form.address.trim(),
       };
-      const ok = saveContact(contact);
+      const ok = saveContact(contact, senderOwner);
       if (ok) {
         addToast(t("toast_contact_saved"), "success");
       } else {
@@ -134,7 +142,7 @@ export default function SettingsPage() {
   }
 
   function handleDelete(id: string) {
-    deleteContact(id);
+    deleteContact(id, senderOwner);
     if (form.id === id) setForm(emptyForm);
     load();
     addToast(t("toast_contact_deleted"), "info");
@@ -198,6 +206,52 @@ export default function SettingsPage() {
             </div>
             {thresholdError && (
               <p id="threshold-error" className="text-red-400 text-xs mt-1">{thresholdError}</p>
+            )}
+          </div>
+        </div>
+
+        {/* Large Stream Confirmation Threshold (#428) */}
+        <div className="bg-gray-800 rounded-xl p-6 space-y-4 mb-8">
+          <h2 className="text-lg font-semibold">{t("stream_threshold_title")}</h2>
+          <p className="text-gray-400 text-sm">
+            {t("stream_threshold_desc")}
+          </p>
+          <div>
+            <label htmlFor="stream-threshold" className="text-gray-200 text-sm font-medium block mb-1">
+              {t("stream_threshold_label")}
+            </label>
+            <div className="flex gap-3">
+              <input
+                id="stream-threshold"
+                type="number"
+                min="0"
+                step="1"
+                value={streamThresholdInput}
+                onChange={(e) => {
+                  setStreamThresholdInput(e.target.value);
+                  setStreamThresholdError("");
+                }}
+                className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
+                aria-invalid={!!streamThresholdError}
+                aria-describedby={streamThresholdError ? "stream-threshold-error" : undefined}
+              />
+              <button
+                onClick={() => {
+                  const parsed = parseFloat(streamThresholdInput);
+                  if (!Number.isFinite(parsed) || parsed < 0) {
+                    setStreamThresholdError(t("stream_threshold_error"));
+                    return;
+                  }
+                  setStreamThreshold(parsed);
+                  addToast(t("stream_threshold_saved"), "success");
+                }}
+                className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
+              >
+                {t("save")}
+              </button>
+            </div>
+            {streamThresholdError && (
+              <p id="stream-threshold-error" className="text-red-400 text-xs mt-1">{streamThresholdError}</p>
             )}
           </div>
         </div>

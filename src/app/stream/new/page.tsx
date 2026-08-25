@@ -14,6 +14,7 @@ import FeeEstimationPanel from "@/components/FeeEstimationPanel";
 import StreamCostCalculator from "@/components/StreamCostCalculator";
 import BatchCreateTab from "@/components/BatchCreateTab";
 import NetReceivedDisplay from "@/components/NetReceivedDisplay";
+import StreamDryRunPreview from "@/components/StreamDryRunPreview";
 import AddressVerificationBadge from "@/components/AddressVerificationBadge";
 import AddressVerificationWarning from "@/components/AddressVerificationWarning";
 import { SkeletonForm } from "@/components/Skeleton";
@@ -21,6 +22,7 @@ import { useTranslations } from "@/src/lib/i18n";
 import { trackEvent } from "@/src/lib/analytics";
 import { verifyAddress, canCreateStream, type AddressVerification } from "@/src/lib/addressVerification";
 import { sorostream, getFeeConfig, calcWithdrawBreakdown, validateMetadataUri, getCollateralConfig, checkIsNewSender, calcCollateral, getGasFeeEstimate, type GasFeeEstimate } from "@/src/lib/sorostream";
+import { getContacts, saveContact, isRecipientApproved, isWhitelistEnforced, type AddressBookContact } from "@/src/lib/addressBook";
 import { useWallet } from "@/src/context/WalletContext";
 import { getOptionalEnvVar } from "@/src/lib/env";
 import { readDraft, useFormPersist } from "@/src/lib/useFormPersist";
@@ -240,9 +242,9 @@ function NewStreamWizard() {
   const [feeBasisPoints, setFeeBasisPoints] = useState<number>(0);
   const [feeLoading, setFeeLoading] = useState(false);
 
-  // Load protocol fee config whenever we enter the review step
+  // Load protocol fee config whenever we enter the preview or review step (#430)
   useEffect(() => {
-    if (step !== "review") return;
+    if (step !== "review" && step !== "preview") return;
     let active = true;
     setFeeLoading(true);
     getFeeConfig()
@@ -287,6 +289,48 @@ function NewStreamWizard() {
   const [verificationAcknowledged, setVerificationAcknowledged] = useState(false);
   const [verificationLoading, setVerificationLoading] = useState(false);
   const verificationDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Sender's recipient whitelist / address book (#432)
+  const senderKey = address ?? undefined;
+  const [senderContacts, setSenderContacts] = useState<AddressBookContact[]>([]);
+  const [whitelistEnforced, setWhitelistEnforcedState] = useState(false);
+  const [savedToBook, setSavedToBook] = useState<string | null>(null); // last address quick-saved
+
+  useEffect(() => {
+    setSenderContacts(getContacts(senderKey));
+    setWhitelistEnforcedState(isWhitelistEnforced(senderKey));
+    setSavedToBook(null);
+  }, [senderKey]);
+
+  const recipientInBook =
+    !!recipient &&
+    /^G[A-Z2-7]{55}$/.test(recipient) &&
+    senderContacts.some((c) => c.address.toLowerCase() === recipient.toLowerCase());
+  const recipientApproved = isRecipientApproved(recipient, senderKey);
+  const recipientWhitelistError =
+    !recipient || recipientInBook
+      ? ""
+      : whitelistEnforced && !recipientApproved
+      ? "Recipient is not in your approved list. Add them via the Address Book to continue."
+      : "";
+
+  function handleQuickSaveRecipient() {
+    if (!recipient || !/^G[A-Z2-7]{55}$/.test(recipient)) return;
+    if (!senderContacts.some((c) => c.address.toLowerCase() === recipient.toLowerCase())) {
+      const ok = saveContact(
+        {
+          id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+          name: `${recipient.slice(0, 6)}…${recipient.slice(-4)}`,
+          address: recipient,
+        },
+        senderKey,
+      );
+      if (ok) {
+        setSenderContacts(getContacts(senderKey));
+        setSavedToBook(recipient);
+      }
+    }
+  }
 
   // Trigger address verification when recipient changes
   useEffect(() => {
@@ -338,6 +382,19 @@ function NewStreamWizard() {
 
   // Preview state
   const [previewLoading, setPreviewLoading] = useState(false);
+
+  // Large-amount typed confirmation (#428)
+  const streamThreshold = settings.streamThreshold;
+  const requiresTypedConfirm = (parseFloat(amount) || 0) >= streamThreshold && streamThreshold > 0;
+  const [confirmAmountInput, setConfirmAmountInput] = useState("");
+  const confirmAmountMatches =
+    !requiresTypedConfirm ||
+    confirmAmountInput.trim() === String(parseFloat(amount));
+
+  // Reset typed confirmation whenever the amount or step changes
+  useEffect(() => {
+    setConfirmAmountInput("");
+  }, [amount, step]);
 
   // Gas fee estimate
   const [gasFee, setGasFee] = useState<GasFeeEstimate | null>(null);
@@ -479,6 +536,11 @@ function NewStreamWizard() {
         setTouched((prev) => ({ ...prev, recipient: true }));
         return;
       }
+      // Whitelist enforcement (#432)
+      if (recipientWhitelistError) {
+        setErrors((prev) => ({ ...prev, recipient: recipientWhitelistError }));
+        return;
+      }
       setStep("amount");
     } else if (step === "amount") {
       const aErr = validateAmount(amount);
@@ -540,6 +602,15 @@ function NewStreamWizard() {
     if (rErr || aErr || dErr || eErr || cErr || sErr || mErr) {
       setErrors({ recipient: rErr, amount: aErr, duration: dErr, endDate: eErr, cliffDate: cErr, scheduledStart: sErr });
       setMetadataUriError(mErr);
+      return;
+    }
+
+    // Large-amount guard (#428): never sign unless the typed confirmation matches
+    if (!confirmAmountMatches) return;
+
+    // Whitelist guard (#432): never sign to an unapproved recipient
+    if (recipientWhitelistError) {
+      setErrors((prev) => ({ ...prev, recipient: recipientWhitelistError }));
       return;
     }
 
@@ -657,7 +728,7 @@ function NewStreamWizard() {
   }
 
   const canGoNext = step === "recipient"
-    ? recipient.length > 0 && canCreateStream(addressVerification) && verificationAcknowledged === (addressVerification?.status === "unverified")
+    ? recipient.length > 0 && canCreateStream(addressVerification) && verificationAcknowledged === (addressVerification?.status === "unverified") && !recipientWhitelistError
     : step === "amount"
     ? amount.length > 0 && duration > 0
     : true;
@@ -750,11 +821,38 @@ function NewStreamWizard() {
                 placeholder={t("recipient_placeholder")}
                 error={errors.recipient}
                 touched={touched.recipient}
+                senderAddress={senderKey}
               />
               {errors.recipient && (
                 <p id="recipient-error" className="text-red-400 text-sm mt-1">
                   {errors.recipient}
                 </p>
+              )}
+
+              {/* Address book status (#432) */}
+              {recipient && !errors.recipient && /^G[A-Z2-7]{55}$/.test(recipient) && (
+                <div className="mt-2 flex items-center gap-2 text-xs">
+                  {recipientInBook || savedToBook === recipient ? (
+                    <span className="text-green-400" data-testid="recipient-in-book">
+                      ✓ In your address book
+                    </span>
+                  ) : savedToBook !== recipient ? (
+                    <>
+                      <span className="text-gray-500">Not in your address book.</span>
+                      <button
+                        type="button"
+                        onClick={handleQuickSaveRecipient}
+                        className="text-green-400 hover:text-green-300 underline underline-offset-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 rounded"
+                        data-testid="quick-save-recipient"
+                      >
+                        Save to address book
+                      </button>
+                    </>
+                  ) : null}
+                  {whitelistEnforced && (
+                    <span className="ml-auto text-gray-500">Whitelist mode on</span>
+                  )}
+                </div>
               )}
 
               {recipient && !errors.recipient && (
@@ -1250,6 +1348,16 @@ function NewStreamWizard() {
         {/* Step: Preview */}
         {step === "preview" && (
           <div className="space-y-6">
+            {/* Dry-run simulation (#430) — runs before the user can confirm */}
+            <StreamDryRunPreview
+              active={step === "preview"}
+              amount={amount}
+              durationSeconds={duration}
+              cliffSeconds={cliffDate ? Math.max(0, Math.floor((new Date(cliffDate).getTime() - Date.now()) / 1000)) : undefined}
+              feeBasisPoints={feeBasisPoints}
+              token={selectedToken === CUSTOM_TOKEN_VALUE ? "tokens" : selectedToken}
+            />
+
             <div className="bg-gray-800 rounded-xl p-6 space-y-4 border border-gray-700">
               <p className="text-gray-400 text-sm mb-4">Here&apos;s what your stream will look like on-chain:</p>
 
@@ -1447,7 +1555,15 @@ function NewStreamWizard() {
                         <div className="flex justify-between items-center">
                           <span className="text-gray-400 text-sm">
                             Protocol fee{" "}
-                            <span className="text-gray-500 text-xs">({feePercent}%)</span>
+                            <span className="text-gray-500 text-xs">({feePercent}%)</span>{" "}
+                            <a
+                              href="/docs/fees"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-green-400 hover:text-green-300 underline underline-offset-2 text-xs ml-1"
+                            >
+                              how do fees work?
+                            </a>
                           </span>
                           <span className="text-yellow-400 font-mono text-sm" data-testid="protocol-fee">
                             {feeDisplay} {tokenLabel}
@@ -1578,6 +1694,55 @@ function NewStreamWizard() {
             })()}
             {/* Fee estimation — simulated pre-sign */}
             <FeeEstimationPanel active={step === "review"} />
+
+            {/* Large-amount typed confirmation (#428) */}
+            {requiresTypedConfirm && (
+              <div
+                role="group"
+                aria-label="Large amount confirmation"
+                className="bg-yellow-900/20 border border-yellow-700/50 rounded-xl p-4 space-y-3"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-yellow-400 text-base" aria-hidden="true">🔒</span>
+                  <p className="text-yellow-300 text-sm font-semibold">Large amount — confirmation required</p>
+                </div>
+                <p className="text-gray-300 text-sm">
+                  This stream is at or above your{" "}
+                  <span className="font-mono font-semibold text-yellow-300">
+                    {streamThreshold.toLocaleString()} {selectedToken === CUSTOM_TOKEN_VALUE ? "tokens" : selectedToken}
+                  </span>{" "}
+                  threshold. Type <span className="font-mono font-semibold text-white">{parseFloat(amount)}</span>{" "}
+                  to enable signing.
+                </p>
+                <input
+                  id="confirm-amount"
+                  type="text"
+                  inputMode="decimal"
+                  value={confirmAmountInput}
+                  onChange={(e) => setConfirmAmountInput(e.target.value)}
+                  placeholder={t("amount_placeholder")}
+                  autoComplete="off"
+                  className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-3 text-white font-mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+                  aria-label={`Type ${parseFloat(amount)} to confirm this large stream`}
+                  aria-invalid={confirmAmountInput.length > 0 && !confirmAmountMatches}
+                  aria-describedby="confirm-amount-status"
+                  data-testid="confirm-amount-input"
+                />
+                <p
+                  id="confirm-amount-status"
+                  aria-live="polite"
+                  className={`text-xs ${
+                    confirmAmountMatches ? "text-green-400" : "text-gray-500"
+                  }`}
+                >
+                  {confirmAmountInput.length === 0
+                    ? "Waiting for typed confirmation…"
+                    : confirmAmountMatches
+                    ? "✓ Amount confirmed — you can now sign."
+                    : "Typed amount does not match yet."}
+                </p>
+              </div>
+            )}
           </div>
         )}
 
@@ -1615,9 +1780,11 @@ function NewStreamWizard() {
             <button
               type="button"
               onClick={handleCreateStream}
-              disabled={loading}
+              disabled={loading || !confirmAmountMatches}
               aria-label="Confirm and sign transaction"
-              className="flex-1 bg-green-700 text-white py-3 rounded-lg font-medium hover:bg-green-800 disabled:opacity-50 transition-colors inline-flex items-center justify-center gap-2"
+              aria-disabled={loading || !confirmAmountMatches}
+              data-testid="confirm-sign-button"
+              className="flex-1 bg-green-700 text-white py-3 rounded-lg font-medium hover:bg-green-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors inline-flex items-center justify-center gap-2"
             >
               {loading ? (
                 <>

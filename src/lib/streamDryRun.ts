@@ -1,0 +1,118 @@
+/**
+ * Stream creation dry-run simulator (#430) — pure, UI-free, testable.
+ *
+ * Simulates what a proposed stream will look like over time before the
+ * user signs the creation transaction: cumulative vesting checkpoints,
+ * protocol-fee impact, and net receivable amounts.
+ *
+ * Amounts are in stroops (1 token = 10_000_000 stroops).
+ * Times are Unix timestamps in seconds.
+ */
+
+import { calculateVestingSchedule } from "./vestingSchedule";
+import { calcWithdrawBreakdown } from "./sorostream";
+
+/** Progress markers sampled by the dry run. */
+export const DRY_RUN_PROGRESS_MARKERS = [0, 0.25, 0.5, 0.75, 1] as const;
+
+export interface DryRunCheckpoint {
+  /** Fraction of the stream elapsed at this checkpoint (0..1). */
+  progress: number;
+  /** Unix timestamp (seconds) of the checkpoint. */
+  time: number;
+  /** Cumulative gross vested amount (stroops) at this point. */
+  vestedStroops: number;
+  /** Protocol fee (stroops) if the full vested amount were withdrawn here. */
+  feeStroops: number;
+  /** Net receivable (stroops) after protocol fee. */
+  netStroops: number;
+}
+
+export interface StreamDryRunInput {
+  /** Total deposit in stroops. */
+  amountStroops: number;
+  /** Stream duration in seconds (> 0). */
+  durationSeconds: number;
+  /** Optional cliff offset from start, in seconds (0 = no cliff). */
+  cliffSeconds?: number;
+  /** Protocol fee rate in basis points (e.g. 50 = 0.50%). */
+  feeBasisPoints?: number;
+  /** Stream start time (Unix seconds). Defaults to now. */
+  startTime?: number;
+}
+
+export interface StreamDryRunResult {
+  /** Whether the simulated creation would succeed. */
+  ok: boolean;
+  /** Failure reason when `ok` is false. */
+  error?: string;
+  /** Ordered checkpoints across the stream lifetime. */
+  checkpoints: DryRunCheckpoint[];
+  /** Total protocol fee (stroops) on the full deposit. */
+  totalFeeStroops: number;
+  /** Net total receivable (stroops) after fees. */
+  netTotalStroops: number;
+}
+
+const FAIL: Omit<StreamDryRunResult, "error"> = {
+  ok: false,
+  checkpoints: [],
+  totalFeeStroops: 0,
+  netTotalStroops: 0,
+};
+
+/**
+ * Simulate a stream over its lifetime without submitting a transaction.
+ *
+ * Samples the vesting curve (via calculateVestingSchedule, so cliff
+ * semantics are identical to on-chain behaviour) at even progress
+ * markers, applying the protocol fee to each checkpoint's vested amount.
+ */
+export function simulateStreamDryRun(input: StreamDryRunInput): StreamDryRunResult {
+  const {
+    amountStroops,
+    durationSeconds,
+    cliffSeconds = 0,
+    feeBasisPoints = 0,
+    startTime = Math.floor(Date.now() / 1000),
+  } = input;
+
+  if (!Number.isFinite(amountStroops) || amountStroops <= 0) {
+    return { ...FAIL, error: "Amount must be greater than 0." };
+  }
+  if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+    return { ...FAIL, error: "Duration must be greater than 0." };
+  }
+
+  const endTime = startTime + durationSeconds;
+  const cliffTime = cliffSeconds > 0 ? startTime + cliffSeconds : 0;
+
+  // Densely sample the vesting curve (every 1% of duration) so that each
+  // progress marker lands on an exact sample.
+  const { points } = calculateVestingSchedule(amountStroops, startTime, endTime, cliffTime, 101);
+  if (points.length === 0) {
+    return { ...FAIL, error: "Unable to simulate the requested stream." };
+  }
+
+  const checkpoints: DryRunCheckpoint[] = DRY_RUN_PROGRESS_MARKERS.map((progress) => {
+    const idx = Math.min(points.length - 1, Math.round(progress * (points.length - 1)));
+    const point = points[idx];
+    const { fee, net } = calcWithdrawBreakdown(point.claimable, feeBasisPoints);
+    return {
+      progress,
+      time: point.time,
+      vestedStroops: point.claimable,
+      feeStroops: fee,
+      netStroops: net,
+    };
+  });
+
+  const { fee, net } = calcWithdrawBreakdown(amountStroops, feeBasisPoints);
+
+  return {
+    ok: true,
+    checkpoints,
+    totalFeeStroops: fee,
+    netTotalStroops: net,
+  };
+}
