@@ -62,6 +62,8 @@ vi.mock('@/src/lib/freighter', () => {
       lastWatcher = new MockWatchWalletChanges(interval);
       return lastWatcher;
     }),
+    isSessionExpiredError: vi.fn(() => false),
+    FRIENDLY_SESSION_EXPIRED_MESSAGE: "Your wallet session has expired. Please reconnect to continue.",
   };
 });
 
