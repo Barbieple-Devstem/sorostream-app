@@ -11,6 +11,8 @@ export interface StreamData {
   endTime: string;
   lastWithdrawTime: string;
   status: "Active" | "Cancelled" | "Ended" | "Paused";
+  /** ISO timestamp captured when the stream was paused. Frozen balances use this. */
+  pausedAt?: string;
   /** Whether the stream auto-renews on expiry. */
   autoRenew?: boolean;
   /** Duration in seconds for each auto-renewal cycle (defaults to original duration). */
@@ -308,14 +310,31 @@ export const sorostream = {
   pauseStream: async (id?: string) => {
     if (id) {
       const stream = MOCK_STREAMS.find((s) => s.id === id);
-      if (stream && stream.status === "Active") stream.status = "Paused";
+      // Only an active stream can be paused. Capture the pause moment so that
+      // balances freeze at the value they held when streaming stopped.
+      if (stream && stream.status === "Active") {
+        stream.status = "Paused";
+        stream.pausedAt = new Date().toISOString();
+      }
     }
     return { txHash: "mock-pause-tx-hash" };
   },
   resumeStream: async (id?: string) => {
     if (id) {
       const stream = MOCK_STREAMS.find((s) => s.id === id);
-      if (stream && stream.status === "Paused") stream.status = "Active";
+      if (stream && stream.status === "Paused") {
+        // Advance the withdraw baseline by the duration of the pause so that
+        // accrued balances resume seamlessly from the frozen value rather than
+        // jumping forward to include the paused gap.
+        const lastWithdraw = new Date(stream.lastWithdrawTime).getTime();
+        const pausedAt = stream.pausedAt
+          ? new Date(stream.pausedAt).getTime()
+          : Date.now();
+        const pausedForMs = Math.max(0, Date.now() - pausedAt);
+        stream.lastWithdrawTime = new Date(lastWithdraw + pausedForMs).toISOString();
+        stream.pausedAt = undefined;
+        stream.status = "Active";
+      }
     }
     return { txHash: "mock-resume-tx-hash" };
   },
@@ -485,8 +504,64 @@ export function claimableNow(stream: any): string {
     return "0";
   }
 
+  // When paused, freeze the elapsed window at the moment of pausing so the
+  // streamed/claimable balance stops advancing.
+  if (stream.status === "Paused" && stream.pausedAt) {
+    const pausedAt = new Date(stream.pausedAt).getTime();
+    const elapsedSeconds = Math.max(0, (pausedAt - lastWithdrawTime) / 1000);
+    return Math.floor(flowRate * elapsedSeconds).toString();
+  }
+
   const elapsedSeconds = Math.max(0, (Date.now() - lastWithdrawTime) / 1000);
   return Math.floor(flowRate * elapsedSeconds).toString();
+}
+
+/**
+ * Amount (stroops) streamed out of the deposit so far, respecting pause state.
+ * For a paused stream this freezes at the value when the stream was paused.
+ */
+export function getStreamedAmount(stream: any): number {
+  if (!stream) return 0;
+  const flowRate = Number(stream.flowRate);
+  const lastWithdrawTime = new Date(stream.lastWithdrawTime).getTime();
+  if (!Number.isFinite(flowRate) || !Number.isFinite(lastWithdrawTime)) return 0;
+
+  let elapsedSeconds = Math.max(0, (Date.now() - lastWithdrawTime) / 1000);
+  if (stream.status === "Paused" && stream.pausedAt) {
+    const pausedAt = new Date(stream.pausedAt).getTime();
+    elapsedSeconds = Math.max(0, (pausedAt - lastWithdrawTime) / 1000);
+  }
+  return Math.floor(flowRate * elapsedSeconds);
+}
+
+/**
+ * Remaining (unstreamed) deposit in stroops. Freezes while the stream is
+ * paused instead of continuing to count down.
+ */
+export function getRemainingBalance(stream: any): number {
+  if (!stream) return 0;
+  const deposit = Number(stream.deposit);
+  if (!Number.isFinite(deposit)) return 0;
+  return Math.max(0, deposit - getStreamedAmount(stream));
+}
+
+/**
+ * On-chain price oracle (simulated). Returns the USD price for a given token
+ * asset code by reading a contract-style price feed. USD-pegged assets map to
+ * 1; volatile assets (e.g. XLM) carry a snapshot price.
+ */
+const ORACLE_PRICES: Record<string, number> = {
+  USDC: 1,
+  USDA: 1,
+  EURT: 1.08,
+  YUSDC: 1,
+  XLM: 0.12,
+};
+
+export async function getOraclePrice(token: string): Promise<number | null> {
+  const key = (token || "").toUpperCase();
+  if (key in ORACLE_PRICES) return ORACLE_PRICES[key];
+  return null;
 }
 
 export interface StreamEvent {

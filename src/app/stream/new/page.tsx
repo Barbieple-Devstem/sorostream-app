@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import DurationPicker from "@/components/DurationPicker";
 import FlowRatePreview from "@/components/FlowRatePreview";
+import AssetConversionPreview from "@/components/AssetConversionPreview";
 import StreamTemplatePicker from "@/components/StreamTemplatePicker";
 import RecipientAutocomplete from "@/components/RecipientAutocomplete";
 import VestingPreviewChart from "@/components/VestingPreviewChart";
@@ -834,6 +835,13 @@ function NewStreamWizard() {
                     selectedToken === CUSTOM_TOKEN_VALUE ? "Custom" : selectedToken
                   }
                   isCustomToken={selectedToken === CUSTOM_TOKEN_VALUE}
+                />
+              )}
+
+              {!errors.amount && amount && selectedToken !== CUSTOM_TOKEN_VALUE && (
+                <AssetConversionPreview
+                  amount={amount}
+                  tokenSymbol={selectedToken}
                 />
               )}
             </div>

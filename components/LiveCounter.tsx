@@ -13,6 +13,13 @@ interface LiveCounterProps {
   streamId?: string;
   reconcileIntervalMs?: number;
   /**
+   * Stream status. When "Paused", the counter freezes at the value it held
+   * when the stream was paused instead of continuing to interpolate upward.
+   */
+  status?: string;
+  /** ISO timestamp captured when the stream was paused (used to freeze the value). */
+  pausedAt?: string;
+  /**
    * When provided, the counter shows this value instead of the live-ticking
    * estimate and renders a visual "pending" indicator to distinguish optimistic
    * state from confirmed on-chain state.
@@ -25,8 +32,19 @@ interface LiveCounterProps {
 const DEFAULT_RECONCILE_INTERVAL_MS = 30_000;
 const ANNOUNCE_THROTTLE_MS = 30_000;
 
-function getEstimatedClaimable(flowRate: number, lastWithdrawTime: Date) {
-  const elapsed = (Date.now() - new Date(lastWithdrawTime).getTime()) / 1000;
+/** Pause-aware estimate: freezes at the pause moment when the stream is paused. */
+function estimateClaimable(
+  flowRate: number,
+  lastWithdrawTime: Date,
+  status?: string,
+  pausedAt?: string,
+) {
+  const lastWithdrawMs = new Date(lastWithdrawTime).getTime();
+  let elapsed = Math.max(0, (Date.now() - lastWithdrawMs) / 1000);
+  if (status === "Paused" && pausedAt) {
+    const pausedAtMs = new Date(pausedAt).getTime();
+    elapsed = Math.max(0, (pausedAtMs - lastWithdrawMs) / 1000);
+  }
   return Math.max(0, flowRate * elapsed);
 }
 
@@ -46,6 +64,8 @@ export default function LiveCounter({
   lastWithdrawTime,
   streamId,
   reconcileIntervalMs = DEFAULT_RECONCILE_INTERVAL_MS,
+  status,
+  pausedAt,
   optimisticOverride,
 }: LiveCounterProps) {
   const t = useTranslations("common");
@@ -59,11 +79,11 @@ export default function LiveCounter({
   const rpcFetch = useRpcFetch();
 
   const [baseline, setBaseline] = useState(() => ({
-    amount: getEstimatedClaimable(flowRate, lastWithdrawTime),
+    amount: estimateClaimable(flowRate, lastWithdrawTime, status, pausedAt),
     timestamp: Date.now(),
   }));
   const [claimable, setClaimable] = useState(() =>
-    getEstimatedClaimable(flowRate, lastWithdrawTime)
+    estimateClaimable(flowRate, lastWithdrawTime, status, pausedAt)
   );
 
   const isOptimistic = optimisticOverride != null;
@@ -119,15 +139,17 @@ export default function LiveCounter({
   // Interpolate locally at 1-second resolution.
   useEffect(() => {
     // Stop ticking while an optimistic override is active — the override value
-    // is the source of truth until the transaction resolves.
+    // is the source of truth until the transaction resolves. Also stop while
+    // the stream is paused so the balance freezes at the paused value.
     if (optimisticOverride != null) return;
+    if (status === "Paused") return;
 
     const interval = setInterval(() => {
       const elapsed = (Date.now() - baseline.timestamp) / 1000;
       setClaimable(Math.max(0, baseline.amount + flowRate * elapsed));
     }, 1_000);
     return () => clearInterval(interval);
-  }, [baseline, flowRate, optimisticOverride]);
+  }, [baseline, flowRate, optimisticOverride, status]);
 
   // Locale-aware display: groups thousands, always shows 7 decimal places
   const formatUSDC = (val: number) =>
