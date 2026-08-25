@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
-import { StreamListSkeleton } from "@/components/Skeleton";
+import { StreamListSkeleton, SkeletonCard } from "@/components/Skeleton";
 import StreamVirtualList from "@/components/StreamVirtualList";
 import StreamEventFeed from "@/components/StreamEventFeed";
 import KeyboardShortcutsHelp from "@/components/KeyboardShortcutsHelp";
@@ -676,7 +676,20 @@ function DashboardContent() {
 
             <StreamErrorBoundary section="Stream List">
             {state === "loading" ? (
-              <StreamListSkeleton />
+              <div
+                className="rounded-xl border border-gray-700 bg-gray-900 p-2"
+                role="status"
+                aria-busy="true"
+                aria-label="Loading streams"
+              >
+                <ul className="grid gap-4 md:grid-cols-2" role="list">
+                  {Array.from({ length: 6 }, (_, index) => (
+                    <li key={index}>
+                      <SkeletonCard />
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ) : state === "empty" ? (
               <div className="bg-gray-800 rounded-xl p-10 text-center flex flex-col items-center gap-4">
                 <svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
