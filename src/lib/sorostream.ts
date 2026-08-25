@@ -224,6 +224,61 @@ export function calculateTotalValueLocked(streams: TvlStreamLike[]): number {
   }, 0);
 }
 
+export interface CompletionTimeInput {
+  /** Stream start time (ISO string or Date). */
+  startTime: string | Date;
+  /** Flow rate in stroops per second. */
+  flowRate: number;
+  /** Total deposit (fixed stream amount) in stroops. */
+  deposit: number;
+}
+
+/**
+ * Estimate when a stream will be fully dripped (#415).
+ *
+ * For streams with a fixed total amount, the completion instant is
+ * `startTime + deposit / flowRate` — independent of the configured endTime,
+ * so it stays correct after top-ups extend the total.
+ *
+ * Returns `null` when the estimate cannot be computed (zero/negative rate or
+ * deposit, or an unparseable start time).
+ */
+export function estimateStreamCompletionTime({
+  startTime,
+  flowRate,
+  deposit,
+}: CompletionTimeInput): Date | null {
+  const rate = Number(flowRate);
+  const total = Number(deposit);
+  if (!Number.isFinite(rate) || rate <= 0) return null;
+  if (!Number.isFinite(total) || total <= 0) return null;
+
+  const startMs =
+    typeof startTime === "string" ? new Date(startTime).getTime() : startTime.getTime();
+  if (!Number.isFinite(startMs)) return null;
+
+  const durationSeconds = total / rate;
+  return new Date(startMs + durationSeconds * 1000);
+}
+
+/**
+ * Human-readable relative time until the given date ("in 3d 4h", "in 45m").
+ * Past dates return "completed". Used next to the estimated completion time.
+ */
+export function formatTimeUntil(date: Date, now: Date = new Date()): string {
+  const diffMs = date.getTime() - now.getTime();
+  if (diffMs <= 0) return "completed";
+
+  const totalMinutes = Math.floor(diffMs / 60_000);
+  const days = Math.floor(totalMinutes / 1_440);
+  const hours = Math.floor((totalMinutes % 1_440) / 60);
+  const minutes = totalMinutes % 60;
+
+  if (days > 0) return hours > 0 ? `in ${days}d ${hours}h` : `in ${days}d`;
+  if (hours > 0) return minutes > 0 ? `in ${hours}h ${minutes}m` : `in ${hours}h`;
+  return `in ${Math.max(1, minutes)}m`;
+}
+
 /** Mutable stream store — seeded with test data, extended by createStream(). */
 const MOCK_STREAMS: StreamData[] = [
   {
