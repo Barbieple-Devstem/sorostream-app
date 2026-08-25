@@ -85,6 +85,7 @@
     "disconnect": "Desconectar",
     "secret_placeholder": "Clave secreta (S...)",
     "error_freighter": "Extensión Freighter no encontrada. Por favor, instálela.",
+    "error_lobstr": "Extensión LOBSTR no encontrada. Por favor, instálela.",
     "error_ledger": "No se encontró ningún dispositivo USB. Conecte su Ledger.",
     "error_server_keypair": "Por favor, introduzca una clave secreta válida."
   },

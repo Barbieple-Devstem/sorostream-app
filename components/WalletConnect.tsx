@@ -6,6 +6,7 @@ import {
   WalletAdapter,
   WALLET_LABELS,
   freighterAdapter,
+  lobstrAdapter,
   ledgerAdapter,
   ServerKeypairAdapter,
 } from "@/src/lib/wallets";
@@ -22,7 +23,7 @@ interface WalletConnectProps {
   compact?: boolean;
 }
 
-const WALLET_TYPES: WalletType[] = ["freighter", "ledger", "server-keypair"];
+const WALLET_TYPES: WalletType[] = ["freighter", "lobstr", "ledger", "server-keypair"];
 
 /**
  * Multi-wallet connect button.
@@ -94,6 +95,13 @@ export default function WalletConnect({ onConnect, compact = false }: WalletConn
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [dropdownOpen]);
 
+  // "w" keyboard shortcut (GlobalShortcuts) opens the connect dropdown
+  useEffect(() => {
+    const open = () => setDropdownOpen(true);
+    window.addEventListener("sorostream:open-wallet", open);
+    return () => window.removeEventListener("sorostream:open-wallet", open);
+  }, []);
+
   /**
    * Keep local adapter state aligned with the context address.
    * When the context detects an account switch (via WatchWalletChanges) and
@@ -139,6 +147,8 @@ export default function WalletConnect({ onConnect, compact = false }: WalletConn
         let selected: WalletAdapter;
         if (storedType === "freighter") {
           selected = freighterAdapter;
+        } else if (storedType === "lobstr") {
+          selected = lobstrAdapter;
         } else if (storedType === "ledger") {
           selected = ledgerAdapter;
         } else if (storedType === "server-keypair") {
@@ -181,6 +191,7 @@ export default function WalletConnect({ onConnect, compact = false }: WalletConn
     try {
       let selected: WalletAdapter;
       if (walletType === "freighter") selected = freighterAdapter;
+      else if (walletType === "lobstr") selected = lobstrAdapter;
       else if (walletType === "ledger") selected = ledgerAdapter;
       else selected = new ServerKeypairAdapter(secretInput);
 
@@ -189,6 +200,8 @@ export default function WalletConnect({ onConnect, compact = false }: WalletConn
         setError(
           walletType === "freighter"
             ? t("error_freighter")
+            : walletType === "lobstr"
+            ? t("error_lobstr")
             : walletType === "ledger"
             ? t("error_ledger")
             : t("error_server_keypair")

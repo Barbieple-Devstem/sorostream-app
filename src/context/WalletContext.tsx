@@ -287,6 +287,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       // idempotent so calling it here is a safe no-op.
       startWatcher();
 
+      // Signal consumers (e.g. dashboard stream list) to re-fetch immediately.
+      // Without this, a reconnect that resolves to the SAME address as the
+      // previous session leaves the list showing stale session data.
+      if (publicKey) {
+        triggerStreamRefresh();
+      }
+
       return publicKey || null;
     } catch (err) {
       // Route through the session-error classifier so an expired-session /
@@ -308,6 +315,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsConnecting(false);
     }
+  }, [verifyNetwork, startWatcher, startSessionTracking, triggerStreamRefresh]);
   }, [verifyNetwork, startWatcher, startSessionTracking, handleWalletError]);
 
   // Cleanup on unmount

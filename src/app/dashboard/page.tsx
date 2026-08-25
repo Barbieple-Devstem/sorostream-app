@@ -148,6 +148,26 @@ function DashboardContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [address, streamRefreshTrigger]);
 
+  // Manual refresh ("r" shortcut / refresh event) — re-fetch without resetting filters.
+  const refreshStreams = useCallback(async () => {
+    if (!address) return;
+    try {
+      const data = await rpcFetch(() =>
+        Promise.resolve(getStreamsForWallet(address)),
+      );
+      setStreams(data);
+      addToast("Stream list refreshed.", "info");
+    } catch {
+      // Errors are surfaced via toast by rpcFetch.
+    }
+  }, [address, rpcFetch, addToast]);
+
+  useEffect(() => {
+    const handler = () => void refreshStreams();
+    window.addEventListener("sorostream:refresh-streams", handler);
+    return () => window.removeEventListener("sorostream:refresh-streams", handler);
+  }, [refreshStreams]);
+
   // Get unique tokens from streams for dropdown
   const uniqueTokens = useMemo(() => {
     const tokens = new Set(streams.map((s) => s.token));
@@ -363,12 +383,13 @@ function DashboardContent() {
       title: "Dashboard",
       shortcuts: [
         { key: "n", description: "New stream", action: () => router.push("/stream/new") },
+        { key: "r", description: "Refresh list", action: () => void refreshStreams() },
         { key: "/", description: "Focus search", action: () => searchRef.current?.focus(), ignoreWhenEditing: false },
         { key: "Escape", description: "Clear search / selection", action: () => { setSearch(""); clearSelection(); (document.activeElement as HTMLElement)?.blur(); } },
         { key: "?", shift: true, description: "Toggle keyboard shortcuts help", action: () => setShowShortcutsHelp((v) => !v) },
       ],
     },
-  ], [router, clearSelection]);
+  ], [router, clearSelection, refreshStreams]);
 
   useKeyboardShortcuts(shortcutGroups);
 
