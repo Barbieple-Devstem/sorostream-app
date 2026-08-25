@@ -1,4 +1,4 @@
-export type WalletType = "freighter" | "ledger" | "server-keypair";
+export type WalletType = "freighter" | "lobstr" | "ledger" | "server-keypair";
 
 export interface WalletAdapter {
   type: WalletType;
@@ -20,6 +20,30 @@ export const freighterAdapter: WalletAdapter = {
   },
   async signTransaction(xdr) {
     return (window as any).freighter.signTransaction(xdr);
+  },
+  disconnect() {},
+};
+
+// ── Lobstr ─────────────────────────────────────────────────────────────────
+export const lobstrAdapter: WalletAdapter = {
+  type: "lobstr",
+  async isAvailable() {
+    if (typeof window === "undefined") return false;
+    return !!((window as any).LOBSTR || (window as any).lobstr);
+  },
+  async getPublicKey() {
+    const ext = (window as any).LOBSTR ?? (window as any).lobstr;
+    const result = await ext.getPublicKey();
+    // Some Lobstr builds wrap the key in { publicKey } / { address }
+    return typeof result === "string" ? result : result?.publicKey ?? result?.address;
+  },
+  async signTransaction(xdr) {
+    const ext = (window as any).LOBSTR ?? (window as any).lobstr;
+    const network = process.env.NEXT_PUBLIC_STELLAR_NETWORK === "mainnet"
+      ? "PUBLIC"
+      : "TESTNET";
+    const result = await ext.signTransaction(xdr, network);
+    return typeof result === "string" ? result : result?.signedTxXdr ?? result?.signed_tx_xdr ?? xdr;
   },
   disconnect() {},
 };
@@ -77,6 +101,7 @@ export class ServerKeypairAdapter implements WalletAdapter {
 
 export const WALLET_LABELS: Record<WalletType, string> = {
   freighter: "Freighter",
+  lobstr: "Lobstr",
   ledger: "Ledger",
   "server-keypair": "Server Keypair",
 };

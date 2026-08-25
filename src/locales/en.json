@@ -79,6 +79,7 @@
     "disconnect": "Disconnect",
     "secret_placeholder": "Secret key (S...)",
     "error_freighter": "Freighter extension not found. Please install it.",
+    "error_lobstr": "LOBSTR extension not found. Please install it.",
     "error_ledger": "No USB device found. Connect your Ledger.",
     "error_server_keypair": "Please enter a valid secret key."
   },

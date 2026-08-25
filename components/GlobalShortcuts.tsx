@@ -88,6 +88,8 @@ export function GlobalShortcutsProvider({ children }: { children: ReactNode }) {
         { key: "s", description: "Go to Streams", action: () => {} },
         { key: "h", description: "Go to Home", action: () => {} },
         { key: "n", description: "New stream", action: () => {} },
+        { key: "w", description: "Open wallet", action: () => {} },
+        { key: "r", description: "Refresh stream list", action: () => {} },
         { key: "/", description: "Open search", action: () => {} },
         { key: "?", shift: true, description: "Toggle keyboard shortcuts help", action: () => {} },
         { key: "Escape", description: "Close modals / clear state", action: () => {} },
@@ -125,6 +127,16 @@ export function GlobalShortcutsProvider({ children }: { children: ReactNode }) {
             key: "n",
             description: "New stream",
             action: () => router.push("/stream/new"),
+          },
+          {
+            key: "w",
+            description: "Open wallet",
+            action: () => window.dispatchEvent(new CustomEvent("sorostream:open-wallet")),
+          },
+          {
+            key: "r",
+            description: "Refresh stream list",
+            action: () => window.dispatchEvent(new CustomEvent("sorostream:refresh-streams")),
           },
           {
             key: "?",
