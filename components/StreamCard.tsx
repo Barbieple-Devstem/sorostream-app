@@ -21,6 +21,8 @@ interface StreamCardProps {
   deposit?: number;
   selected?: boolean;
   onToggle?: (id: string) => void;
+  /** Invoked when the user clicks the clone action. */
+  onClone?: (id: string) => void;
   /** Unix timestamp (seconds). When set and > now, a "Scheduled" badge is shown. */
   scheduledStartTime?: number;
   /** Stream start time ISO string. */
@@ -38,6 +40,7 @@ export default function StreamCard({
   deposit = 0,
   selected = false,
   onToggle,
+  onClone,
   scheduledStartTime,
   startTime,
   endTime,
@@ -104,6 +107,19 @@ export default function StreamCard({
           <CopyButton value={id} label="Copy stream ID" />
         </span>
         <div className="flex items-center gap-2">
+          {onClone && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onClone(id); }}
+              aria-label="Clone stream"
+              title="Clone stream"
+              className="text-gray-400 dark:text-gray-600 hover:text-green-500 dark:hover:text-green-400 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 rounded"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+            </button>
+          )}
           <button
             onClick={(e) => { e.stopPropagation(); toggleBookmark(id); }}
             aria-label={bookmarked ? "Remove bookmark" : "Bookmark stream"}
