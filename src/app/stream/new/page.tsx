@@ -3,12 +3,14 @@ import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import DurationPicker from "@/components/DurationPicker";
 import FlowRatePreview from "@/components/FlowRatePreview";
+import AssetConversionPreview from "@/components/AssetConversionPreview";
 import StreamTemplatePicker from "@/components/StreamTemplatePicker";
 import RecipientAutocomplete from "@/components/RecipientAutocomplete";
 import VestingPreviewChart from "@/components/VestingPreviewChart";
 import TransactionStepper, { TxStage } from "@/components/TransactionStepper";
 import SchedulingToggle from "@/components/SchedulingToggle";
 import FeeEstimationPanel from "@/components/FeeEstimationPanel";
+import StreamCostCalculator from "@/components/StreamCostCalculator";
 import BatchCreateTab from "@/components/BatchCreateTab";
 import NetReceivedDisplay from "@/components/NetReceivedDisplay";
 import AddressVerificationBadge from "@/components/AddressVerificationBadge";
@@ -120,6 +122,7 @@ function NewStreamWizard() {
   const recipientParam = searchParams.get("recipient");
   const amountParam = searchParams.get("amount");
   const durationParam = searchParams.get("duration");
+  const tokenParam = searchParams.get("token");
 
   // ----- sessionStorage draft -----
   // Read once before any useState initialisation so we can use draft values
@@ -145,15 +148,32 @@ function NewStreamWizard() {
     return draft?.duration ?? 0;
   })();
 
+  // Prefill the token when arriving from a "Clone stream" action. A token that
+  // matches a supported symbol selects it directly; a contract address (or
+  // other asset id) is routed through the custom-token field.
+  const initialTokenIsCustom =
+    !!tokenParam && /^C[A-Z2-7]{55}$/.test(tokenParam);
+  const initialToken = (() => {
+    if (tokenParam && SUPPORTED_TOKENS.some((t) => t.symbol === tokenParam)) {
+      return tokenParam;
+    }
+    if (initialTokenIsCustom) return CUSTOM_TOKEN_VALUE;
+    return undefined;
+  })();
+
   const [recipient, setRecipient] = useState(initialRecipient);
   const [amount, setAmount] = useState(initialAmount);
   // Use URL param first, then saved preference, then 0
   const [duration, setDuration] = useState(initialDuration || defaultDuration || 0);
   // Pre-select token from preference when no URL param overrides
   const [selectedToken, setSelectedToken] = useState<string>(
-    SUPPORTED_TOKENS.find((t) => t.symbol === defaultToken)?.symbol ?? SUPPORTED_TOKENS[0].symbol,
+    initialToken ??
+      SUPPORTED_TOKENS.find((t) => t.symbol === defaultToken)?.symbol ??
+      SUPPORTED_TOKENS[0].symbol,
   );
-  const [customTokenAddress, setCustomTokenAddress] = useState(draft?.customTokenAddress ?? "");
+  const [customTokenAddress, setCustomTokenAddress] = useState(
+    draft?.customTokenAddress ?? (initialTokenIsCustom ? (tokenParam ?? "") : ""),
+  );
   const [customTokenError, setCustomTokenError] = useState("");
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({ recipient: "", amount: "", duration: "", endDate: "", cliffDate: "", scheduledStart: "" });
@@ -237,6 +257,30 @@ function NewStreamWizard() {
     return () => { active = false; };
   }, [step]);
 
+  // Also surface the Soroban network fee estimate on the review step so users
+  // know the cost before signing, even if they skipped past the amount step
+  // (e.g. when arriving from a clone action).
+  useEffect(() => {
+    if (step !== "review") return;
+    const parsed = parseFloat(amount);
+    if (!(parsed > 0) || gasFee) return;
+    let active = true;
+    setGasFeeLoading(true);
+    getGasFeeEstimate(Math.round(parsed * 10_000_000))
+      .then((estimate) => {
+        if (active) setGasFee(estimate);
+      })
+      .catch(() => {
+        /* keep last known value; the panel degrades gracefully */
+      })
+      .finally(() => {
+        if (active) setGasFeeLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [step, amount, gasFee]);
+
   // Address verification state
   const [addressVerification, setAddressVerification] = useState<AddressVerification | null>(null);
   const [verificationAcknowledged, setVerificationAcknowledged] = useState(false);
@@ -287,6 +331,9 @@ function NewStreamWizard() {
   // Metadata URI setting
   const [metadataUri, setMetadataUri] = useState("");
   const [metadataUriError, setMetadataUriError] = useState("");
+
+  // #408 — optional plaintext memo stored in the stream metadata URI
+  const [memo, setMemo] = useState("");
 
   // Preview state
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -533,6 +580,7 @@ function NewStreamWizard() {
         autoRenewDurationSeconds: autoRenew && autoRenewDuration > 0 ? autoRenewDuration : undefined,
         scheduledStartTime,
         metadataUri: metadataUri || undefined,
+        memo: memo.trim() || undefined,
         feeBump: feeBumpEnabled && !!feeSponsorAddress,
         feeSponsorAddress: feeBumpEnabled && feeSponsorAddress ? feeSponsorAddress : undefined,
       });
@@ -836,6 +884,13 @@ function NewStreamWizard() {
                   isCustomToken={selectedToken === CUSTOM_TOKEN_VALUE}
                 />
               )}
+
+              {!errors.amount && amount && selectedToken !== CUSTOM_TOKEN_VALUE && (
+                <AssetConversionPreview
+                  amount={amount}
+                  tokenSymbol={selectedToken}
+                />
+              )}
             </div>
 
             <StreamTemplatePicker
@@ -948,6 +1003,14 @@ function NewStreamWizard() {
 
             {amount && duration > 0 && (
               <FlowRatePreview amount={amount} durationSeconds={duration} />
+            )}
+
+            {amount && duration > 0 && (
+              <StreamCostCalculator
+                amount={amount}
+                durationSeconds={duration}
+                tokenSymbol={selectedToken === CUSTOM_TOKEN_VALUE ? "tokens" : selectedToken}
+              />
             )}
 
             {/* Gas fee estimate */}
@@ -1064,6 +1127,25 @@ function NewStreamWizard() {
                       />
                     </div>
                   )}
+
+                  {/* #408 — Memo / note field */}
+                  <div>
+                    <label htmlFor="stream-memo" className="text-sm text-gray-200 font-medium block mb-2">
+                      Memo <span className="text-gray-400 font-normal">(optional)</span>
+                    </label>
+                    <input
+                      id="stream-memo"
+                      type="text"
+                      value={memo}
+                      onChange={(e) => setMemo(e.target.value)}
+                      maxLength={100}
+                      placeholder="e.g. Rent for March"
+                      className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-3 text-white text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+                    />
+                    <p className="text-gray-500 text-xs mt-1">
+                      Short plaintext note attached to the stream metadata. {memo.length}/100
+                    </p>
+                  </div>
 
                   {/* Metadata URI field */}
                   <div>

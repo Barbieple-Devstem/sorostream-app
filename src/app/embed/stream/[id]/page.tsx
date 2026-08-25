@@ -138,6 +138,12 @@ function EmbedWidget({ stream, theme, show }: EmbedWidgetProps) {
       >
         View on SoroStream ↗
       </a>
+
+      {stream.pauseAt && stream.pauseAt > Math.floor(Date.now() / 1000) && (
+        <p className={`text-[10px] ${textSecondary} text-center`}>
+          Pause scheduled: {new Date(stream.pauseAt * 1000).toLocaleString()}
+        </p>
+      )}
     </div>
   );
 }
