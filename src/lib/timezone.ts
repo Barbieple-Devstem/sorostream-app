@@ -61,3 +61,22 @@ export function formatDateShortWithTimezone(
     return date.toLocaleDateString(locale);
   }
 }
+
+/**
+ * Returns the UTC representation of a timestamp for use as a hover tooltip
+ * alongside a local-time display.
+ *
+ * Example output: "2025-12-31 23:59:00 UTC"
+ */
+export function formatDateUtc(
+  value: Date | string,
+): string {
+  const date = typeof value === "string" ? new Date(value) : value;
+  if (Number.isNaN(date.getTime())) return String(value);
+
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())} ` +
+    `${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())} UTC`
+  );
+}
