@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useWallet } from "@/src/context/WalletContext";
 
 export function SessionWarningToast() {
-  const { showSessionWarning5Min, sessionExpired, clearSessionExpired, connect } = useWallet();
+  const { showSessionWarning5Min, sessionExpired, clearSessionExpired, reconnect } = useWallet();
   const [dismissed, setDismissed] = useState(false);
   const [expiredDismissed, setExpiredDismissed] = useState(false);
 
@@ -50,14 +50,13 @@ export function SessionWarningToast() {
                 Wallet session expired
               </h3>
               <p className="mt-1 text-xs text-red-200">
-                Your Freighter wallet session has expired. Please reconnect to continue.
+                Your wallet session expired. We&apos;re reconnecting you automatically — you won&apos;t lose your place. If that doesn&apos;t work, use Reconnect Now.
               </p>
-              <button
-                onClick={() => {
-                  setExpiredDismissed(true);
-                  clearSessionExpired();
-                  void connect();
-                }}
+               <button
+                 onClick={() => {
+                   setExpiredDismissed(true);
+                   void reconnect();
+                 }}
                 className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-700 hover:bg-red-600 text-red-50 text-xs font-medium rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
               >
                 Reconnect Now

@@ -1,3 +1,5 @@
+import { SessionExpiredWalletError } from "@/src/lib/freighter";
+
 export type WalletType = "freighter" | "ledger" | "server-keypair";
 
 export interface WalletAdapter {
@@ -19,7 +21,21 @@ export const freighterAdapter: WalletAdapter = {
     return (window as any).freighter.getPublicKey();
   },
   async signTransaction(xdr) {
-    return (window as any).freighter.signTransaction(xdr);
+    try {
+      const signed = await (window as any).freighter.signTransaction(xdr);
+      if (!signed) {
+        throw new SessionExpiredWalletError();
+      }
+      return signed;
+    } catch (err) {
+      // Normalize any Freighter signing failure (incl. expired session) to a
+      // friendly, typed error instead of a raw XDR parse failure.
+      throw err instanceof SessionExpiredWalletError
+        ? err
+        : new SessionExpiredWalletError(
+            err instanceof Error ? err.message : "Transaction signing failed.",
+          );
+    }
   },
   disconnect() {},
 };
