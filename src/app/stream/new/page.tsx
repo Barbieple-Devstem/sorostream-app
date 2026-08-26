@@ -121,7 +121,7 @@ function NewStreamWizard() {
   const [activeTab, setActiveTab] = useState<PageTab>("single");
   const [step, setStep] = useState<Step>("recipient");
   const searchParams = useSearchParams();
-  const { address } = useWallet();
+  const { address, triggerStreamRefresh } = useWallet();
   const { defaultToken, defaultDuration, defaultCliffDuration } = usePreferences();
   const settings = useSettings();
 
@@ -687,6 +687,10 @@ function NewStreamWizard() {
       setTouched({ recipient: false, amount: false });
       setDurationPickerKey((k) => k + 1);
       setTxStage(null);
+
+      // Trigger stream list refresh so the new stream appears on the dashboard
+      triggerStreamRefresh();
+
       router.push(`/stream/${result.streamId}?new=true`);
     } catch (err) {
       console.error("Failed to create stream:", err);
