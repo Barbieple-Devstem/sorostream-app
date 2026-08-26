@@ -138,6 +138,7 @@ describe("Utility Function", () => {
 - **Location**: `e2e/`
 - **Run**: `npm run test:e2e` or `npm run test:e2e:ui`
 - **Visual baselines**: update the create-stream dark-mode snapshot with `npx playwright test e2e/visual-regression.spec.ts --update-snapshots`
+- **Contributor guide**: see [docs/playwright-e2e.md](./docs/playwright-e2e.md) for step-by-step setup and writing guidance
 
 ```bash
 # Run E2E tests

@@ -667,9 +667,27 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
 
   // ── Stream completion ─────────────────────────────────────────────────────
   /** True when the current wall-clock time has passed the stream's end time. */
-  const isCompleted = stream
-    ? Date.now() >= new Date(stream.endTime).getTime()
-    : false;
+  const [isCompleted, setIsCompleted] = useState(false);
+
+  useEffect(() => {
+    if (!stream || stream.status === "Cancelled") {
+      setIsCompleted(false);
+      return;
+    }
+
+    const endMs = new Date(stream.endTime).getTime();
+    const now = Date.now();
+    const completedNow = stream.status === "Ended" || now >= endMs;
+    setIsCompleted(completedNow);
+
+    if (completedNow) return;
+
+    const timeout = window.setTimeout(() => {
+      setIsCompleted(true);
+    }, Math.max(0, endMs - now));
+
+    return () => window.clearTimeout(timeout);
+  }, [stream]);
 
   const handleClaimFinal = useCallback(async () => {
     setClaimFinalLoading(true);
@@ -1303,9 +1321,8 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
             </p>
           )}
 
-          {address && stream.sender.includes(address.slice(0, 5)) && stream.status === "Paused" && (
-          {address && stream.sender.includes(address.slice(0, 5)) && displayStatus === "Paused" && (
-            <button
+	          {address && stream.sender.includes(address.slice(0, 5)) && displayStatus === "Paused" && (
+	            <button
               onClick={() => setShowResumeModal(true)}
               disabled={isBusy}
               className="w-full border border-green-600 text-green-400 py-3 rounded-lg font-medium hover:bg-green-900 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
