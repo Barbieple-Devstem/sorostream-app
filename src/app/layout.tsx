@@ -105,6 +105,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                           <OnboardingWizard />
                           <SessionWarningToast />
                           <SessionTimeoutModal />
+                          </RateLimitProvider>
                         </ContractVersionProvider>
                       </GlobalShortcutsProvider>
                     </NotificationProvider>

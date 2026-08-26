@@ -79,7 +79,6 @@ export class ServerKeypairAdapter implements WalletAdapter {
 
 export const WALLET_LABELS: Record<WalletType, string> = {
   freighter: "Freighter",
-  lobstr: "Lobstr",
   ledger: "Ledger",
   "server-keypair": "Server Keypair",
 };

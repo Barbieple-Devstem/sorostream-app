@@ -2,6 +2,13 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import StreamHistory, { type HistoryEntry } from '../StreamHistory';
 
+vi.mock('@/src/lib/network', () => ({
+  useNetwork: () => ({ network: 'testnet', isTestnet: true, isMainnet: false, networkUrl: 'https://testnet.stellar.org' }),
+}));
+vi.mock('@/src/context/SettingsContext', () => ({
+  useSettings: () => ({ language: 'en', timeDisplayMode: 'local' }),
+}));
+
 vi.mock('@/src/lib/sorostream', () => ({
   formatUSDC: (stroops: bigint) => {
     const whole = Number(stroops) / 10_000_000;

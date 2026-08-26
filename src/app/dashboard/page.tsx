@@ -23,6 +23,7 @@ import StreamExpiryAlerts from "@/components/StreamExpiryAlerts";
 import PortfolioSummaryCard from "@/components/PortfolioSummaryCard";
 import StreamPerformanceMetrics from "@/components/StreamPerformanceMetrics";
 import WatchlistTab from "@/components/WatchlistTab";
+import StreamCard from "@/components/StreamCard";
 
 type DashboardState = "loading" | "filtered-empty" | "empty" | "ready";
 
@@ -45,6 +46,8 @@ function parseSortOrder(value: string | null): SortOrder {
   }
   return "desc";
 }
+
+import { exportStreamsPdf } from "@/src/lib/pdfExport";
 
 function DashboardContent() {
   const rpcFetch = useRpcFetch();
@@ -379,6 +382,22 @@ function DashboardContent() {
     addToast(`Exported history for ${ids.length} stream(s).`, "success");
   }, [selectedIds, addToast]);
 
+  const handleExportPdf = useCallback(() => {
+    const targets = selectedIds.size > 0
+      ? streams.filter((s) => selectedIds.has(s.id))
+      : sortedFiltered.length > 0
+      ? sortedFiltered
+      : streams;
+
+    if (targets.length === 0) {
+      addToast("No streams available to export.", "info");
+      return;
+    }
+
+    const { filename } = exportStreamsPdf(targets, address);
+    addToast(`Exported PDF report: ${filename}`, "success");
+  }, [selectedIds, streams, sortedFiltered, address, addToast]);
+
   const shortcutGroups: ShortcutGroup[] = useMemo(() => [
     {
       title: "Dashboard",
@@ -400,6 +419,14 @@ function DashboardContent() {
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold">Dashboard</h1>
           <div className="flex items-center gap-2">
+            <button
+              onClick={handleExportPdf}
+              data-testid="export-pdf-button"
+              className="border border-green-700 text-green-300 hover:bg-green-900/30 px-4 py-2 rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+              aria-label="Export streams to formatted PDF report"
+            >
+              📄 Export PDF
+            </button>
             <button
               onClick={() => {
                 setMultiSelectMode(!multiSelectMode);
@@ -675,6 +702,14 @@ function DashboardContent() {
                     className="px-3 py-1.5 text-xs bg-gray-700 text-white rounded-lg hover:bg-gray-600 disabled:opacity-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
                   >
                     Export CSV
+                  </button>
+                  <button
+                    onClick={handleExportPdf}
+                    disabled={bulkLoading}
+                    data-testid="bulk-export-pdf-button"
+                    className="px-3 py-1.5 text-xs bg-green-800 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
+                  >
+                    Export PDF
                   </button>
                   <button
                     onClick={handleBulkTopUp}

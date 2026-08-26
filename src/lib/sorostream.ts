@@ -749,7 +749,6 @@ export function claimableNow(stream: any): string {
     return Math.floor(flowRate * elapsedSeconds).toString();
   }
 
-  const elapsedSeconds = Math.max(0, (Date.now() - lastWithdrawTime) / 1000);
   // A cancelled or ended stream stops accruing once it can no longer drip.
   // Cap the effective "now" so the recipient can only claim what actually
   // streamed before the stream stopped.
@@ -764,23 +763,7 @@ export function claimableNow(stream: any): string {
   return Math.floor(flowRate * elapsedSeconds).toString();
 }
 
-/**
- * Amount (stroops) streamed out of the deposit so far, respecting pause state.
- * For a paused stream this freezes at the value when the stream was paused.
- */
-export function getStreamedAmount(stream: any): number {
-  if (!stream) return 0;
-  const flowRate = Number(stream.flowRate);
-  const lastWithdrawTime = new Date(stream.lastWithdrawTime).getTime();
-  if (!Number.isFinite(flowRate) || !Number.isFinite(lastWithdrawTime)) return 0;
 
-  let elapsedSeconds = Math.max(0, (Date.now() - lastWithdrawTime) / 1000);
-  if (stream.status === "Paused" && stream.pausedAt) {
-    const pausedAt = new Date(stream.pausedAt).getTime();
-    elapsedSeconds = Math.max(0, (pausedAt - lastWithdrawTime) / 1000);
-  }
-  return Math.floor(flowRate * elapsedSeconds);
-}
 
 /**
  * Remaining (unstreamed) deposit in stroops. Freezes while the stream is
@@ -810,6 +793,9 @@ export async function getOraclePrice(token: string): Promise<number | null> {
   const key = (token || "").toUpperCase();
   if (key in ORACLE_PRICES) return ORACLE_PRICES[key];
   return null;
+}
+
+/**
  * Total amount that has dripped into a stream up to the current effective
  * time, taking cancellation and end time into account. For a cancelled stream
  * this is the pro-rated amount streamed before cancellation, not the full
@@ -826,9 +812,14 @@ export function getStreamedAmount(stream: StreamData): number {
   } else if (stream.status === "Ended") {
     effectiveNow = Math.min(effectiveNow, new Date(stream.endTime).getTime());
   } else if (stream.status === "Paused") {
-    // Paused streams are treated like active for display (no special cap),
-    // but we still never exceed the end time.
-    effectiveNow = Math.min(effectiveNow, new Date(stream.endTime).getTime());
+    if (stream.pausedAt) {
+      const pausedMs = new Date(stream.pausedAt).getTime();
+      if (Number.isFinite(pausedMs)) {
+        effectiveNow = Math.min(effectiveNow, pausedMs);
+      }
+    } else {
+      effectiveNow = Math.min(effectiveNow, new Date(stream.endTime).getTime());
+    }
   }
 
   if (effectiveNow <= start) return 0;

@@ -76,7 +76,8 @@ describe('StreamActions — cancel grace period', () => {
 
   it('shows a countdown toast immediately when Cancel is clicked', () => {
     renderActions();
-    fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /cancel stream/i }));
 
     expect(mockUpsertPersistentToast).toHaveBeenCalledWith(
       'cancel-grace-42',
@@ -88,7 +89,8 @@ describe('StreamActions — cancel grace period', () => {
 
   it('counts down each second in the toast', () => {
     renderActions();
-    fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /cancel stream/i }));
 
     act(() => { vi.advanceTimersByTime(1000); });
     expect(mockUpsertPersistentToast).toHaveBeenCalledWith(
@@ -109,7 +111,8 @@ describe('StreamActions — cancel grace period', () => {
 
   it('submits the transaction after 5 seconds', async () => {
     renderActions();
-    fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /cancel stream/i }));
 
     await act(async () => { vi.advanceTimersByTime(5000); });
 
@@ -122,7 +125,8 @@ describe('StreamActions — cancel grace period', () => {
 
   it('does NOT submit the transaction before 5 seconds', () => {
     renderActions();
-    fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /cancel stream/i }));
 
     act(() => { vi.advanceTimersByTime(4999); });
 
@@ -131,14 +135,16 @@ describe('StreamActions — cancel grace period', () => {
 
   it('button changes to "Undo Cancel" while grace period is active', () => {
     renderActions();
-    fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /cancel stream/i }));
 
     expect(screen.getByRole('button', { name: /undo cancel/i })).toBeInTheDocument();
   });
 
   it('clicking Undo Cancel aborts the transaction', async () => {
     renderActions();
-    fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /cancel stream/i }));
 
     // Click the button-level undo
     fireEvent.click(screen.getByRole('button', { name: /undo cancel/i }));
@@ -155,7 +161,8 @@ describe('StreamActions — cancel grace period', () => {
     mockUpsertPersistentToast.mockReturnValue(1);
 
     renderActions();
-    fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /cancel stream/i }));
     fireEvent.click(screen.getByRole('button', { name: /undo cancel/i }));
 
     expect(mockRemoveToast).toHaveBeenCalledWith(1);
@@ -163,7 +170,8 @@ describe('StreamActions — cancel grace period', () => {
 
   it('restores the Cancel button after Undo', () => {
     renderActions();
-    fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /cancel stream/i }));
     fireEvent.click(screen.getByRole('button', { name: /undo cancel/i }));
 
     expect(screen.getByRole('button', { name: /^cancel$/i })).toBeInTheDocument();
@@ -173,7 +181,8 @@ describe('StreamActions — cancel grace period', () => {
     mockUpsertPersistentToast.mockReturnValue(99);
 
     renderActions();
-    fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /cancel stream/i }));
 
     await act(async () => { vi.advanceTimersByTime(5000); });
 
@@ -186,7 +195,8 @@ describe('StreamActions — cancel grace period', () => {
     );
 
     renderActions();
-    fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /cancel stream/i }));
 
     await act(async () => { vi.advanceTimersByTime(5000); });
 
@@ -198,7 +208,8 @@ describe('StreamActions — cancel grace period', () => {
 
   it('calling Undo via the toast action callback also aborts', async () => {
     renderActions();
-    fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /cancel stream/i }));
 
     // Grab the action.onClick that was passed to upsertPersistentToast
     const { onClick: action } = (mockUpsertPersistentToast.mock.calls[0] as any)[3] as {
