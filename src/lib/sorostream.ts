@@ -769,7 +769,7 @@ export function claimableNow(stream: any): string {
  * Remaining (unstreamed) deposit in stroops. Freezes while the stream is
  * paused instead of continuing to count down.
  */
-export function getRemainingBalance(stream: any): number {
+export function getRemainingBalance(stream: StreamData): number {
   if (!stream) return 0;
   const deposit = Number(stream.deposit);
   if (!Number.isFinite(deposit)) return 0;
@@ -976,7 +976,10 @@ export function addStreamEvent(event: Omit<StreamEvent, "id">): StreamEvent {
 
 export function truncateAddress(address: string): string {
   if (!address) return "";
-  return `${address.slice(0, 4)}...${address.slice(-4)}`;
+  // Normalise to uppercase so mixed-case inputs (e.g. from copy-paste or
+  // external sources) render the same truncated form as the on-chain address.
+  const normalised = address.toUpperCase();
+  return `${normalised.slice(0, 4)}...${normalised.slice(-4)}`;
 }
 
 // ── Gas fee estimate ─────────────────────────────────────────────────────────
