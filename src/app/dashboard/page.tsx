@@ -93,6 +93,10 @@ function DashboardContent() {
   const [multiSelectMode, setMultiSelectMode] = useState(false);
   const [showBulkCancelConfirm, setShowBulkCancelConfirm] = useState(false);
 
+  // Pagination state (#383)
+  const [visibleCount, setVisibleCount] = useState(12);
+  const PAGE_SIZE = 12;
+
   // Tab state
   const [activeTab, setActiveTab] = useState<"streams" | "watchlist">("streams");
 
@@ -223,7 +227,7 @@ function DashboardContent() {
         case "amount":
           return dir * (a.deposit - b.deposit);
         case "status": {
-          const order: Record<string, number> = { Active: 0, Ended: 1, Cancelled: 2, Paused: 3 };
+          const order: Record<string, number> = { Active: 0, Paused: 1, Ended: 2, Cancelled: 3 };
           return dir * ((order[a.status] ?? 3) - (order[b.status] ?? 3));
         }
         default:
@@ -255,9 +259,15 @@ function DashboardContent() {
     setSearch("");
     setBookmarksOnly(false);
     setSelectedTags([]);
+    setVisibleCount(PAGE_SIZE);
   };
 
   const hasActiveFilters = statusFilter || tokenFilter || search.trim() || bookmarksOnly || selectedTags.length > 0;
+
+  // Reset pagination when filters change
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [statusFilter, tokenFilter, search, bookmarksOnly, selectedTags]);
 
   // Grouped view: bucket the (already filtered + sorted) streams by token.
   const assetGroups = useMemo(() => {
@@ -526,6 +536,7 @@ function DashboardContent() {
                 >
                   <option value="">All Statuses</option>
                   <option value="Active">Active</option>
+                  <option value="Paused">Paused</option>
                   <option value="Ended">Ended</option>
                   <option value="Cancelled">Cancelled</option>
                 </select>
@@ -805,17 +816,19 @@ function DashboardContent() {
               </div>
             ) : groupBy === "asset" ? (
               <div className="space-y-6">
-                {assetGroups.map(({ token, items }) => (
-                  <section key={token} aria-label={`Streams in ${token}`}>
-                    <div className="flex items-center gap-2 mb-3">
-                      <h3 className="text-sm font-semibold text-white">{token}</h3>
-                      <span className="text-xs text-gray-400 bg-gray-800 rounded-full px-2 py-0.5">
-                        {items.length}
-                      </span>
-                    </div>
-                    <div className="rounded-xl border border-gray-700 bg-gray-900 p-2">
-                      <div className="grid gap-4 md:grid-cols-2">
-                        {items.map((s) => (
+                {assetGroups.map(({ token, items }) => {
+                  const visibleItems = items.slice(0, visibleCount);
+                  return (
+                    <section key={token} aria-label={`Streams in ${token}`}>
+                      <div className="flex items-center gap-2 mb-3">
+                        <h3 className="text-sm font-semibold text-white">{token}</h3>
+                        <span className="text-xs text-gray-400 bg-gray-800 rounded-full px-2 py-0.5">
+                          {items.length}
+                        </span>
+                      </div>
+                      <div className="rounded-xl border border-gray-700 bg-gray-900 p-2">
+                        <div className="grid gap-4 md:grid-cols-2">
+                          {visibleItems.map((s) => (
                           <div key={s.id} className="relative">
                             <Link href={`/stream/${s.id}`} className="block">
                               <StreamCard
@@ -836,15 +849,16 @@ function DashboardContent() {
                             </Link>
                           </div>
                         ))}
-                      </div>
+                       </div>
                     </div>
                   </section>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="rounded-xl border border-gray-700 bg-gray-900 p-2">
                 <StreamVirtualList
-                  streams={sortedFiltered}
+                  streams={sortedFiltered.slice(0, visibleCount)}
                   selectedIds={multiSelectMode ? selectedIds : undefined}
                   onToggleSelect={multiSelectMode ? toggleSelect : undefined}
                   onClone={handleClone}
@@ -852,6 +866,28 @@ function DashboardContent() {
               </div>
             )}
             </StreamErrorBoundary>
+
+            {/* Pagination: Load More (#383) */}
+            {sortedFiltered.length > visibleCount && (
+              <div className="mt-4 text-center">
+                <button
+                  onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
+                  className="px-6 py-2 bg-gray-800 border border-gray-700 text-gray-300 rounded-lg text-sm hover:bg-gray-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+                >
+                  Load More ({Math.min(PAGE_SIZE, sortedFiltered.length - visibleCount)} of {sortedFiltered.length - visibleCount} remaining)
+                </button>
+                <p className="text-xs text-gray-500 mt-2">
+                  Showing {Math.min(visibleCount, sortedFiltered.length)} of {sortedFiltered.length} streams
+                </p>
+              </div>
+            )}
+            {sortedFiltered.length > 0 && sortedFiltered.length <= visibleCount && (
+              <div className="mt-4 text-center">
+                <p className="text-xs text-gray-500">
+                  All {sortedFiltered.length} stream{sortedFiltered.length === 1 ? "" : "s"} loaded
+                </p>
+              </div>
+            )}
             </div>
             )}{/* end activeTab conditional */}
           </div>
