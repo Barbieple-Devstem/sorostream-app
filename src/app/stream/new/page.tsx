@@ -699,6 +699,7 @@ function NewStreamWizard() {
       setAutoRenewDuration(0);
       setShowAdvanced(false);
       setMetadataUri("");
+      setMemo("");
       setMetadataUriError("");
       setGasFee(null);
       setFeeBumpEnabled(false);
@@ -707,6 +708,8 @@ function NewStreamWizard() {
       setScheduledStart("");
       setTouched({ recipient: false, amount: false });
       setDurationPickerKey((k) => k + 1);
+      setConfirmAmountInput("");
+      setStep("recipient");
       setTxStage(null);
 
       // Trigger stream list refresh so the new stream appears on the dashboard
