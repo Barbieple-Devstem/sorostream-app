@@ -749,7 +749,6 @@ export function claimableNow(stream: any): string {
     return Math.floor(flowRate * elapsedSeconds).toString();
   }
 
-  const elapsedSeconds = Math.max(0, (Date.now() - lastWithdrawTime) / 1000);
   // A cancelled or ended stream stops accruing once it can no longer drip.
   // Cap the effective "now" so the recipient can only claim what actually
   // streamed before the stream stopped.
@@ -810,29 +809,6 @@ export async function getOraclePrice(token: string): Promise<number | null> {
   const key = (token || "").toUpperCase();
   if (key in ORACLE_PRICES) return ORACLE_PRICES[key];
   return null;
- * Total amount that has dripped into a stream up to the current effective
- * time, taking cancellation and end time into account. For a cancelled stream
- * this is the pro-rated amount streamed before cancellation, not the full
- * deposit.
- */
-export function getStreamedAmount(stream: StreamData): number {
-  const flowRate = Number(stream.flowRate);
-  const start = new Date(stream.startTime).getTime();
-  if (!Number.isFinite(flowRate) || !Number.isFinite(start)) return 0;
-
-  let effectiveNow = Date.now();
-  if (stream.status === "Cancelled" && stream.cancelledAt) {
-    effectiveNow = Math.min(effectiveNow, stream.cancelledAt * 1000);
-  } else if (stream.status === "Ended") {
-    effectiveNow = Math.min(effectiveNow, new Date(stream.endTime).getTime());
-  } else if (stream.status === "Paused") {
-    // Paused streams are treated like active for display (no special cap),
-    // but we still never exceed the end time.
-    effectiveNow = Math.min(effectiveNow, new Date(stream.endTime).getTime());
-  }
-
-  if (effectiveNow <= start) return 0;
-  return Math.floor(flowRate * (effectiveNow - start) / 1000);
 }
 
 export interface StreamEvent {

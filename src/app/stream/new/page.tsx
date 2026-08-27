@@ -269,7 +269,7 @@ function NewStreamWizard() {
   useEffect(() => {
     if (step !== "review") return;
     const parsed = parseFloat(amount);
-    if (!(parsed > 0) || gasFee) return;
+    if (!(parsed > 0)) return;
     let active = true;
     setGasFeeLoading(true);
     getGasFeeEstimate(Math.round(parsed * 10_000_000))
@@ -285,7 +285,7 @@ function NewStreamWizard() {
     return () => {
       active = false;
     };
-  }, [step, amount, gasFee]);
+  }, [step, amount]);
 
   // Address verification state
   const [addressVerification, setAddressVerification] = useState<AddressVerification | null>(null);
