@@ -44,6 +44,7 @@ export default function NavHeader() {
   const { address, balanceRefreshTrigger } = useWallet();
   const { network } = useNetwork();
   const [xlmBalance, setXlmBalance] = useState<string | null>(null);
+  const [usdcBalance, setUsdcBalance] = useState<string | null>(null);
   const [balanceLoading, setBalanceLoading] = useState(false);
   const [balanceUpdated, setBalanceUpdated] = useState(false);
   const [changelogOpen, setChangelogOpen] = useState(false);
@@ -69,11 +70,14 @@ export default function NavHeader() {
     try {
       const res = await fetch(`${HORIZON_URL}/accounts/${addr}`);
       if (!res.ok) throw new Error(`Horizon ${res.status}`);
-      const data = await res.json() as { balances?: { asset_type: string; balance: string }[] };
+      const data = await res.json() as { balances?: { asset_type: string; asset_code?: string; balance: string }[] };
       const native = data.balances?.find((b) => b.asset_type === "native");
+      const usdc = data.balances?.find((b) => b.asset_code === "USDC");
       setXlmBalance(native ? parseFloat(native.balance).toFixed(2) : null);
+      setUsdcBalance(usdc ? parseFloat(usdc.balance).toFixed(2) : null);
     } catch {
       setXlmBalance(null);
+      setUsdcBalance(null);
     } finally {
       setBalanceLoading(false);
     }
@@ -82,6 +86,7 @@ export default function NavHeader() {
   useEffect(() => {
     if (!address) {
       setXlmBalance(null);
+      setUsdcBalance(null);
       return;
     }
     void fetchBalance(address);
@@ -93,14 +98,18 @@ export default function NavHeader() {
 
   // Brief "Balance updated" indicator when balance changes
   const prevBalanceRef = useRef<string | null>(null);
+  const prevUsdcRef = useRef<string | null>(null);
   useEffect(() => {
-    if (xlmBalance !== null && prevBalanceRef.current !== null && prevBalanceRef.current !== xlmBalance) {
+    const xlmChanged = xlmBalance !== null && prevBalanceRef.current !== null && prevBalanceRef.current !== xlmBalance;
+    const usdcChanged = usdcBalance !== null && prevUsdcRef.current !== null && prevUsdcRef.current !== usdcBalance;
+    if (xlmChanged || usdcChanged) {
       setBalanceUpdated(true);
       const timer = setTimeout(() => setBalanceUpdated(false), 2000);
       return () => clearTimeout(timer);
     }
     prevBalanceRef.current = xlmBalance;
-  }, [xlmBalance]);
+    prevUsdcRef.current = usdcBalance;
+  }, [xlmBalance, usdcBalance]);
 
   return (
     <>
@@ -145,11 +154,19 @@ export default function NavHeader() {
               className="text-xs text-gray-600 dark:text-gray-300 font-mono hidden sm:inline-block"
               aria-label={t("wallet_balance")}
             >
-              {balanceLoading && xlmBalance === null ? (
-                <span className="inline-block w-16 h-3 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" aria-hidden="true" />
-              ) : xlmBalance !== null ? (
-                <span className="inline-flex items-center gap-1.5">
-                  {`${parseFloat(xlmBalance).toLocaleString(language, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} XLM`}
+              {balanceLoading && xlmBalance === null && usdcBalance === null ? (
+                <span className="inline-block w-24 h-3 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" aria-hidden="true" />
+              ) : (xlmBalance !== null || usdcBalance !== null) ? (
+                <span className="inline-flex items-center gap-2 border border-gray-200 dark:border-gray-700 rounded-md px-2 py-1 bg-gray-50 dark:bg-gray-800">
+                  {xlmBalance !== null && (
+                    <span>{parseFloat(xlmBalance).toLocaleString(language, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} XLM</span>
+                  )}
+                  {usdcBalance !== null && (
+                    <span className="text-gray-400 dark:text-gray-500">|</span>
+                  )}
+                  {usdcBalance !== null && (
+                    <span className="text-blue-600 dark:text-blue-400">{parseFloat(usdcBalance).toLocaleString(language, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC</span>
+                  )}
                   {balanceUpdated && (
                     <span className="text-[10px] text-green-400 font-normal" aria-live="polite">
                       updated
