@@ -27,7 +27,7 @@ export function toJSON(entries: StreamHistoryEntry[]): string {
   return JSON.stringify(entries, null, 2);
 }
 
-export type ExportFormat = "csv" | "json";
+export type ExportFormat = "csv" | "json" | "pdf";
 
 const STROOPS_PER_UNIT = 10_000_000;
 
@@ -119,6 +119,26 @@ export async function exportTransactions(
     onProgress?.(1);
     downloadBlob(content, filename, "application/json");
     return { filename, mimeType: "application/json" };
+  }
+
+  if (format === "pdf") {
+    onProgress?.(0.5);
+    const { exportStreamsPdf } = await import("./pdfExport");
+    const streamItems = filtered.map((e, idx) => ({
+      id: String(idx + 1),
+      sender: account || "GA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJVSGZ",
+      recipient: "GB7B2XS7YYUWVLXUYG6EWBEYHV4WTUY5VWFDOXWOITVNHAJBMMRV7ZGO",
+      deposit: Number(e.amount),
+      token: "USDC",
+      startTime: e.timestamp,
+      endTime: e.timestamp,
+      status: (e.type === "cancellation" ? "Cancelled" : "Ended") as StreamData["status"],
+      flowRate: 1000,
+      lastWithdrawTime: e.timestamp,
+    }));
+    const res = exportStreamsPdf(streamItems, account, filters);
+    onProgress?.(1);
+    return res;
   }
 
   // CSV — build header + rows in chunks, yielding to the event loop between

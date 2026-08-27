@@ -47,6 +47,8 @@ function parseSortOrder(value: string | null): SortOrder {
   return "desc";
 }
 
+import { exportStreamsPdf } from "@/src/lib/pdfExport";
+
 function DashboardContent() {
   const rpcFetch = useRpcFetch();
   const searchParams = useSearchParams();
@@ -380,6 +382,22 @@ function DashboardContent() {
     addToast(`Exported history for ${ids.length} stream(s).`, "success");
   }, [selectedIds, addToast]);
 
+  const handleExportPdf = useCallback(() => {
+    const targets = selectedIds.size > 0
+      ? streams.filter((s) => selectedIds.has(s.id))
+      : sortedFiltered.length > 0
+      ? sortedFiltered
+      : streams;
+
+    if (targets.length === 0) {
+      addToast("No streams available to export.", "info");
+      return;
+    }
+
+    const { filename } = exportStreamsPdf(targets, address);
+    addToast(`Exported PDF report: ${filename}`, "success");
+  }, [selectedIds, streams, sortedFiltered, address, addToast]);
+
   const shortcutGroups: ShortcutGroup[] = useMemo(() => [
     {
       title: "Dashboard",
@@ -687,6 +705,14 @@ function DashboardContent() {
                     className="px-3 py-1.5 text-xs bg-gray-700 text-white rounded-lg hover:bg-gray-600 disabled:opacity-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
                   >
                     Export CSV
+                  </button>
+                  <button
+                    onClick={handleExportPdf}
+                    disabled={bulkLoading}
+                    data-testid="bulk-export-pdf-button"
+                    className="px-3 py-1.5 text-xs bg-green-800 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
+                  >
+                    Export PDF
                   </button>
                   <button
                     onClick={handleBulkTopUp}

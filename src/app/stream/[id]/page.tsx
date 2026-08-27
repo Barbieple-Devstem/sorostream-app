@@ -225,6 +225,41 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
   const [showComparisonModal, setShowComparisonModal] = useState(false);
   const [allStreams, setAllStreams] = useState<StreamData[]>([]);
 
+  // ── Milestone tracking & push notifications (#358) ───────────────────────────
+  const firedMilestonesRef = useRef<Set<number>>(new Set());
+  const [pushNotificationsEnabled, setPushNotificationsEnabled] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem(`sorostream_milestones_push_${params.id}`) === "true";
+  });
+
+  const handleTogglePushNotifications = async () => {
+    if (!pushNotificationsEnabled) {
+      if (typeof Notification !== "undefined") {
+        if (Notification.permission === "default") {
+          const perm = await Notification.requestPermission();
+          if (perm !== "granted") {
+            addToast("Notification permission denied by browser.", "info");
+            return;
+          }
+        } else if (Notification.permission === "denied") {
+          addToast("Browser notifications are blocked in settings.", "error");
+          return;
+        }
+      }
+      setPushNotificationsEnabled(true);
+      if (typeof window !== "undefined") {
+        localStorage.setItem(`sorostream_milestones_push_${params.id}`, "true");
+      }
+      addToast("Milestone push notifications enabled.", "success");
+    } else {
+      setPushNotificationsEnabled(false);
+      if (typeof window !== "undefined") {
+        localStorage.setItem(`sorostream_milestones_push_${params.id}`, "false");
+      }
+      addToast("Milestone push notifications disabled.", "info");
+    }
+  };
+
   // ── Optimistic UI state ────────────────────────────────────────────────────
   /**
    * optimisticClaimable — passed to LiveCounter:
@@ -294,6 +329,51 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [address]);
 
+  // Milestone detection effect: fires toast once per milestone per session
+  useEffect(() => {
+    if (!stream || stream.status === "Cancelled") return;
+
+    const checkMilestones = () => {
+      const start = new Date(stream.startTime).getTime();
+      const end = new Date(stream.endTime).getTime();
+      const now = Date.now();
+      const totalDuration = end - start;
+      if (totalDuration <= 0) return;
+
+      const elapsed = now - start;
+      const currentPct = Math.max(0, Math.min(100, (elapsed / totalDuration) * 100));
+
+      const milestones = [25, 50, 75];
+      for (const m of milestones) {
+        if (currentPct >= m && !firedMilestonesRef.current.has(m)) {
+          firedMilestonesRef.current.add(m);
+          addToast(`🎉 Milestone reached: Stream #${stream.id} is ${m}% completed!`, "success");
+
+          // Opt-in browser push notification when tab is not active
+          if (
+            pushNotificationsEnabled &&
+            typeof window !== "undefined" &&
+            typeof Notification !== "undefined" &&
+            Notification.permission === "granted" &&
+            document.hidden
+          ) {
+            try {
+              new Notification("Milestone Reached! 🎉", {
+                body: `Stream #${stream.id} has crossed ${m}% completion.`,
+              });
+            } catch {
+              // Ignore push errors
+            }
+          }
+        }
+      }
+    };
+
+    checkMilestones();
+    const interval = setInterval(checkMilestones, 1000);
+    return () => clearInterval(interval);
+  }, [stream, addToast, pushNotificationsEnabled]);
+
   // ── Load stream on mount ───────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
@@ -356,13 +436,12 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
     };
   }, [params.id, fetchKey]);
 
-  // ── Milestone notifications (#421) ────────────────────────────────────────
-  // Fire an in-app toast the first time a stream crosses 25/50/75/100% progress.
-  const firedMilestonesRef = useRef<Set<number>>(new Set());
+  // ── Milestone notifications (#421, #358) ──────────────────────────────────
+  // Fire an in-app toast and opt-in push notification the first time a stream crosses 25/50/75% progress.
   useEffect(() => {
     firedMilestonesRef.current = new Set();
 
-    const milestones = [25, 50, 75, 100];
+    const milestones = [25, 50, 75];
     const computeProgress = (s: StreamData): number => {
       const start = new Date(s.startTime).getTime();
       const end = new Date(s.endTime).getTime();
@@ -374,14 +453,29 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
     const check = () => {
       const s = streamRef.current;
       if (!s) return;
-      // Progress is frozen for paused/cancelled streams — don't fire milestones.
       if (s.status === "Paused" || s.status === "Cancelled") return;
 
       const pct = computeProgress(s);
       for (const m of milestones) {
         if (pct >= m && !firedMilestonesRef.current.has(m)) {
           firedMilestonesRef.current.add(m);
-          addToast(`Stream #${s.id} is ${m}% complete`, "info");
+          addToast(`🎉 Milestone reached: Stream #${s.id} is ${m}% completed!`, "success");
+
+          if (
+            pushNotificationsEnabled &&
+            typeof window !== "undefined" &&
+            typeof Notification !== "undefined" &&
+            Notification.permission === "granted" &&
+            document.hidden
+          ) {
+            try {
+              new Notification("Milestone Reached! 🎉", {
+                body: `Stream #${s.id} has crossed ${m}% completion.`,
+              });
+            } catch {
+              // ignore push errors
+            }
+          }
         }
       }
     };
@@ -389,7 +483,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
     check();
     const interval = setInterval(check, 1000);
     return () => clearInterval(interval);
-  }, [stream?.id, addToast]);
+  }, [stream?.id, addToast, pushNotificationsEnabled]);
 
   // ── Load all streams for comparison modal ──────────────────────────────────
   useEffect(() => {
@@ -1095,6 +1189,24 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
           <CountdownTimer endTime={stream.endTime} />
 
           <StreamProgressBar stream={stream} />
+
+          {/* Milestone Push Notification Opt-in toggle (#358) */}
+          <div className="flex items-center justify-between mt-3 pt-2 border-t border-gray-700/60 text-xs text-gray-400">
+            <span>Milestone Push Notifications (25%, 50%, 75%)</span>
+            <button
+              type="button"
+              onClick={handleTogglePushNotifications}
+              data-testid="milestone-push-toggle"
+              aria-pressed={pushNotificationsEnabled}
+              className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 ${
+                pushNotificationsEnabled
+                  ? "bg-green-900/60 border-green-600 text-green-300"
+                  : "bg-gray-800 border-gray-700 text-gray-400 hover:text-gray-200"
+              }`}
+            >
+              {pushNotificationsEnabled ? "🔔 Push Enabled" : "🔕 Enable Push"}
+            </button>
+          </div>
 
           {/* Collateral unlock badge — shown when sender has collateral */}
           {displayStatus !== "Cancelled" && (

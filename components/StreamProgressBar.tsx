@@ -54,20 +54,49 @@ export default function StreamProgressBar({ stream }: StreamProgressBarProps) {
           {isCompleted ? "Completed" : elapsedText}
         </span>
       </div>
-      <div
-        className="relative h-3 bg-gray-700 rounded-full overflow-hidden"
-        role="progressbar"
-        aria-valuenow={Math.round(percentage)}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-label={`Stream progress: ${elapsedText}`}
-      >
+      <div className="relative pt-1 pb-4">
         <div
-          className={`h-full transition-all duration-500 ease-out ${
-            isCompleted ? "bg-green-500" : "bg-green-600"
-          }`}
-          style={{ width: `${percentage}%` }}
-        />
+          className="relative h-3 bg-gray-700 rounded-full overflow-hidden"
+          role="progressbar"
+          aria-valuenow={Math.round(percentage)}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label={`Stream progress: ${elapsedText}`}
+        >
+          <div
+            className={`h-full transition-all duration-500 ease-out ${
+              isCompleted ? "bg-green-500" : "bg-green-600"
+            }`}
+            style={{ width: `${percentage}%` }}
+          />
+        </div>
+
+        {/* Milestone markers at 25%, 50%, 75% */}
+        {[25, 50, 75].map((m) => {
+          const reached = percentage >= m;
+          return (
+            <div
+              key={m}
+              data-testid={`milestone-marker-${m}`}
+              data-reached={reached}
+              className="absolute top-1 -translate-x-1/2 flex flex-col items-center pointer-events-none"
+              style={{ left: `${m}%` }}
+            >
+              <div
+                className={`w-1 h-3 rounded-full transition-colors ${
+                  reached ? "bg-green-400 shadow-sm" : "bg-gray-500/70"
+                }`}
+              />
+              <span
+                className={`text-[10px] mt-0.5 font-mono font-medium transition-colors ${
+                  reached ? "text-green-300 font-semibold" : "text-gray-500"
+                }`}
+              >
+                {m}%
+              </span>
+            </div>
+          );
+        })}
       </div>
       <p className="text-xs text-gray-500">
         {isCompleted

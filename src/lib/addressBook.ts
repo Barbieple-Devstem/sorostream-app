@@ -111,6 +111,9 @@ export function getContacts(owner?: string): AddressBookContact[] {
 }
 
 export function saveContact(contact: AddressBookContact, owner?: string): boolean {
+  if (owner !== undefined && !isValidOwner(owner)) {
+    return false;
+  }
   if (!isValidOwner(owner)) {
     // Legacy global behaviour
     const contacts = readLegacyContacts();
@@ -125,10 +128,12 @@ export function saveContact(contact: AddressBookContact, owner?: string): boolea
     }
   }
 
-  const contacts = getOwnerContacts(owner);
+  const store = readStore();
+  const contacts = Object.prototype.hasOwnProperty.call(store, owner)
+    ? store[owner]
+    : [];
   if (contacts.length >= MAX_CONTACTS) return false;
   if (contacts.some((c) => c.id === contact.id)) return false;
-  const store = readStore();
   store[owner] = [...contacts, contact];
   writeStore(store);
   return true;

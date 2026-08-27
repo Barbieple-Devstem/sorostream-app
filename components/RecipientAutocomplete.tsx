@@ -163,7 +163,7 @@ export default function RecipientAutocomplete({
           }}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
-          className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-3 text-white font-mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+          className="w-full bg-gray-800 border border-gray-600 rounded-lg pl-4 pr-10 py-3 text-white font-mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
           aria-required="true"
           aria-invalid={!!(touched && error)}
           aria-describedby={
@@ -174,18 +174,35 @@ export default function RecipientAutocomplete({
           aria-controls="recipient-listbox"
           role="combobox"
           autoComplete="off"
+          data-testid="recipient-input"
         />
+        {contacts.length > 0 && (
+          <button
+            type="button"
+            tabIndex={-1}
+            aria-label="Toggle address book contacts"
+            data-testid="address-book-toggle"
+            onClick={() => setOpen((prev) => !prev)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
+          >
+            <svg className={`w-4 h-4 transform transition-transform ${open ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+        )}
         {showDropdown && (
           <ul
             id="recipient-listbox"
             ref={listRef}
             role="listbox"
+            data-testid="address-book-dropdown"
             className="absolute z-10 top-full mt-1 w-full bg-gray-800 border border-gray-600 rounded-lg shadow-xl max-h-48 overflow-y-auto"
           >
             {filtered.map((contact, idx) => (
               <li
                 key={contact.id}
                 role="option"
+                data-testid={`contact-option-${contact.name}`}
                 aria-selected={highlightedIdx === idx}
                 className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer text-sm transition-colors ${
                   highlightedIdx === idx ? "bg-gray-700 text-white" : "text-gray-300 hover:bg-gray-700/60"
@@ -196,8 +213,8 @@ export default function RecipientAutocomplete({
                 }}
                 onMouseEnter={() => setHighlightedIdx(idx)}
               >
-                <span className="flex-1 truncate">{contact.name}</span>
-                <span className="text-gray-500 font-mono text-xs shrink-0">{truncateAddress(contact.address)}</span>
+                <span className="flex-1 truncate font-medium text-white">{contact.name}</span>
+                <span className="text-gray-400 font-mono text-xs shrink-0">{truncateAddress(contact.address)}</span>
               </li>
             ))}
           </ul>
