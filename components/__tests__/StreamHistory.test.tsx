@@ -3,10 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import StreamHistory, { type HistoryEntry } from '../StreamHistory';
 
 vi.mock('@/src/lib/network', () => ({
-  useNetwork: () => ({ network: 'testnet', isTestnet: true, isMainnet: false, networkUrl: 'https://testnet.stellar.org' }),
-}));
-vi.mock('@/src/context/SettingsContext', () => ({
-  useSettings: () => ({ language: 'en', timeDisplayMode: 'local' }),
+  useNetwork: () => ({ network: 'testnet' }),
 }));
 
 vi.mock('@/src/lib/sorostream', () => ({

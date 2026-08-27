@@ -795,37 +795,6 @@ export async function getOraclePrice(token: string): Promise<number | null> {
   return null;
 }
 
-/**
- * Total amount that has dripped into a stream up to the current effective
- * time, taking cancellation and end time into account. For a cancelled stream
- * this is the pro-rated amount streamed before cancellation, not the full
- * deposit.
- */
-export function getStreamedAmount(stream: StreamData): number {
-  const flowRate = Number(stream.flowRate);
-  const start = new Date(stream.startTime).getTime();
-  if (!Number.isFinite(flowRate) || !Number.isFinite(start)) return 0;
-
-  let effectiveNow = Date.now();
-  if (stream.status === "Cancelled" && stream.cancelledAt) {
-    effectiveNow = Math.min(effectiveNow, stream.cancelledAt * 1000);
-  } else if (stream.status === "Ended") {
-    effectiveNow = Math.min(effectiveNow, new Date(stream.endTime).getTime());
-  } else if (stream.status === "Paused") {
-    if (stream.pausedAt) {
-      const pausedMs = new Date(stream.pausedAt).getTime();
-      if (Number.isFinite(pausedMs)) {
-        effectiveNow = Math.min(effectiveNow, pausedMs);
-      }
-    } else {
-      effectiveNow = Math.min(effectiveNow, new Date(stream.endTime).getTime());
-    }
-  }
-
-  if (effectiveNow <= start) return 0;
-  return Math.floor(flowRate * (effectiveNow - start) / 1000);
-}
-
 export interface StreamEvent {
   id: string;
   type: "withdrawal" | "top-up" | "creation" | "cancellation" | "alert";

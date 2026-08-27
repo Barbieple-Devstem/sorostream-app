@@ -12,7 +12,7 @@ import { StreamErrorBoundary } from "@/components/StreamErrorBoundary";
 import { getStreamsForWallet, watchClaimable, sorostream, getMockStreamHistory, type StreamData } from "@/src/lib/sorostream";
 import { useRpcFetch } from "@/src/lib/useRpcFetch";
 import { useToast } from "@/src/lib/toast";
-import { downloadCSV } from "@/src/lib/export";
+import { downloadCSV, downloadWalletStreamsCsv } from "@/src/lib/export";
 import { useKeyboardShortcuts, type ShortcutGroup } from "@/src/lib/useKeyboardShortcuts";
 import { useBookmarks } from "@/src/context/BookmarksContext";
 import { useWallet } from "@/src/context/WalletContext";
@@ -420,12 +420,15 @@ function DashboardContent() {
           <h1 className="text-2xl font-bold">Dashboard</h1>
           <div className="flex items-center gap-2">
             <button
-              onClick={handleExportPdf}
-              data-testid="export-pdf-button"
-              className="border border-green-700 text-green-300 hover:bg-green-900/30 px-4 py-2 rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
-              aria-label="Export streams to formatted PDF report"
+              type="button"
+              onClick={() => {
+                const result = downloadWalletStreamsCsv(streams, address);
+                addToast(`Exported ${result.rowCount} stream${result.rowCount === 1 ? "" : "s"} to ${result.filename}`, "success");
+              }}
+              disabled={!address || streams.length === 0}
+              className="px-4 py-2 rounded-lg text-sm font-medium border border-gray-700 text-gray-300 hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
             >
-              📄 Export PDF
+              Export CSV
             </button>
             <button
               onClick={() => {
