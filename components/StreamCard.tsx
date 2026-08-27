@@ -54,6 +54,14 @@ interface StreamCardProps {
   pausedAt?: string;
   /** Token type (XLM, USDC, etc.) for proper USD conversion display. */
   token?: string;
+  /** True when an on-chain transaction is in-flight for this stream. */
+  optimisticPending?: boolean;
+  /** Optimistic status override while transaction is pending. */
+  optimisticStatus?: string;
+  /** Optimistic deposit override while transaction is pending. */
+  optimisticDeposit?: number;
+  /** Optimistic claimable override while transaction is pending. */
+  optimisticClaimable?: number;
 }
 
 export default function StreamCard({
@@ -72,6 +80,10 @@ export default function StreamCard({
   endTime,
   pausedAt,
   token = "XLM",
+  optimisticPending = false,
+  optimisticStatus,
+  optimisticDeposit,
+  optimisticClaimable,
 }: StreamCardProps) {
   const { isBookmarked, toggleBookmark } = useBookmarks();
   const bookmarked = isBookmarked(id);
@@ -161,10 +173,13 @@ function statusBadgeClass(status: string): string {
   }
 }
 
+  const effectiveStatus = optimisticStatus ?? status;
+  const effectiveDeposit = optimisticDeposit ?? deposit;
+
   /** Convert stroops → XLM/USDC (display value). */
   const toXlm = (val: number) => (val / 10_000_000).toFixed(2);
   const flowXlm = flowRate / 10_000_000;
-  const depositXlm = deposit / 10_000_000;
+  const depositXlm = effectiveDeposit / 10_000_000;
 
   /** Determine if we should display USD equivalents and which type */
   const isUsdcToken = token === "USDC";
@@ -235,11 +250,22 @@ function statusBadgeClass(status: string): string {
               Scheduled
             </span>
           )}
+          {optimisticPending && (
+            <span
+              data-testid="optimistic-confirming"
+              className="text-xs px-2 py-0.5 rounded-full bg-amber-900/60 text-amber-300 border border-amber-700 flex items-center gap-1 font-medium"
+              aria-label="Transaction confirming"
+              title="Transaction submitted and confirming on-chain"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" aria-hidden="true" />
+              Confirming…
+            </span>
+          )}
           <span
-            className={`text-xs px-2 py-1 rounded-full ${statusBadgeClass(status)}`}
-            aria-label={`Status: ${status}`}
+            className={`text-xs px-2 py-1 rounded-full ${statusBadgeClass(effectiveStatus)}`}
+            aria-label={`Status: ${effectiveStatus}`}
           >
-            {status}
+            {effectiveStatus}
           </span>
           {healthScore !== null && healthTier !== null && (() => {
             const now = Date.now();
