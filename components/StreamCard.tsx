@@ -81,15 +81,31 @@ export default function StreamCard({
         aria-label={id ? `Loading stream ${id}` : "Loading stream"}
         aria-busy="true"
       >
-        <div className="flex justify-between">
-          <div className="h-4 w-20 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
-          <div className="h-5 w-16 animate-pulse rounded-full bg-gray-200 dark:bg-gray-700" />
+        {/* Header: Stream ID and status badges */}
+        <div className="flex justify-between items-center">
+          <span className="flex items-center gap-2">
+            <div className="h-4 w-20 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+          </span>
+          <div className="flex items-center gap-2">
+            <div className="h-5 w-16 animate-pulse rounded-full bg-gray-200 dark:bg-gray-700" />
+            <div className="h-5 w-16 animate-pulse rounded-full bg-gray-200 dark:bg-gray-700" />
+            <div className="h-5 w-16 animate-pulse rounded-full bg-gray-200 dark:bg-gray-700" />
+          </div>
         </div>
-        <div className="space-y-2">
-          <div className="h-3 w-40 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
-          <div className="h-3 w-36 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
-          <div className="h-3 w-32 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
-          <div className="h-3 w-28 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+
+        {/* From/To information */}
+        <div className="text-sm space-y-2">
+          <div className="h-4 w-48 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+          <div className="h-4 w-44 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+          <div className="h-4 w-40 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+          <div className="h-4 w-36 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+          <div className="h-4 w-52 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+        </div>
+
+        {/* Tags section */}
+        <div className="flex gap-2">
+          <div className="h-6 w-16 animate-pulse rounded-full bg-gray-200 dark:bg-gray-700" />
+          <div className="h-6 w-20 animate-pulse rounded-full bg-gray-200 dark:bg-gray-700" />
         </div>
       </div>
     );
