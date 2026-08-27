@@ -24,6 +24,7 @@ import PortfolioSummaryCard from "@/components/PortfolioSummaryCard";
 import StreamPerformanceMetrics from "@/components/StreamPerformanceMetrics";
 import WatchlistTab from "@/components/WatchlistTab";
 import StreamCard from "@/components/StreamCard";
+import ThemeToggle from "@/components/ThemeToggle";
 
 type DashboardState = "loading" | "filtered-empty" | "empty" | "ready";
 
@@ -95,16 +96,26 @@ function DashboardContent() {
   const [multiSelectMode, setMultiSelectMode] = useState(false);
   const [showBulkCancelConfirm, setShowBulkCancelConfirm] = useState(false);
 
+  // Pagination state (#383)
+  const [visibleCount, setVisibleCount] = useState(12);
+  const PAGE_SIZE = 12;
+
   // Tab state
   const [activeTab, setActiveTab] = useState<"streams" | "watchlist">("streams");
 
   // UI state
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
   const [showGiftModal, setShowGiftModal] = useState(false);
-  // When "asset", streams are grouped by their token in the list view.
-  const [groupBy, setGroupBy] = useState<"none" | "asset">("none");
+  // When "asset", streams are grouped by their token; when "tag", by their tag label.
+  const [groupBy, setGroupBy] = useState<"none" | "asset" | "tag">("none");
+  // Track which tag groups are collapsed. Key = tag label, value = true when collapsed.
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const searchRef = useRef<HTMLInputElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Whether the filter bar is expanded (toggle with "f" shortcut)
+  const [showFilterBar, setShowFilterBar] = useState(true);
+  // Index of the currently keyboard-focused stream card (-1 = none)
+  const [focusedStreamIndex, setFocusedStreamIndex] = useState(-1);
 
   useEffect(() => {
     let cancelled = false;
@@ -230,7 +241,7 @@ function DashboardContent() {
         case "amount":
           return dir * (a.deposit - b.deposit);
         case "status": {
-          const order: Record<string, number> = { Active: 0, Ended: 1, Cancelled: 2, Paused: 3 };
+          const order: Record<string, number> = { Active: 0, Paused: 1, Ended: 2, Cancelled: 3 };
           return dir * ((order[a.status] ?? 3) - (order[b.status] ?? 3));
         }
         default:
@@ -262,9 +273,15 @@ function DashboardContent() {
     setSearch("");
     setBookmarksOnly(false);
     setSelectedTags([]);
+    setVisibleCount(PAGE_SIZE);
   };
 
   const hasActiveFilters = statusFilter || tokenFilter || search.trim() || bookmarksOnly || selectedTags.length > 0;
+
+  // Reset pagination when filters change
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [statusFilter, tokenFilter, search, bookmarksOnly, selectedTags]);
 
   // Grouped view: bucket the (already filtered + sorted) streams by token.
   const assetGroups = useMemo(() => {
@@ -279,6 +296,39 @@ function DashboardContent() {
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([token, items]) => ({ token, items }));
   }, [groupBy, sortedFiltered]);
+
+  // Grouped view: bucket streams by their tag labels.
+  // Streams with no tags are placed into an "(Untagged)" group.
+  const tagGroups = useMemo(() => {
+    if (groupBy !== "tag") return [];
+    const tagMap = getTagMap();
+    const map = new Map<string, StreamData[]>();
+    for (const s of sortedFiltered) {
+      const tags = tagMap[s.id] ?? [];
+      if (tags.length === 0) {
+        const key = "(Untagged)";
+        if (!map.has(key)) map.set(key, []);
+        map.get(key)!.push(s);
+      } else {
+        for (const tag of tags) {
+          if (!map.has(tag)) map.set(tag, []);
+          map.get(tag)!.push(s);
+        }
+      }
+    }
+    // Sort: named tags alphabetically first, then "(Untagged)" last.
+    return Array.from(map.entries())
+      .sort((a, b) => {
+        if (a[0] === "(Untagged)") return 1;
+        if (b[0] === "(Untagged)") return -1;
+        return a[0].localeCompare(b[0]);
+      })
+      .map(([label, items]) => ({ label, items }));
+  }, [groupBy, sortedFiltered]);
+
+  const toggleGroupCollapse = useCallback((key: string) => {
+    setCollapsedGroups((prev) => ({ ...prev, [key]: !prev[key] }));
+  }, []);
 
   const state: DashboardState = loading
     ? "loading"
@@ -412,20 +462,52 @@ function DashboardContent() {
         { key: "n", description: "New stream", action: () => router.push("/stream/new") },
         { key: "r", description: "Refresh list", action: () => void refreshStreams() },
         { key: "/", description: "Focus search", action: () => searchRef.current?.focus(), ignoreWhenEditing: false },
-        { key: "Escape", description: "Clear search / selection", action: () => { setSearch(""); clearSelection(); (document.activeElement as HTMLElement)?.blur(); } },
+        { key: "f", description: "Toggle filter bar", action: () => setShowFilterBar((v) => !v) },
+        {
+          key: "j",
+          description: "Next stream",
+          action: () => {
+            if (sortedFiltered.length === 0) return;
+            setFocusedStreamIndex((i) => {
+              const next = i < sortedFiltered.length - 1 ? i + 1 : 0;
+              return next;
+            });
+          },
+        },
+        {
+          key: "k",
+          description: "Previous stream",
+          action: () => {
+            if (sortedFiltered.length === 0) return;
+            setFocusedStreamIndex((i) => {
+              const prev = i > 0 ? i - 1 : sortedFiltered.length - 1;
+              return prev;
+            });
+          },
+        },
+        {
+          key: "Enter",
+          description: "Open focused stream",
+          action: () => {
+            if (focusedStreamIndex >= 0 && focusedStreamIndex < sortedFiltered.length) {
+              router.push(`/stream/${sortedFiltered[focusedStreamIndex].id}`);
+            }
+          },
+        },
+        { key: "Escape", description: "Clear search / selection", action: () => { setSearch(""); clearSelection(); setFocusedStreamIndex(-1); (document.activeElement as HTMLElement)?.blur(); } },
         { key: "?", shift: true, description: "Toggle keyboard shortcuts help", action: () => setShowShortcutsHelp((v) => !v) },
       ],
     },
-  ], [router, clearSelection, refreshStreams]);
+  ], [router, clearSelection, refreshStreams, sortedFiltered, focusedStreamIndex]);
 
   useKeyboardShortcuts(shortcutGroups);
 
   return (
-    <main id="main-content" tabIndex={-1} className="min-h-screen bg-gray-900 text-white p-4 sm:p-8">
+    <main id="main-content" tabIndex={-1} className="min-h-screen bg-gray-900 text-white p-4 sm:p-6">
       <div className="max-w-6xl mx-auto">
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
           <h1 className="text-2xl font-bold">Dashboard</h1>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => {
@@ -458,8 +540,9 @@ function DashboardContent() {
               href="/stream/new"
               className="bg-green-700 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
             >
-              + New Stream
+              + Create Stream
             </Link>
+            <ThemeToggle />
           </div>
         </div>
 
@@ -523,6 +606,32 @@ function DashboardContent() {
 
             {/* Filter Bar */}
             <div className="mb-6 space-y-3">
+              <div className="flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => setShowFilterBar((v) => !v)}
+                  aria-expanded={showFilterBar}
+                  aria-controls="filter-bar-content"
+                  className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 rounded"
+                >
+                  <span
+                    aria-hidden="true"
+                    className="transition-transform duration-200"
+                    style={{ display: "inline-block", transform: showFilterBar ? "rotate(0deg)" : "rotate(-90deg)" }}
+                  >
+                    ▼
+                  </span>
+                  Filters
+                  {hasActiveFilters && (
+                    <span className="ml-1 bg-green-800 text-green-300 rounded-full px-1.5 py-0.5 text-[10px] font-semibold">
+                      active
+                    </span>
+                  )}
+                  <kbd className="hidden sm:inline-flex ml-1 bg-gray-700 text-gray-400 text-[10px] px-1 rounded font-mono">F</kbd>
+                </button>
+              </div>
+              {showFilterBar && (
+              <div id="filter-bar-content">
               <div className="flex flex-wrap gap-3">
                 {/* Status Filter */}
                 <select
@@ -533,6 +642,7 @@ function DashboardContent() {
                 >
                   <option value="">All Statuses</option>
                   <option value="Active">Active</option>
+                  <option value="Paused">Paused</option>
                   <option value="Ended">Ended</option>
                   <option value="Cancelled">Cancelled</option>
                 </select>
@@ -601,7 +711,7 @@ function DashboardContent() {
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search by recipient, sender, or ID…"
-                  className="flex-1 min-w-[200px] bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-sm text-white placeholder-gray-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+                  className="flex-1 min-w-0 w-full sm:min-w-[200px] bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-sm text-white placeholder-gray-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
                   aria-label="Search streams"
                 />
 
@@ -646,11 +756,14 @@ function DashboardContent() {
                   )}
                 </div>
               )}
+              </div>
+              )}
             </div>
 
             {/* Sort controls */}
-            <div className="mb-4 flex flex-wrap items-center gap-2">
-              <span className="text-xs text-gray-400 mr-1">Sort by:</span>
+            <div className="mb-4 overflow-x-auto">
+            <div className="flex flex-wrap items-center gap-2 min-w-0">
+              <span className="text-xs text-gray-400 mr-1 whitespace-nowrap">Sort by:</span>
               {(
                 [
                   { value: "created", label: "Date Created" },
@@ -690,7 +803,19 @@ function DashboardContent() {
               >
                 Group by asset
               </button>
-            </div>
+              <button
+                onClick={() => setGroupBy((g) => (g === "tag" ? "none" : "tag"))}
+                aria-pressed={groupBy === "tag"}
+                className={`ml-1 px-3 py-1.5 rounded-lg text-xs border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 ${
+                  groupBy === "tag"
+                    ? "bg-green-700 border-green-600 text-white"
+                    : "border-gray-700 text-gray-400 hover:bg-gray-800"
+                }`}
+              >
+                Group by tag
+              </button>
+            </div>{/* end sort inner flex */}
+            </div>{/* end sort overflow wrapper */}
 
             {/* Bulk actions bar */}
             {selectedIds.size > 0 && (
@@ -754,7 +879,7 @@ function DashboardContent() {
                 aria-busy="true"
                 aria-label="Loading streams"
               >
-                <ul className="grid gap-4 md:grid-cols-2" role="list">
+                <ul className="grid gap-4 sm:grid-cols-1 md:grid-cols-2" role="list">
                   {Array.from({ length: 6 }, (_, index) => (
                     <li key={index}>
                       <SkeletonCard />
@@ -821,7 +946,7 @@ function DashboardContent() {
                       </span>
                     </div>
                     <div className="rounded-xl border border-gray-700 bg-gray-900 p-2">
-                      <div className="grid gap-4 md:grid-cols-2">
+                      <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2">
                         {items.map((s) => (
                           <div key={s.id} className="relative">
                             <Link href={`/stream/${s.id}`} className="block">
@@ -843,18 +968,88 @@ function DashboardContent() {
                             </Link>
                           </div>
                         ))}
-                      </div>
+                       </div>
                     </div>
                   </section>
-                ))}
+                  );
+                })}
+              </div>
+            ) : groupBy === "tag" ? (
+              <div className="space-y-6">
+                {tagGroups.map(({ label, items }) => {
+                  const isCollapsed = collapsedGroups[label] ?? false;
+                  const activeCount = items.filter((s) => s.status === "Active").length;
+                  return (
+                    <section key={label} aria-label={`Streams tagged ${label}`}>
+                      <button
+                        type="button"
+                        onClick={() => toggleGroupCollapse(label)}
+                        className="flex items-center gap-2 mb-3 w-full text-left group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 rounded"
+                        aria-expanded={!isCollapsed}
+                      >
+                        <span
+                          className="text-gray-400 transition-transform duration-200 text-xs"
+                          aria-hidden="true"
+                          style={{ display: "inline-block", transform: isCollapsed ? "rotate(-90deg)" : "rotate(0deg)" }}
+                        >
+                          ▼
+                        </span>
+                        <h3 className="text-sm font-semibold text-white group-hover:text-green-300 transition-colors">
+                          {label}
+                        </h3>
+                        <span
+                          className="text-xs bg-gray-800 text-gray-400 rounded-full px-2 py-0.5"
+                          title={`${items.length} stream${items.length !== 1 ? "s" : ""} total`}
+                        >
+                          {items.length}
+                        </span>
+                        {activeCount > 0 && (
+                          <span
+                            className="text-xs bg-green-900/60 text-green-400 border border-green-700/50 rounded-full px-2 py-0.5"
+                            title={`${activeCount} active`}
+                          >
+                            {activeCount} active
+                          </span>
+                        )}
+                      </button>
+                      {!isCollapsed && (
+                        <div className="rounded-xl border border-gray-700 bg-gray-900 p-2">
+                          <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2">
+                            {items.map((s) => (
+                              <div key={s.id} className="relative">
+                                <Link href={`/stream/${s.id}`} className="block">
+                                  <StreamCard
+                                    id={s.id}
+                                    sender={s.sender}
+                                    recipient={s.recipient}
+                                    flowRate={s.flowRate}
+                                    deposit={s.deposit}
+                                    status={s.status}
+                                    selected={multiSelectMode ? selectedIds.has(s.id) : false}
+                                    onToggle={multiSelectMode ? toggleSelect : undefined}
+                                    onClone={handleClone}
+                                    scheduledStartTime={s.scheduledStartTime}
+                                    startTime={s.startTime}
+                                    endTime={s.endTime}
+                                  />
+                                </Link>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </section>
+                  );
+                })}
               </div>
             ) : (
               <div className="rounded-xl border border-gray-700 bg-gray-900 p-2">
                 <StreamVirtualList
-                  streams={sortedFiltered.slice((currentPage - 1) * pageSize, currentPage * pageSize)}
+                  streams={sortedFiltered.slice(0, visibleCount)}
                   selectedIds={multiSelectMode ? selectedIds : undefined}
                   onToggleSelect={multiSelectMode ? toggleSelect : undefined}
                   onClone={handleClone}
+                  focusedStreamId={focusedStreamIndex >= 0 && focusedStreamIndex < sortedFiltered.length ? sortedFiltered[focusedStreamIndex].id : undefined}
                 />
                 <div className="flex justify-between items-center p-4">
                   <button 
@@ -878,6 +1073,28 @@ function DashboardContent() {
               </div>
             )}
             </StreamErrorBoundary>
+
+            {/* Pagination: Load More (#383) */}
+            {sortedFiltered.length > visibleCount && (
+              <div className="mt-4 text-center">
+                <button
+                  onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
+                  className="px-6 py-2 bg-gray-800 border border-gray-700 text-gray-300 rounded-lg text-sm hover:bg-gray-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+                >
+                  Load More ({Math.min(PAGE_SIZE, sortedFiltered.length - visibleCount)} of {sortedFiltered.length - visibleCount} remaining)
+                </button>
+                <p className="text-xs text-gray-500 mt-2">
+                  Showing {Math.min(visibleCount, sortedFiltered.length)} of {sortedFiltered.length} streams
+                </p>
+              </div>
+            )}
+            {sortedFiltered.length > 0 && sortedFiltered.length <= visibleCount && (
+              <div className="mt-4 text-center">
+                <p className="text-xs text-gray-500">
+                  All {sortedFiltered.length} stream{sortedFiltered.length === 1 ? "" : "s"} loaded
+                </p>
+              </div>
+            )}
             </div>
             )}{/* end activeTab conditional */}
           </div>
