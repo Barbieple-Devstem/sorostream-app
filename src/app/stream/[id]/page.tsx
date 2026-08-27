@@ -1628,7 +1628,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
 
                 return (
                   <>
-                    <StreamHistory entries={realEntries} />
+                    <StreamHistory entries={realEntries} streamId={params.id} />
                     {realEntries.length > 0 && (
                       <div className="mt-4">
                         <p className="text-gray-400 text-sm font-medium mb-3">
