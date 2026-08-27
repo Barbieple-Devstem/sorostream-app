@@ -12,7 +12,7 @@ import { StreamErrorBoundary } from "@/components/StreamErrorBoundary";
 import { getStreamsForWallet, watchClaimable, sorostream, getMockStreamHistory, type StreamData } from "@/src/lib/sorostream";
 import { useRpcFetch } from "@/src/lib/useRpcFetch";
 import { useToast } from "@/src/lib/toast";
-import { downloadCSV } from "@/src/lib/export";
+import { downloadCSV, downloadWalletStreamsCsv } from "@/src/lib/export";
 import { useKeyboardShortcuts, type ShortcutGroup } from "@/src/lib/useKeyboardShortcuts";
 import { useBookmarks } from "@/src/context/BookmarksContext";
 import { useWallet } from "@/src/context/WalletContext";
@@ -23,6 +23,7 @@ import StreamExpiryAlerts from "@/components/StreamExpiryAlerts";
 import PortfolioSummaryCard from "@/components/PortfolioSummaryCard";
 import StreamPerformanceMetrics from "@/components/StreamPerformanceMetrics";
 import WatchlistTab from "@/components/WatchlistTab";
+import StreamCard from "@/components/StreamCard";
 
 type DashboardState = "loading" | "filtered-empty" | "empty" | "ready";
 
@@ -45,6 +46,8 @@ function parseSortOrder(value: string | null): SortOrder {
   }
   return "desc";
 }
+
+import { exportStreamsPdf } from "@/src/lib/pdfExport";
 
 function DashboardContent() {
   const rpcFetch = useRpcFetch();
@@ -379,6 +382,22 @@ function DashboardContent() {
     addToast(`Exported history for ${ids.length} stream(s).`, "success");
   }, [selectedIds, addToast]);
 
+  const handleExportPdf = useCallback(() => {
+    const targets = selectedIds.size > 0
+      ? streams.filter((s) => selectedIds.has(s.id))
+      : sortedFiltered.length > 0
+      ? sortedFiltered
+      : streams;
+
+    if (targets.length === 0) {
+      addToast("No streams available to export.", "info");
+      return;
+    }
+
+    const { filename } = exportStreamsPdf(targets, address);
+    addToast(`Exported PDF report: ${filename}`, "success");
+  }, [selectedIds, streams, sortedFiltered, address, addToast]);
+
   const shortcutGroups: ShortcutGroup[] = useMemo(() => [
     {
       title: "Dashboard",
@@ -400,6 +419,17 @@ function DashboardContent() {
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold">Dashboard</h1>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                const result = downloadWalletStreamsCsv(streams, address);
+                addToast(`Exported ${result.rowCount} stream${result.rowCount === 1 ? "" : "s"} to ${result.filename}`, "success");
+              }}
+              disabled={!address || streams.length === 0}
+              className="px-4 py-2 rounded-lg text-sm font-medium border border-gray-700 text-gray-300 hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+            >
+              Export CSV
+            </button>
             <button
               onClick={() => {
                 setMultiSelectMode(!multiSelectMode);
@@ -677,6 +707,14 @@ function DashboardContent() {
                     Export CSV
                   </button>
                   <button
+                    onClick={handleExportPdf}
+                    disabled={bulkLoading}
+                    data-testid="bulk-export-pdf-button"
+                    className="px-3 py-1.5 text-xs bg-green-800 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
+                  >
+                    Export PDF
+                  </button>
+                  <button
                     onClick={handleBulkTopUp}
                     disabled={bulkLoading}
                     className="px-3 py-1.5 text-xs bg-green-700 text-white rounded-lg hover:bg-green-600 disabled:opacity-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
@@ -793,6 +831,7 @@ function DashboardContent() {
                                 scheduledStartTime={s.scheduledStartTime}
                                 startTime={s.startTime}
                                 endTime={s.endTime}
+                                token={s.token}
                               />
                             </Link>
                           </div>

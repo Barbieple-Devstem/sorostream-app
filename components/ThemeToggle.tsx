@@ -2,27 +2,18 @@
 
 import { useTheme } from "@/src/lib/theme";
 
-const themeLabels: Record<string, string> = {
-  dark: "☀️ Light",
-  light: "🔲 High Contrast",
-  "high-contrast": "🌙 Dark",
-};
-
-const themeAriaLabels: Record<string, string> = {
-  dark: "Switch to light theme",
-  light: "Switch to high contrast theme",
-  "high-contrast": "Switch to dark theme",
-};
-
 export default function ThemeToggle() {
   const { theme, isSystem, toggle, useSystemTheme } = useTheme();
+  const isDark = theme === "dark" || theme === "high-contrast";
+  const label = isDark ? "☀️ Light" : "🌙 Dark";
+  const ariaLabel = isDark ? "Switch to light theme" : "Switch to dark theme";
 
   return (
     <div className="flex items-center gap-1">
       <button
         onClick={toggle}
         className="text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors rounded-md px-2 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
-        aria-label={themeAriaLabels[theme] ?? "Toggle theme"}
+        aria-label={ariaLabel}
         title={
           isSystem
             ? "Following system preference"
@@ -31,7 +22,7 @@ export default function ThemeToggle() {
             : "Theme set manually"
         }
       >
-        {themeLabels[theme] ?? "🌙 Dark"}
+        {label}
       </button>
       {!isSystem && (
         <button
