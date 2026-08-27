@@ -274,6 +274,21 @@ function statusBadgeClass(status: string): string {
           </span>
         </p>
 
+        {/* Time remaining until stream end (#461) */}
+        {status === "Active" && endTime && (
+          <p className="text-gray-600 dark:text-gray-400">
+            Time remaining:{" "}
+            <span
+              className="text-gray-900 dark:text-white font-medium"
+              title={`Scheduled end time: ${formatDateWithTimezone(new Date(endTime))}`}
+            >
+              <span className="text-blue-600 dark:text-blue-400">
+                {formatTimeUntil(new Date(endTime))}
+              </span>
+            </span>
+          </p>
+        )}
+
         {estimatedCompletion && (
           <p className="text-gray-600 dark:text-gray-400">
             Est. completion:{" "}
