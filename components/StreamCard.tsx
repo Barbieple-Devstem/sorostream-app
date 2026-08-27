@@ -52,6 +52,8 @@ interface StreamCardProps {
   endTime?: string;
   /** ISO timestamp captured when the stream was paused (freezes remaining balance). */
   pausedAt?: string;
+  /** Token type (XLM, USDC, etc.) for proper USD conversion display. */
+  token?: string;
 }
 
 export default function StreamCard({
@@ -69,6 +71,7 @@ export default function StreamCard({
   startTime,
   endTime,
   pausedAt,
+  token = "XLM",
 }: StreamCardProps) {
   const { isBookmarked, toggleBookmark } = useBookmarks();
   const bookmarked = isBookmarked(id);
@@ -158,10 +161,13 @@ function statusBadgeClass(status: string): string {
   }
 }
 
-  /** Convert stroops → XLM (display value). */
+  /** Convert stroops → XLM/USDC (display value). */
   const toXlm = (val: number) => (val / 10_000_000).toFixed(2);
   const flowXlm = flowRate / 10_000_000;
   const depositXlm = deposit / 10_000_000;
+
+  /** Determine if we should display USD equivalents and which type */
+  const isUsdcToken = token === "USDC";
 
   // ── Estimated completion time (#415) ──────────────────────────────────
   // For active streams with a fixed total amount, estimate when the
@@ -277,16 +283,20 @@ function statusBadgeClass(status: string): string {
         <p className="text-gray-600 dark:text-gray-400">
           Flow:{" "}
           <span className="text-green-600 dark:text-green-400">
-            {toXlm(flowRate)} XLM/sec
-            <FiatDisplay xlmAmount={flowXlm} />
+            {toXlm(flowRate)} {token}/sec
+            <FiatDisplay
+              {...(isUsdcToken ? { usdcAmount: flowXlm } : { xlmAmount: flowXlm })}
+            />
           </span>
         </p>
 
         <p className="text-gray-600 dark:text-gray-400">
           Total:{" "}
           <span className="text-gray-900 dark:text-white">
-            {toXlm(deposit)} XLM
-            <FiatDisplay xlmAmount={depositXlm} />
+            {toXlm(deposit)} {token}
+            <FiatDisplay
+              {...(isUsdcToken ? { usdcAmount: depositXlm } : { xlmAmount: depositXlm })}
+            />
           </span>
         </p>
 

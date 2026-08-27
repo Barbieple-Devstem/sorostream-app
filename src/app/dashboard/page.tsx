@@ -831,6 +831,7 @@ function DashboardContent() {
                                 scheduledStartTime={s.scheduledStartTime}
                                 startTime={s.startTime}
                                 endTime={s.endTime}
+                                token={s.token}
                               />
                             </Link>
                           </div>

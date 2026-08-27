@@ -925,6 +925,11 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
   const depositXlm = stream.deposit / 10_000_000;
   const flowXlm = stream.flowRate / 10_000_000;
 
+  // Determine if we should display USD equivalents and which type
+  const isUsdcToken = stream.token === "USDC";
+  const depositAmount = stream.deposit / 10_000_000;
+  const flowAmount = stream.flowRate / 10_000_000;
+
   // ── Render: detail ─────────────────────────────────────────────────────────
   return (
     <main id="main-content" tabIndex={-1} className="min-h-screen bg-gray-900 text-white p-4 sm:p-8">
@@ -1232,14 +1237,18 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
               <p className="text-gray-400 mb-1">Total deposit</p>
               <p className="text-white font-mono">
                 {toXlm(stream.deposit)} {stream.token}
-                <FiatDisplay xlmAmount={depositXlm} />
+                <FiatDisplay
+                  {...(isUsdcToken ? { usdcAmount: depositAmount } : { xlmAmount: depositXlm })}
+                />
               </p>
             </div>
             <div>
               <p className="text-gray-400 mb-1">Flow rate</p>
               <p className="text-green-400 font-mono">
                 {toXlm(stream.flowRate)} {stream.token}/sec
-                <FiatDisplay xlmAmount={flowXlm} />
+                <FiatDisplay
+                  {...(isUsdcToken ? { usdcAmount: flowAmount } : { xlmAmount: flowXlm })}
+                />
               </p>
             </div>
             {stream.autoRenew && (
