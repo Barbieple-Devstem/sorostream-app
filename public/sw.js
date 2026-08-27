@@ -5,6 +5,13 @@
  *   - App shell (HTML, JS, CSS, icons, manifest): Cache-first with network fallback.
  *   - API / RPC calls (soroban RPC, coingecko, stellar.expert): Network-first, no cache.
  *   - Offline fallback: serve the cached root "/" when a navigation fails.
+ *
+ * Web Push (#523):
+ *   - Handles incoming `push` events from the browser's push service and shows
+ *     a visible notification using `registration.showNotification()`.
+ *   - Handles `notificationclick` to focus or open the relevant app URL.
+ *   - Handles `sorostream-show-notification` messages from the app so
+ *     the app can dispatch notifications via the SW even without a push server.
  */
 
 const CACHE_NAME = "sorostream-v1";
@@ -92,4 +99,78 @@ self.addEventListener("fetch", (event) => {
         }),
     ),
   );
+});
+
+// ── Web Push: receive push events from the browser push service (#523) ──────
+self.addEventListener("push", (event) => {
+  let data = {
+    title: "SoroStream",
+    body: "You have a new stream notification.",
+    icon: "/icons/icon-192.png",
+    url: "/dashboard",
+    tag: "sorostream-push",
+  };
+
+  if (event.data) {
+    try {
+      const parsed = event.data.json();
+      data = { ...data, ...parsed };
+    } catch {
+      data.body = event.data.text() || data.body;
+    }
+  }
+
+  event.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: data.icon,
+      badge: "/icons/icon-192.png",
+      tag: data.tag,
+      data: { url: data.url },
+    }),
+  );
+});
+
+// ── notificationclick: open or focus the relevant app URL ───────────────────
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const targetUrl = (event.notification.data && event.notification.data.url)
+    ? event.notification.data.url
+    : "/dashboard";
+
+  event.waitUntil(
+    self.clients
+      .matchAll({ type: "window", includeUncontrolled: true })
+      .then((clientList) => {
+        // If a window for the target URL is already open, focus it.
+        for (const client of clientList) {
+          const clientUrl = new URL(client.url);
+          const target = new URL(targetUrl, self.location.origin);
+          if (clientUrl.pathname === target.pathname && "focus" in client) {
+            return client.focus();
+          }
+        }
+        // Otherwise open a new window.
+        if (self.clients.openWindow) {
+          return self.clients.openWindow(targetUrl);
+        }
+      }),
+  );
+});
+
+// ── Message: local notification dispatch from the app ───────────────────────
+// The app posts `sorostream-show-notification` messages when it wants to show
+// a notification without a real push server (e.g. for stream milestones).
+self.addEventListener("message", (event) => {
+  if (!event.data || event.data.type !== "sorostream-show-notification") return;
+  const { payload } = event.data;
+  if (!payload || !payload.title) return;
+
+  self.registration.showNotification(payload.title, {
+    body: payload.body ?? "",
+    icon: payload.icon ?? "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
+    tag: payload.tag ?? "sorostream-local",
+    data: { url: payload.url ?? "/dashboard" },
+  });
 });

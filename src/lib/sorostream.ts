@@ -1067,6 +1067,31 @@ export async function getFeeConfig(): Promise<FeeConfig> {
   return { basisPoints: 50 };
 }
 
+// ── Stream deposit cap ────────────────────────────────────────────────────────
+
+export interface StreamCapConfig {
+  /**
+   * Maximum allowed deposit per stream in stroops (1 USDC = 10_000_000 stroops).
+   * A value of 0 means no cap is enforced.
+   */
+  maxDepositStroops: number;
+}
+
+/**
+ * Simulates reading the maximum per-stream deposit cap from the contract.
+ * In production this would call the contract's `get_stream_cap` query instruction.
+ *
+ * The cap is intentionally set to 100_000 USDC (1_000_000_000_000 stroops) so
+ * integration tests can exercise the validation path without hitting real limits.
+ * Override by setting `NEXT_PUBLIC_MAX_DEPOSIT_STROOPS` in .env.local.
+ */
+export async function getStreamCapConfig(): Promise<StreamCapConfig> {
+  // Simulate network latency
+  await new Promise((r) => setTimeout(r, 100 + Math.random() * 100));
+  // Mock: 100 000 USDC cap (100_000 * 10_000_000 stroops).
+  return { maxDepositStroops: 100_000 * 10_000_000 };
+}
+
 // ── Contract version ──────────────────────────────────────────────────────────
 
 /** Version reported by the deployed contract's `version` query instruction. */
