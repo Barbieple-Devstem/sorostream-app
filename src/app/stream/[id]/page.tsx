@@ -56,6 +56,7 @@ import {
 } from "@/src/lib/share";
 import StreamShareButtons from "@/components/StreamShareButtons";
 import StreamCloneModal from "@/components/StreamCloneModal";
+import SaveTemplateModal from "@/components/SaveTemplateModal";
 
 /** Grace period in seconds before a cancel is submitted on-chain. */
 const CANCEL_GRACE_SECONDS = 5;
@@ -204,6 +205,9 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
 
   // ── Clone modal ────────────────────────────────────────────────────────────
   const [showCloneModal, setShowCloneModal] = useState(false);
+
+  // ── Save Template modal ────────────────────────────────────────────────────
+  const [showSaveTemplateModal, setShowSaveTemplateModal] = useState(false);
 
   // ── Success banner (stream just created) ──────────────────────────────────
   const [successPhase, setSuccessPhase] = useState<"in" | "out" | null>(null);
@@ -1026,7 +1030,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
           );
         })()}
 
-        <div className="flex justify-end gap-2 mb-4 print-hidden">
+        <div className="flex flex-wrap justify-end gap-2 mb-4 print-hidden">
           {/* Bookmark toggle */}
           <button
             onClick={() => toggleBookmark(stream.id)}
@@ -1083,6 +1087,20 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
             </svg>
             Clone
           </button>
+          
+          <button
+            onClick={() => setShowSaveTemplateModal(true)}
+            aria-label="Save as template"
+            className="inline-flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-white py-2 px-4 rounded-lg text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+              <polyline points="17 21 17 13 7 13 7 21" />
+              <polyline points="7 3 7 8 15 8" />
+            </svg>
+            Save as Template
+          </button>
+          
           <div className="relative inline-block" ref={shareMenuRef}>
             <button
               onClick={() => setShowShareMenu((v) => !v)}
@@ -1895,6 +1913,17 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
         <StreamCloneModal
           stream={stream}
           onClose={() => setShowCloneModal(false)}
+        />
+      )}
+
+      {stream && (
+        <SaveTemplateModal
+          open={showSaveTemplateModal}
+          onClose={() => setShowSaveTemplateModal(false)}
+          durationSeconds={stream.endTime - stream.startTime}
+          amount={formatStellarAmount(stream.deposit)}
+          recipient={stream.recipient}
+          token={stream.token}
         />
       )}
     </main>

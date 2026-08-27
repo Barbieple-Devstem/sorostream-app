@@ -24,6 +24,7 @@ import PortfolioSummaryCard from "@/components/PortfolioSummaryCard";
 import StreamPerformanceMetrics from "@/components/StreamPerformanceMetrics";
 import WatchlistTab from "@/components/WatchlistTab";
 import StreamCard from "@/components/StreamCard";
+import ThemeToggle from "@/components/ThemeToggle";
 
 type DashboardState = "loading" | "filtered-empty" | "empty" | "ready";
 
@@ -451,8 +452,9 @@ function DashboardContent() {
               href="/stream/new"
               className="bg-green-700 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
             >
-              + New Stream
+              + Create Stream
             </Link>
+            <ThemeToggle />
           </div>
         </div>
 
