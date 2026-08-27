@@ -1,50 +1,60 @@
-/**
- * Tests for truncateAddress — fixes #487
- *
- * Verifies that truncateAddress normalises the address to uppercase before
- * slicing so the displayed short form is consistent regardless of the casing
- * of the stored address string.
- */
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { truncateAddress } from "../sorostream";
 
-describe("truncateAddress (#487)", () => {
+describe("truncateAddress — case-insensitive truncation (#486)", () => {
   it("returns empty string for empty input", () => {
     expect(truncateAddress("")).toBe("");
   });
 
-  it("truncates a normal all-uppercase Stellar address correctly", () => {
-    const addr = "GBAM1234ABCDEFGHIJKLMNOPQRSTUVWXYZ234567ABCDEFGHIJKLMNOPQXDRL";
-    const result = truncateAddress(addr);
-    expect(result).toBe(`${addr.slice(0, 4)}...${addr.slice(-4)}`);
+  it("truncates a standard uppercase Stellar address correctly", () => {
+    const addr = "GBKLYONWFBQFBFZK6HMTXQZJNBKQEXZ3PJOVXNKZXVTV4FQXVMKLKHA";
+    expect(truncateAddress(addr)).toBe("GBKL...LKHA");
   });
 
   it("normalises a lowercase address to uppercase before truncating", () => {
-    // Simulate a scenario where the stored address has lowercase characters
-    const mixed  = "gbaM1234abcdefghijklmnopqrstuvwxyz234567abcdefghijklmnopqxDrL";
-    const upper  = mixed.toUpperCase();
-    const result = truncateAddress(mixed);
-    expect(result).toBe(`${upper.slice(0, 4)}...${upper.slice(-4)}`);
+    const lower = "gbklyonwfbqfbfzk6hmtxqzjnbkqexz3pjovxnkzxvtv4fqxvmklkha";
+    expect(truncateAddress(lower)).toBe("GBKL...LKHA");
   });
 
-  it("normalises a mixed-case address consistently", () => {
-    const addr = "GBAm1234XdRl5678ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopq";
-    const result = truncateAddress(addr);
-    // First 4 and last 4 chars of the uppercased address
-    const upper = addr.toUpperCase();
-    expect(result.startsWith(upper.slice(0, 4))).toBe(true);
-    expect(result.endsWith(upper.slice(-4))).toBe(true);
+  it("normalises a mixed-case address to uppercase before truncating", () => {
+    const mixed = "GBKLyonWFBQFBFZK6HMtxQZJNBKQEXZ3PJOVXNKZXVtV4FQXVmKlkhA";
+    // The first 4 and last 4 chars uppercased
+    const expected = `${mixed.toUpperCase().slice(0, 4)}...${mixed.toUpperCase().slice(-4)}`;
+    expect(truncateAddress(mixed)).toBe(expected);
   });
 
-  it("returns the same truncated form regardless of input casing", () => {
-    const base  = "GBAM5678ABCDEFGHIJKLMNOPQRSTUVWXYZ234567ABCDEFGHIJKLMNOPQXDRL";
-    const lower = base.toLowerCase();
-    const mixed = base
+  it("produces the same output for the same address regardless of input case", () => {
+    const upper = "GBKLYONWFBQFBFZK6HMTXQZJNBKQEXZ3PJOVXNKZXVTV4FQXVMKLKHA";
+    const lower = upper.toLowerCase();
+    const mixed = upper
       .split("")
-      .map((c, i) => (i % 2 === 0 ? c.toLowerCase() : c))
+      .map((c, i) => (i % 2 === 0 ? c.toLowerCase() : c.toUpperCase()))
       .join("");
 
-    expect(truncateAddress(base)).toBe(truncateAddress(lower));
-    expect(truncateAddress(base)).toBe(truncateAddress(mixed));
+    const truncUpper = truncateAddress(upper);
+    const truncLower = truncateAddress(lower);
+    const truncMixed = truncateAddress(mixed);
+
+    expect(truncUpper).toBe(truncLower);
+    expect(truncUpper).toBe(truncMixed);
+  });
+
+  it("always uses uppercase characters in the truncated result", () => {
+    const addr = "gbklyonwfbqfbfzk6hmtxqzjnbkqexz3pjovxnkzxvtv4fqxvmklkha";
+    const result = truncateAddress(addr);
+    expect(result).toBe(result.toUpperCase().replace(/\./g, "...").slice(0, 4) + "..." + result.slice(-4));
+    // All non-ellipsis characters should be uppercase
+    expect(result.replace(/\./g, "")).toBe(result.replace(/\./g, "").toUpperCase());
+  });
+
+  it("formats as XXXX...XXXX (4 chars, ellipsis, 4 chars)", () => {
+    const addr = "GBKLYONWFBQFBFZK6HMTXQZJNBKQEXZ3PJOVXNKZXVTV4FQXVMKLKHA";
+    const result = truncateAddress(addr);
+    expect(result).toMatch(/^.{4}\.\.\..{4}$/);
+  });
+
+  it("handles a short address gracefully", () => {
+    // Short strings should still not throw
+    expect(() => truncateAddress("GABC")).not.toThrow();
   });
 });
