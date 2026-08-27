@@ -976,7 +976,8 @@ export function addStreamEvent(event: Omit<StreamEvent, "id">): StreamEvent {
 
 export function truncateAddress(address: string): string {
   if (!address) return "";
-  return `${address.slice(0, 4)}...${address.slice(-4)}`;
+  const normalized = address.toUpperCase();
+  return `${normalized.slice(0, 4)}...${normalized.slice(-4)}`;
 }
 
 // ── Gas fee estimate ─────────────────────────────────────────────────────────
