@@ -15,6 +15,7 @@ import { APP_NETWORK } from "@/src/lib/freighter";
 import { useTranslations } from "@/src/lib/i18n";
 import { useGlobalShortcuts } from "@/components/GlobalShortcuts";
 import RpcHealthIndicator from "@/components/RpcHealthIndicator";
+import { useNetwork } from "@/src/lib/network";
 
 const NAV_LINKS = [
   { href: "/", key: "home" },
@@ -41,6 +42,7 @@ export default function NavHeader() {
   const { countFor, clearSection } = useNotifications();
   const { showUsd, toggleShowUsd, language } = useSettings();
   const { address, balanceRefreshTrigger } = useWallet();
+  const { network } = useNetwork();
   const [xlmBalance, setXlmBalance] = useState<string | null>(null);
   const [usdcBalance, setUsdcBalance] = useState<string | null>(null);
   const [balanceLoading, setBalanceLoading] = useState(false);
@@ -215,6 +217,32 @@ export default function NavHeader() {
         </div>
       </div>
     </header>
+    {network === "testnet" && (
+      <div className="bg-yellow-50 dark:bg-yellow-900/20 border-b border-yellow-200 dark:border-yellow-700 px-4 sm:px-6 py-3">
+        <div className="max-w-6xl mx-auto flex items-center gap-3">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="text-yellow-700 dark:text-yellow-400 flex-shrink-0"
+            aria-hidden="true"
+          >
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="8" x2="12" y2="12" />
+            <line x1="12" y1="16" x2="12.01" y2="16" />
+          </svg>
+          <span className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
+            Testnet mode: Connected to Stellar Testnet. For development and testing only.
+          </span>
+        </div>
+      </div>
+    )}
     <ChangelogModal open={changelogOpen} onClose={() => setChangelogOpen(false)} />
     </>
   );

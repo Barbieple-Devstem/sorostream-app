@@ -56,7 +56,7 @@ import {
 } from "@/src/lib/share";
 import StreamShareButtons from "@/components/StreamShareButtons";
 import StreamCloneModal from "@/components/StreamCloneModal";
-import SaveTemplateModal from "@/components/SaveTemplateModal";
+import StreamAnalyticsCharts from "@/components/StreamAnalyticsCharts";
 
 /** Grace period in seconds before a cancel is submitted on-chain. */
 const CANCEL_GRACE_SECONDS = 5;
@@ -1644,6 +1644,19 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
                   </>
                 );
               })()}
+            </section>
+          </StreamErrorBoundary>
+
+          {/* Analytics section (#358) */}
+          <StreamErrorBoundary section="Stream Analytics" resetKey={stream.id}>
+            <section aria-labelledby="analytics-heading">
+              <h2 id="analytics-heading" className="text-lg font-semibold mb-3">
+                Analytics
+              </h2>
+              <StreamAnalyticsCharts
+                stream={stream}
+                historyEntries={historyEntries}
+              />
             </section>
           </StreamErrorBoundary>
         </div>
