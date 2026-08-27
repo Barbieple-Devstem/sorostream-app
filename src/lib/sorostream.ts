@@ -749,7 +749,6 @@ export function claimableNow(stream: any): string {
     return Math.floor(flowRate * elapsedSeconds).toString();
   }
 
-  const elapsedSeconds = Math.max(0, (Date.now() - lastWithdrawTime) / 1000);
   // A cancelled or ended stream stops accruing once it can no longer drip.
   // Cap the effective "now" so the recipient can only claim what actually
   // streamed before the stream stopped.
@@ -765,28 +764,10 @@ export function claimableNow(stream: any): string {
 }
 
 /**
- * Amount (stroops) streamed out of the deposit so far, respecting pause state.
- * For a paused stream this freezes at the value when the stream was paused.
- */
-export function getStreamedAmount(stream: any): number {
-  if (!stream) return 0;
-  const flowRate = Number(stream.flowRate);
-  const lastWithdrawTime = new Date(stream.lastWithdrawTime).getTime();
-  if (!Number.isFinite(flowRate) || !Number.isFinite(lastWithdrawTime)) return 0;
-
-  let elapsedSeconds = Math.max(0, (Date.now() - lastWithdrawTime) / 1000);
-  if (stream.status === "Paused" && stream.pausedAt) {
-    const pausedAt = new Date(stream.pausedAt).getTime();
-    elapsedSeconds = Math.max(0, (pausedAt - lastWithdrawTime) / 1000);
-  }
-  return Math.floor(flowRate * elapsedSeconds);
-}
-
-/**
  * Remaining (unstreamed) deposit in stroops. Freezes while the stream is
  * paused instead of continuing to count down.
  */
-export function getRemainingBalance(stream: any): number {
+export function getRemainingBalance(stream: StreamData): number {
   if (!stream) return 0;
   const deposit = Number(stream.deposit);
   if (!Number.isFinite(deposit)) return 0;
@@ -810,6 +791,9 @@ export async function getOraclePrice(token: string): Promise<number | null> {
   const key = (token || "").toUpperCase();
   if (key in ORACLE_PRICES) return ORACLE_PRICES[key];
   return null;
+}
+
+/**
  * Total amount that has dripped into a stream up to the current effective
  * time, taking cancellation and end time into account. For a cancelled stream
  * this is the pro-rated amount streamed before cancellation, not the full
@@ -1016,7 +1000,10 @@ export function addStreamEvent(event: Omit<StreamEvent, "id">): StreamEvent {
 
 export function truncateAddress(address: string): string {
   if (!address) return "";
-  return `${address.slice(0, 4)}...${address.slice(-4)}`;
+  // Normalise to uppercase so mixed-case inputs (e.g. from copy-paste or
+  // external sources) render the same truncated form as the on-chain address.
+  const normalised = address.toUpperCase();
+  return `${normalised.slice(0, 4)}...${normalised.slice(-4)}`;
 }
 
 // ── Gas fee estimate ─────────────────────────────────────────────────────────
