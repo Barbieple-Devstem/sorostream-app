@@ -58,6 +58,8 @@ function DashboardContent() {
   const { address, streamRefreshTrigger, setActiveStreamCount } = useWallet();
   const [loading, setLoading] = useState(true);
   const [streams, setStreams] = useState<StreamData[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 10;
 
   // Filter states from URL params
   const [statusFilter, setStatusFilter] = useState(searchParams.get("status") || "");
@@ -205,6 +207,11 @@ function DashboardContent() {
       return true;
     });
   }, [streams, statusFilter, tokenFilter, search, bookmarksOnly, bookmarkedIds, selectedTags]);
+
+  useEffect(() => {
+    // Reset to page 1 when filters change
+    setCurrentPage(1);
+  }, [statusFilter, tokenFilter, search, bookmarksOnly, selectedTags]);
 
   // Sort filtered streams, pinning bookmarks first, then by the chosen sort field.
   const sortedFiltered = useMemo(() => {
@@ -844,11 +851,30 @@ function DashboardContent() {
             ) : (
               <div className="rounded-xl border border-gray-700 bg-gray-900 p-2">
                 <StreamVirtualList
-                  streams={sortedFiltered}
+                  streams={sortedFiltered.slice((currentPage - 1) * pageSize, currentPage * pageSize)}
                   selectedIds={multiSelectMode ? selectedIds : undefined}
                   onToggleSelect={multiSelectMode ? toggleSelect : undefined}
                   onClone={handleClone}
                 />
+                <div className="flex justify-between items-center p-4">
+                  <button 
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage(p => p - 1)}
+                    className="px-4 py-2 bg-gray-800 text-white rounded disabled:opacity-50"
+                  >
+                    Previous
+                  </button>
+                  <span className="text-sm text-gray-400">
+                    Page {currentPage} of {Math.ceil(sortedFiltered.length / pageSize) || 1}
+                  </span>
+                  <button 
+                    disabled={currentPage >= Math.ceil(sortedFiltered.length / pageSize)}
+                    onClick={() => setCurrentPage(p => p + 1)}
+                    className="px-4 py-2 bg-gray-800 text-white rounded disabled:opacity-50"
+                  >
+                    Next
+                  </button>
+                </div>
               </div>
             )}
             </StreamErrorBoundary>
