@@ -51,8 +51,11 @@ function validateRecipient(value: string): string {
 
 function validateAmount(value: string): string {
   if (!value) return "Amount is required.";
+  // Check if value contains a minus sign (negative number)
+  if (value.includes("-")) return "Amount must be a positive number.";
   if (!/^\d*\.?\d*$/.test(value.trim())) return "Amount must contain only numbers.";
-  if (Number(value) <= 0) return "Amount must be greater than 0.";
+  const numValue = Number(value);
+  if (isNaN(numValue) || numValue <= 0) return "Amount must be greater than 0.";
   return "";
 }
 
@@ -118,7 +121,7 @@ function NewStreamWizard() {
   const [activeTab, setActiveTab] = useState<PageTab>("single");
   const [step, setStep] = useState<Step>("recipient");
   const searchParams = useSearchParams();
-  const { address } = useWallet();
+  const { address, triggerStreamRefresh } = useWallet();
   const { defaultToken, defaultDuration, defaultCliffDuration } = usePreferences();
   const settings = useSettings();
 
@@ -684,6 +687,10 @@ function NewStreamWizard() {
       setTouched({ recipient: false, amount: false });
       setDurationPickerKey((k) => k + 1);
       setTxStage(null);
+
+      // Trigger stream list refresh so the new stream appears on the dashboard
+      triggerStreamRefresh();
+
       router.push(`/stream/${result.streamId}?new=true`);
     } catch (err) {
       console.error("Failed to create stream:", err);
@@ -934,7 +941,9 @@ function NewStreamWizard() {
                 inputMode="decimal"
                 value={amount}
                 onChange={(e) => {
-                  const val = e.target.value;
+                  let val = e.target.value;
+                  // Prevent negative numbers by removing any minus signs
+                  val = val.replace(/^-/, "");
                   setAmount(val);
                   if (touched.amount) {
                     setErrors((prev) => ({ ...prev, amount: validateAmount(val) }));
@@ -944,14 +953,16 @@ function NewStreamWizard() {
                   persist({ amount: val });
                 }}
                 onPaste={(e) => {
-                  const pasted = e.clipboardData.getData("text");
+                  let pasted = e.clipboardData.getData("text");
+                  // Remove minus signs from pasted content
+                  pasted = pasted.replace(/-/g, "");
                   // Strip non-numeric characters, keeping digits and at most one decimal point
                   let cleaned = pasted.replace(/[^0-9.]/g, "");
                   const dotIndex = cleaned.indexOf(".");
                   if (dotIndex !== -1) {
                     cleaned = cleaned.slice(0, dotIndex + 1) + cleaned.slice(dotIndex + 1).replace(/\./g, "");
                   }
-                  if (cleaned !== pasted) {
+                  if (cleaned !== pasted && cleaned !== e.target.value) {
                     e.preventDefault();
                     setAmount(cleaned);
                     if (touched.amount) {

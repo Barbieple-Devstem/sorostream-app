@@ -135,6 +135,10 @@ export default function OnboardingWizard() {
           setError("Wallet connection was not completed. Please try again.");
           return;
         }
+        // Automatically advance to next step after successful wallet connection
+        trackEvent({ type: "onboarding_step_complete", step, stepId: current.id });
+        setStep((s) => Math.min(s + 1, STEPS.length - 1));
+        return;
       } catch {
         setError("Could not connect to Freighter. Is the extension installed?");
         return;
