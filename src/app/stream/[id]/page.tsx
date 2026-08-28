@@ -22,6 +22,7 @@ import StreamHealthBadge, {
   calculateHealthScore,
   getHealthTier,
 } from "@/components/StreamHealthBadge";
+import StreamHealthCard from "@/components/StreamHealthCard";
 import CollateralUnlockBadge from "@/components/CollateralUnlockBadge";
 import { type StreamHistoryEntry } from "@/src/lib/export";
 import {
@@ -1006,29 +1007,10 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
           </p>
         )}
 
-        {/* Stream Health Score */}
-        {displayStatus === "Active" && (() => {
-          const now = Date.now();
-          const totalDuration = new Date(stream.endTime).getTime() - new Date(stream.startTime).getTime();
-          const elapsed = now - new Date(stream.startTime).getTime();
-          const timeRemainingRatio = totalDuration > 0 ? Math.max(0, Math.min(1, 1 - elapsed / totalDuration)) : 0;
-          const estimatedStreamed = stream.flowRate * Math.max(0, elapsed / 1000);
-          const depositRemainingRatio = stream.deposit > 0 ? Math.max(0, Math.min(1, 1 - estimatedStreamed / stream.deposit)) : 0;
-          const topUpCount = historyEntries.filter((e) => e.type === "top-up").length;
-          const score = calculateHealthScore({ depositRemainingRatio, timeRemainingRatio, topUpCount });
-          const tier = getHealthTier(score);
-          return (
-            <div className="mt-2">
-              <StreamHealthBadge
-                score={score}
-                tier={tier}
-                depositRemainingRatio={depositRemainingRatio}
-                timeRemainingRatio={timeRemainingRatio}
-                topUpCount={topUpCount}
-              />
-            </div>
-          );
-        })()}
+        {/* Stream Health Card */}
+        <div className="mb-4">
+          <StreamHealthCard stream={stream} historyEntries={historyEntries} />
+        </div>
 
         <div className="flex flex-wrap justify-end gap-2 mb-4 print-hidden">
           {/* Bookmark toggle */}
