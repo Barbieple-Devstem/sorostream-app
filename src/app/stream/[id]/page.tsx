@@ -379,6 +379,19 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
     return () => clearInterval(interval);
   }, [stream, addToast, pushNotificationsEnabled]);
 
+  // ── Clear stream data on wallet disconnect (#525) ─────────────────────────
+  // When the wallet disconnects (address becomes null), immediately flush the
+  // stream state so stale data from the previous session is never shown to a
+  // different user who subsequently connects.
+  useEffect(() => {
+    if (address === null) {
+      setStream(null);
+      setHistoryEntries([]);
+      setError(null);
+      setAllStreams([]);
+    }
+  }, [address]);
+
   // ── Load stream on mount ───────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
