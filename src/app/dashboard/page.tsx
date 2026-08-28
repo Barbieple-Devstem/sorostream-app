@@ -25,7 +25,7 @@ import StreamPerformanceMetrics from "@/components/StreamPerformanceMetrics";
 import WatchlistTab from "@/components/WatchlistTab";
 import StreamCard from "@/components/StreamCard";
 import ThemeToggle from "@/components/ThemeToggle";
-import WalletAnalyticsDashboard from "@/components/WalletAnalyticsDashboard";
+import PullToRefresh from "@/components/PullToRefresh";
 
 type DashboardState = "loading" | "filtered-empty" | "empty" | "ready";
 
@@ -102,6 +102,7 @@ function DashboardContent() {
   const [bulkLoading, setBulkLoading] = useState(false);
   const [multiSelectMode, setMultiSelectMode] = useState(false);
   const [showBulkCancelConfirm, setShowBulkCancelConfirm] = useState(false);
+  const [optimisticOps, setOptimisticOps] = useState<Record<string, { type: string; optimisticDeposit?: number; optimisticStatus?: string; optimisticClaimable?: number }>>({});
 
   // Pagination state (#383)
   const [visibleCount, setVisibleCount] = useState(12);
@@ -424,7 +425,16 @@ function DashboardContent() {
   const handleBulkCancel = useCallback(async () => {
     const ids = Array.from(selectedIds);
     if (ids.length === 0) return;
+
+    // Apply optimistic updates immediately
+    const prevOps = { ...optimisticOps };
+    const newOps = { ...prevOps };
+    ids.forEach((id) => {
+      newOps[id] = { type: "cancel", optimisticStatus: "Cancelled" };
+    });
+    setOptimisticOps(newOps);
     setBulkLoading(true);
+
     try {
       await Promise.all(ids.map((id) => sorostream.cancelStream(id)));
       addToast(`Cancelled ${ids.length} stream(s) successfully.`, "success");
@@ -432,29 +442,55 @@ function DashboardContent() {
       setStreams(data);
       clearSelection();
       setShowBulkCancelConfirm(false);
+      // Clear optimistic overrides once data is refreshed
+      setOptimisticOps((current) => {
+        const next = { ...current };
+        ids.forEach((id) => delete next[id]);
+        return next;
+      });
     } catch (err) {
+      // Roll back optimistic state on failure
+      setOptimisticOps(prevOps);
       addToast("Bulk cancel failed. Please try again.", "error");
     } finally {
       setBulkLoading(false);
     }
-  }, [selectedIds, addToast, rpcFetch, clearSelection, address]);
+  }, [selectedIds, optimisticOps, addToast, rpcFetch, clearSelection, address]);
 
   const handleBulkTopUp = useCallback(async () => {
     const ids = Array.from(selectedIds);
     if (ids.length === 0) return;
+
+    // Apply optimistic top-up immediately
+    const prevOps = { ...optimisticOps };
+    const newOps = { ...prevOps };
+    ids.forEach((id) => {
+      const currentStream = streams.find((s) => s.id === id);
+      const currentDeposit = currentStream?.deposit ?? 0;
+      newOps[id] = { type: "top-up", optimisticDeposit: currentDeposit + 100_000_000 };
+    });
+    setOptimisticOps(newOps);
     setBulkLoading(true);
+
     try {
       await Promise.all(ids.map((id) => sorostream.topUp(id)));
       addToast(`Topped up ${ids.length} stream(s) successfully.`, "success");
       const data = await rpcFetch(() => Promise.resolve(getStreamsForWallet(address)));
       setStreams(data);
       clearSelection();
+      setOptimisticOps((current) => {
+        const next = { ...current };
+        ids.forEach((id) => delete next[id]);
+        return next;
+      });
     } catch {
+      // Roll back on failure
+      setOptimisticOps(prevOps);
       addToast("Bulk top-up failed. Please try again.", "error");
     } finally {
       setBulkLoading(false);
     }
-  }, [selectedIds, addToast, rpcFetch, clearSelection, address]);
+  }, [selectedIds, optimisticOps, streams, addToast, rpcFetch, clearSelection, address]);
 
   const handleBulkExport = useCallback(() => {
     const ids = Array.from(selectedIds);
@@ -1007,6 +1043,7 @@ function DashboardContent() {
             )}
 
             <StreamErrorBoundary section="Stream List">
+            <PullToRefresh onRefresh={refreshStreams}>
             {state === "loading" ? (
               <div
                 className="rounded-xl border border-gray-700 bg-gray-900 p-2"
@@ -1185,6 +1222,7 @@ function DashboardContent() {
                   onToggleSelect={multiSelectMode ? toggleSelect : undefined}
                   onClone={handleClone}
                   focusedStreamId={focusedStreamIndex >= 0 && focusedStreamIndex < sortedFiltered.length ? sortedFiltered[focusedStreamIndex].id : undefined}
+                  optimisticOps={optimisticOps}
                 />
                 <div className="flex justify-between items-center p-4">
                   <button 
@@ -1207,6 +1245,7 @@ function DashboardContent() {
                 </div>
               </div>
             )}
+            </PullToRefresh>
             </StreamErrorBoundary>
 
             {/* Pagination: Load More (#383) */}

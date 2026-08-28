@@ -13,13 +13,15 @@ interface StreamVirtualListProps {
   onClone?: (id: string) => void;
   /** ID of the stream currently focused via keyboard navigation. */
   focusedStreamId?: string;
+  /** Active optimistic operations keyed by stream ID. */
+  optimisticOps?: Record<string, { type: string; optimisticDeposit?: number; optimisticStatus?: string; optimisticClaimable?: number }>;
 }
 
 /** Estimated row height in px (two-column grid). Grows if items are taller. */
 const BASE_ROW_HEIGHT = 280;
 const OVERSCAN_ROWS = 5;
 
-export default function StreamVirtualList({ streams, selectedIds, onToggleSelect, onClone, focusedStreamId }: StreamVirtualListProps) {
+export default function StreamVirtualList({ streams, selectedIds, onToggleSelect, onClone, focusedStreamId, optimisticOps }: StreamVirtualListProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const savedScrollTop = useRef(0);
   const [scrollTop, setScrollTop] = useState(0);
@@ -185,6 +187,10 @@ export default function StreamVirtualList({ streams, selectedIds, onToggleSelect
                       startTime={stream.startTime}
                       endTime={stream.endTime}
                       pausedAt={stream.pausedAt}
+                      optimisticPending={Boolean(optimisticOps?.[stream.id])}
+                      optimisticStatus={optimisticOps?.[stream.id]?.optimisticStatus}
+                      optimisticDeposit={optimisticOps?.[stream.id]?.optimisticDeposit}
+                      optimisticClaimable={optimisticOps?.[stream.id]?.optimisticClaimable}
                     />
                   </Link>
                 </div>
