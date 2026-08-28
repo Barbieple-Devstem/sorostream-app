@@ -68,6 +68,12 @@ function DashboardContent() {
   const [tokenFilter, setTokenFilter] = useState(searchParams.get("token") || "");
   const [search, setSearch] = useState(searchParams.get("search") || "");
   const [bookmarksOnly, setBookmarksOnly] = useState(false);
+  // Date range filters — ISO date strings (YYYY-MM-DD), persisted in URL (#520)
+  const [dateFrom, setDateFrom] = useState(searchParams.get("dateFrom") || "");
+  const [dateTo, setDateTo] = useState(searchParams.get("dateTo") || "");
+  // Min/max stream rate filters in stroops/sec (#520)
+  const [minRate, setMinRate] = useState(searchParams.get("minRate") || "");
+  const [maxRate, setMaxRate] = useState(searchParams.get("maxRate") || "");
   // Tag filter — multiselect, client-side only
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [allTags, setAllTags] = useState<string[]>([]);
@@ -200,10 +206,26 @@ function DashboardContent() {
 
   const filtered = useMemo(() => {
     const tagMap = selectedTags.length > 0 ? getTagMap() : null;
+    const fromMs = dateFrom ? new Date(dateFrom).getTime() : undefined;
+    const toMs = dateTo ? new Date(dateTo + "T23:59:59").getTime() : undefined;
+    const minRateNum = minRate !== "" ? parseFloat(minRate) : undefined;
+    const maxRateNum = maxRate !== "" ? parseFloat(maxRate) : undefined;
     return streams.filter((s) => {
       if (bookmarksOnly && !bookmarkedIds.has(s.id)) return false;
       if (statusFilter && s.status !== statusFilter) return false;
       if (tokenFilter && s.token !== tokenFilter) return false;
+      // Date range filter: compare stream creation date against from/to (#520)
+      if (fromMs !== undefined) {
+        const startMs = new Date(s.startTime).getTime();
+        if (startMs < fromMs) return false;
+      }
+      if (toMs !== undefined) {
+        const startMs = new Date(s.startTime).getTime();
+        if (startMs > toMs) return false;
+      }
+      // Min/max rate filter — flowRate is in stroops/sec (#520)
+      if (minRateNum !== undefined && s.flowRate < minRateNum) return false;
+      if (maxRateNum !== undefined && s.flowRate > maxRateNum) return false;
       if (search.trim()) {
         const q = search.trim().toLowerCase();
         const matchesSearch =
@@ -219,12 +241,12 @@ function DashboardContent() {
       }
       return true;
     });
-  }, [streams, statusFilter, tokenFilter, search, bookmarksOnly, bookmarkedIds, selectedTags]);
+  }, [streams, statusFilter, tokenFilter, search, bookmarksOnly, bookmarkedIds, selectedTags, dateFrom, dateTo, minRate, maxRate]);
 
   useEffect(() => {
     // Reset to page 1 when filters change
     setCurrentPage(1);
-  }, [statusFilter, tokenFilter, search, bookmarksOnly, selectedTags]);
+  }, [statusFilter, tokenFilter, search, bookmarksOnly, selectedTags, dateFrom, dateTo, minRate, maxRate]);
 
   // Sort filtered streams, pinning bookmarks first, then by the chosen sort field.
   const sortedFiltered = useMemo(() => {
@@ -260,6 +282,12 @@ function DashboardContent() {
     if (statusFilter) params.set("status", statusFilter);
     if (tokenFilter) params.set("token", tokenFilter);
     if (search.trim()) params.set("search", search);
+    // Date range filters (#520)
+    if (dateFrom) params.set("dateFrom", dateFrom);
+    if (dateTo) params.set("dateTo", dateTo);
+    // Min/max rate filters (#520)
+    if (minRate) params.set("minRate", minRate);
+    if (maxRate) params.set("maxRate", maxRate);
     // Only write sort params when they differ from defaults to keep URLs clean.
     if (sortField !== "created") params.set("sort", sortField);
     if (sortOrder !== "desc") params.set("dir", sortOrder);
@@ -267,7 +295,7 @@ function DashboardContent() {
     const queryString = params.toString();
     const newPath = queryString ? `/dashboard?${queryString}` : "/dashboard";
     router.replace(newPath);
-  }, [statusFilter, tokenFilter, search, sortField, sortOrder, router]);
+  }, [statusFilter, tokenFilter, search, sortField, sortOrder, dateFrom, dateTo, minRate, maxRate, router]);
 
   const clearFilters = () => {
     setStatusFilter("");
@@ -275,15 +303,19 @@ function DashboardContent() {
     setSearch("");
     setBookmarksOnly(false);
     setSelectedTags([]);
+    setDateFrom("");
+    setDateTo("");
+    setMinRate("");
+    setMaxRate("");
     setVisibleCount(PAGE_SIZE);
   };
 
-  const hasActiveFilters = statusFilter || tokenFilter || search.trim() || bookmarksOnly || selectedTags.length > 0;
+  const hasActiveFilters = !!(statusFilter || tokenFilter || search.trim() || bookmarksOnly || selectedTags.length > 0 || dateFrom || dateTo || minRate || maxRate);
 
   // Reset pagination when filters change
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
-  }, [statusFilter, tokenFilter, search, bookmarksOnly, selectedTags]);
+  }, [statusFilter, tokenFilter, search, bookmarksOnly, selectedTags, dateFrom, dateTo, minRate, maxRate]);
 
   // Grouped view: bucket the (already filtered + sorted) streams by token.
   const assetGroups = useMemo(() => {
@@ -590,6 +622,29 @@ function DashboardContent() {
               <PortfolioSummaryCard streams={streams} walletAddress={address} />
             )}
 
+            {/* Wallet-scoped analytics (#521) */}
+            {address && streams.length > 0 && (
+              <div className="mb-6">
+                <details className="group" open>
+                  <summary className="flex items-center gap-2 cursor-pointer text-sm font-semibold text-gray-300 hover:text-white py-2 select-none list-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 rounded">
+                    <span
+                      className="transition-transform duration-200 group-open:rotate-90"
+                      aria-hidden="true"
+                    >
+                      ▶
+                    </span>
+                    Wallet Analytics
+                    <span className="ml-1 text-xs font-normal text-gray-500">(last 30 days)</span>
+                  </summary>
+                  <div className="mt-3">
+                    <StreamErrorBoundary section="Wallet Analytics">
+                      <WalletAnalyticsDashboard streams={streams} walletAddress={address} />
+                    </StreamErrorBoundary>
+                  </div>
+                </details>
+              </div>
+            )}
+
             {/* Aggregated performance metrics (#419) */}
             <StreamErrorBoundary section="Performance Metrics">
               <StreamPerformanceMetrics streams={streams} walletAddress={address} />
@@ -700,6 +755,65 @@ function DashboardContent() {
                   ))}
                 </select>
 
+                {/* Date range filter (#520) */}
+                <div className="flex items-center gap-1.5">
+                  <label className="text-xs text-gray-400 whitespace-nowrap" htmlFor="filter-date-from">
+                    From
+                  </label>
+                  <input
+                    id="filter-date-from"
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                    max={dateTo || undefined}
+                    className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 [color-scheme:dark]"
+                    aria-label="Filter streams created from date"
+                  />
+                  <label className="text-xs text-gray-400 whitespace-nowrap" htmlFor="filter-date-to">
+                    To
+                  </label>
+                  <input
+                    id="filter-date-to"
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                    min={dateFrom || undefined}
+                    className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 [color-scheme:dark]"
+                    aria-label="Filter streams created to date"
+                  />
+                </div>
+
+                {/* Min/max rate filter — stroops/sec (#520) */}
+                <div className="flex items-center gap-1.5">
+                  <label className="text-xs text-gray-400 whitespace-nowrap" htmlFor="filter-min-rate">
+                    Rate
+                  </label>
+                  <input
+                    id="filter-min-rate"
+                    type="number"
+                    value={minRate}
+                    onChange={(e) => setMinRate(e.target.value)}
+                    placeholder="Min"
+                    min="0"
+                    step="1"
+                    className="w-20 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+                    aria-label="Minimum stream rate (stroops/sec)"
+                  />
+                  <span className="text-xs text-gray-500">–</span>
+                  <input
+                    id="filter-max-rate"
+                    type="number"
+                    value={maxRate}
+                    onChange={(e) => setMaxRate(e.target.value)}
+                    placeholder="Max"
+                    min="0"
+                    step="1"
+                    className="w-20 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+                    aria-label="Maximum stream rate (stroops/sec)"
+                  />
+                  <span className="text-xs text-gray-500">stroops/s</span>
+                </div>
+
                 {/* Bookmarks only toggle */}
                 <button
                   onClick={() => setBookmarksOnly((v) => !v)}
@@ -774,6 +888,26 @@ function DashboardContent() {
                   {tokenFilter && (
                     <span className="bg-gray-800 px-2 py-1 rounded">
                       Token: {tokenFilter}
+                    </span>
+                  )}
+                  {dateFrom && (
+                    <span className="bg-gray-800 px-2 py-1 rounded">
+                      From: {dateFrom}
+                    </span>
+                  )}
+                  {dateTo && (
+                    <span className="bg-gray-800 px-2 py-1 rounded">
+                      To: {dateTo}
+                    </span>
+                  )}
+                  {minRate && (
+                    <span className="bg-gray-800 px-2 py-1 rounded">
+                      Rate ≥ {minRate}
+                    </span>
+                  )}
+                  {maxRate && (
+                    <span className="bg-gray-800 px-2 py-1 rounded">
+                      Rate ≤ {maxRate}
                     </span>
                   )}
                   {search.trim() && (
