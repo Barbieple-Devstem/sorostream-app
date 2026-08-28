@@ -766,6 +766,48 @@ export function claimableNow(stream: any): string {
 
 
 /**
+ * Total amount streamed so far from a stream's deposit, in stroops.
+ *
+ * - For active streams: `flowRate × elapsed_seconds_from_start`.
+ * - For paused streams: frozen at the value held when pausing.
+ * - For future streams (startTime > now): 0 — no drip has occurred yet.
+ * - For ended/cancelled streams: capped at the moment the stream stopped.
+ *
+ * The return value is always a non-negative integer (floor, in stroops).
+ */
+export function getStreamedAmount(stream: any): number {
+  if (!stream) return 0;
+
+  const flowRate = Number(stream.flowRate);
+  const startTime = new Date(stream.startTime).getTime();
+
+  if (!Number.isFinite(flowRate) || !Number.isFinite(startTime)) return 0;
+
+  // Clamp effective "now" to the stream start time so future streams show 0%.
+  let effectiveNow = Math.max(Date.now(), startTime);
+
+  // Paused: freeze at the moment the stream was paused.
+  if (stream.status === "Paused" && stream.pausedAt) {
+    const pausedAtMs = new Date(stream.pausedAt).getTime();
+    const elapsedSeconds = Math.max(0, (pausedAtMs - startTime) / 1000);
+    return Math.floor(flowRate * elapsedSeconds);
+  }
+
+  // Ended: cap at the configured end time.
+  if (stream.status === "Ended") {
+    effectiveNow = Math.min(effectiveNow, new Date(stream.endTime).getTime());
+  }
+
+  // Cancelled: cap at the cancellation timestamp when available.
+  if (stream.status === "Cancelled" && stream.cancelledAt) {
+    effectiveNow = Math.min(effectiveNow, stream.cancelledAt * 1000);
+  }
+
+  const elapsedSeconds = Math.max(0, (effectiveNow - startTime) / 1000);
+  return Math.floor(flowRate * elapsedSeconds);
+}
+
+/**
  * Remaining (unstreamed) deposit in stroops. Freezes while the stream is
  * paused instead of continuing to count down.
  */
