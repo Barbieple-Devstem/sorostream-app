@@ -131,14 +131,25 @@ export default function StreamHistory({ entries, loading }: StreamHistoryProps) 
 
       {visibleEntries.map((entry, idx) => {
         const config = typeConfig[entry.type] ?? typeConfig.creation;
+        const amount = entry.type === "creation"
+          ? formatUSDC(BigInt(entry.amount))
+          : `${entry.type === "top-up" ? "+" : "-"}${formatUSDC(BigInt(entry.amount))}`;
+        const ariaLabel = `${t(config.labelKey)}: ${amount} on ${formatDateUtc(entry.timestamp)}`;
+
         return (
           <div
             key={`${entry.txHash}-${idx}`}
             className={`rounded-lg p-4 border ${config.colorClass}`}
+            role="article"
+            aria-label={ariaLabel}
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-gray-900 text-sm">
+                <span
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-gray-900 text-sm"
+                  role="img"
+                  aria-label={`${t(config.labelKey)} event indicator`}
+                >
                   {config.icon}
                 </span>
                 <div>
@@ -150,17 +161,15 @@ export default function StreamHistory({ entries, loading }: StreamHistoryProps) 
               </div>
               <div className="text-right">
                 <p className="text-sm font-semibold text-white">
-                  {entry.type === "creation"
-                    ? formatUSDC(BigInt(entry.amount))
-                    : `${entry.type === "top-up" ? "+" : "-"}${formatUSDC(BigInt(entry.amount))}`}
+                  {amount}
                 </p>
                 <p className="text-xs text-gray-400 font-mono">
                   <a
                     href={explorerUrl(entry.txHash)}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="hover:text-green-400 underline decoration-dotted"
-                    title="View transaction on Stellar Expert"
+                    className="hover:text-green-400 underline decoration-dotted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-green-400 rounded px-0.5"
+                    aria-label={`View transaction ${entry.txHash} on Stellar Expert (opens in new window)`}
                   >
                     {truncateAddress(entry.txHash)}
                   </a>
@@ -184,7 +193,8 @@ export default function StreamHistory({ entries, loading }: StreamHistoryProps) 
           ) : (
             <button
               onClick={loadMore}
-              className="text-xs text-green-400 hover:text-green-300 font-medium py-1 px-3 rounded bg-gray-800 border border-gray-700"
+              aria-label={`Load more transaction history. Currently showing ${visibleCount} of ${entries.length} events`}
+              className="text-xs text-green-400 hover:text-green-300 font-medium py-1 px-3 rounded bg-gray-800 border border-gray-700 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-green-400"
             >
               Load more
             </button>
