@@ -1426,6 +1426,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
             <button
               onClick={() => setShowSchedulePauseModal(true)}
               disabled={isBusy}
+              aria-label={`Schedule automatic pause for stream ${stream.id} at a future date and time`}
               className="w-full border border-indigo-600 text-indigo-400 py-3 rounded-lg font-medium hover:bg-indigo-900 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -1469,6 +1470,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
             <button
               onClick={() => { setShowTransferModal(true); setTransferRecipientAddress(""); setTransferError(""); }}
               disabled={isBusy}
+              aria-label={`Transfer recipient for stream ${stream.id} to a new wallet address`}
               className="w-full border border-blue-600 text-blue-400 py-2 rounded-lg text-sm hover:bg-blue-900 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -1480,6 +1482,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
 
           <button
             onClick={() => setShowQrModal(true)}
+            aria-label={`Display QR code for stream ${stream.id}`}
             className="w-full border border-gray-600 text-gray-300 py-2 rounded-lg text-sm hover:bg-gray-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
           >
             QR Code
@@ -1488,6 +1491,7 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
           {/* Embed widget */}
           <button
             onClick={() => setShowEmbedModal(true)}
+            aria-label={`Get embed code to display stream ${stream.id} on external websites`}
             className="w-full border border-gray-600 text-gray-300 py-2 rounded-lg text-sm hover:bg-gray-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 flex items-center justify-center gap-2"
           >
             <svg
@@ -1649,13 +1653,14 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
           role="dialog"
           aria-modal="true"
           aria-labelledby="cancel-modal-title"
+          aria-describedby="cancel-modal-desc"
           className="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
         >
           <div className="bg-gray-800 rounded-xl p-6 max-w-sm w-full mx-4 space-y-4">
             <h2 id="cancel-modal-title" className="text-lg font-semibold text-white">
               Cancel Stream?
             </h2>
-            <p className="text-gray-400 text-sm">
+            <p id="cancel-modal-desc" className="text-gray-400 text-sm">
               This is irreversible. Any unstreamed funds will be returned to the
               sender. You&apos;ll have 5 seconds to undo after confirming.
             </p>
@@ -1685,13 +1690,14 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
           role="dialog"
           aria-modal="true"
           aria-labelledby="pause-modal-title"
+          aria-describedby="pause-modal-desc"
           className="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
         >
           <div className="bg-gray-800 rounded-xl p-6 max-w-sm w-full mx-4 space-y-4">
             <h2 id="pause-modal-title" className="text-lg font-semibold text-white">
               Pause Stream?
             </h2>
-            <p className="text-gray-400 text-sm">
+            <p id="pause-modal-desc" className="text-gray-400 text-sm">
               This will temporarily halt the stream. The recipient will not
               receive any funds while the stream is paused. You can resume
               the stream at any time.
@@ -1722,13 +1728,14 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
           role="dialog"
           aria-modal="true"
           aria-labelledby="resume-modal-title"
+          aria-describedby="resume-modal-desc"
           className="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
         >
           <div className="bg-gray-800 rounded-xl p-6 max-w-sm w-full mx-4 space-y-4">
             <h2 id="resume-modal-title" className="text-lg font-semibold text-white">
               Resume Stream?
             </h2>
-            <p className="text-gray-400 text-sm">
+            <p id="resume-modal-desc" className="text-gray-400 text-sm">
               This will resume the paused stream. Funds will start flowing
               to the recipient again from this point forward.
             </p>
@@ -1774,8 +1781,12 @@ export default function StreamDetail({ params }: { params: { id: string } }) {
                 type="datetime-local"
                 value={pauseAtInput}
                 onChange={(e) => setPauseAtInput(e.target.value)}
+                aria-describedby="pause-at-help"
                 className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2.5 text-white text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
               />
+              <p id="pause-at-help" className="text-gray-400 text-xs mt-1">
+                Select a future date and time when the stream will be automatically paused.
+              </p>
             </div>
             <div className="flex gap-3 pt-2">
               <button
